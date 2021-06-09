@@ -1,0 +1,104 @@
+<% content_for :title, "Simple HERE Map Display" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+	<tr>
+		<td>HLP Service releases which are used in this demo:</td>
+		<td>
+			<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+		</td>
+	</tr>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2016
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+	
+	function extrude(buildingLayer) {
+		// that's, certainly, not the way to do it
+		var style = buildingLayer.getStyle();
+		buildingLayer.setStyle(style.replace('polygon-color', 'building-color'))
+	}
+
+	extrude(defaultLayers.vector.findDataLayerByName("building0"));
+	extrude(defaultLayers.vector.findDataLayerByName("building1"));
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	// marker as svg
+	var svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" width="40px" height="60px" viewBox="0.644 4.83 40 60" style="enable-background:new 0.644 4.83 40 60;" xml:space="preserve">' +
+		'<g>' + 
+		'<path style="fill:none;" d="M3.088,10.069v26.352c0,2.838,1.53,4.672,4.369,4.672h18.868L22.5,52.426c0.938,0.318,1.781,0.844,2.467,1.528l12.854-12.861V5.852H7.457C4.619,5.852,3.088,7.233,3.088,10.069z" />' +
+		'<path style="fill:#FFFFFF;" d="M21.174,53.161c-0.231-0.03-0.468-0.052-0.708-0.052c-2.949,0-5.349,2.398-5.349,5.349c0,2.947,2.4,5.348,5.349,5.348s5.349-2.4,5.349-5.348c0-1.106-0.339-2.137-0.916-2.992" />' +
+		'<path style="fill:#FFFFFF;" d="M20.466,58.458l3.779-3.782c-0.576-0.574-1.284-1.016-2.071-1.281L20.466,58.458z" />' +
+		'<path style="fill:#A6B0BB;" d="M22.174,53.395c0.787,0.267,1.495,0.707,2.071,1.281l0.722-0.722c-0.686-0.685-1.528-1.21-2.467-1.528L22.174,53.395z" />' +
+		'<path style="fill:#A6B0BB;" d="M24.898,55.467c0.579,0.854,0.916,1.885,0.916,2.991c0,2.948-2.399,5.349-5.349,5.349s-5.349-2.4-5.349-5.349c0-2.949,2.4-5.348,5.349-5.348c0.24,0,0.477,0.021,0.708,0.052l0.332-0.981c-0.34-0.055-0.686-0.092-1.04-0.092c-3.513,0-6.371,2.857-6.371,6.37s2.857,6.37,6.371,6.37c3.513,0,6.371-2.857,6.371-6.37c0-1.389-0.452-2.671-1.209-3.72L24.898,55.467z" />' +
+		'<path style="fill:#A6B0BB;" d="M24.898,55.467l0.729-0.729l12.917-12.924l0.3-0.3v-0.422V5.852V4.831h-1.022H7.457c-3.477-0.001-5.39,1.86-5.39,5.238v26.352c0,3.513,2.065,5.694,5.39,5.694h17.445l-3.396,10.065l-0.332,0.981 M37.821,41.093L24.967,53.954l-0.722,0.722l-3.779,3.782l1.708-5.063l0.326-0.969l3.824-11.333H7.457c-2.838,0-4.369-1.835-4.369-4.672V10.069c0-2.836,1.53-4.218,4.369-4.218h30.365V41.093z" />' +
+		'</g>' +
+		'<circle style="fill:#FFFFFF;" cx="20.465" cy="58.458" r="5.348" />' +
+		'<g>' +
+		'<g>' +
+		'<polygon style="fill:#237DA0;" points="26.324,41.093 24.746,45.715 36.41,42.668 37.821,41.093" />' +
+		'<path style="fill:#45A3DB;" d="M37.821,41.093V5.852H7.457c-2.838,0-4.369,1.382-4.369,4.219v26.352c0,2.838,1.53,4.673,4.369,4.673h30.365V41.093z" />' +
+		'</g>' +
+		'</g>' +
+		'<g>' +
+		'<path style="fill:none;" d="M3.098,10.07v26.349c0,2.839,1.53,4.674,4.368,4.674h18.868l-3.823,11.333c0.938,0.318,1.781,0.843,2.468,1.527l12.854-12.86V5.852H7.466C4.629,5.852,3.098,7.232,3.098,10.07z" />' +
+		'<path style="fill:#FFFFFF;" d="M21.185,53.161c-0.231-0.032-0.468-0.054-0.708-0.054c-2.949,0-5.35,2.401-5.35,5.351c0,2.948,2.401,5.347,5.35,5.347c2.948,0,5.349-2.398,5.349-5.347c0-1.108-0.338-2.138-0.915-2.991" />' +
+		'<path style="fill:#FFFFFF;" d="M20.477,58.458l3.778-3.782c-0.574-0.575-1.284-1.016-2.07-1.281L20.477,58.458z" />' +
+		'<path style="fill:#A6B0BB;" d="M22.185,53.395c0.786,0.267,1.496,0.706,2.07,1.281l0.724-0.723c-0.687-0.685-1.53-1.209-2.468-1.527L22.185,53.395z" />' +
+		'<path style="fill:#A6B0BB;" d="M24.91,55.469c0.577,0.853,0.914,1.881,0.914,2.989c0,2.948-2.4,5.349-5.349,5.349c-2.949,0-5.35-2.4-5.35-5.349c0-2.947,2.401-5.348,5.35-5.348c0.24,0,0.476,0.019,0.709,0.053l0.33-0.981c-0.339-0.057-0.684-0.094-1.038-0.094c-3.514,0-6.371,2.859-6.371,6.371c0,3.514,2.857,6.371,6.371,6.371c3.513,0,6.37-2.857,6.37-6.371c0-1.389-0.452-2.671-1.209-3.72L24.91,55.469z" />' +
+		'<path style="fill:#A6B0BB;" d="M24.91,55.469l0.728-0.73l12.916-12.924l0.301-0.3v-0.422V5.852V4.83h-1.021H7.466c-3.474,0-5.389,1.861-5.389,5.24v26.349c0,3.515,2.065,5.696,5.389,5.696h17.445l-3.396,10.067l-0.33,0.981 M37.832,41.093l-12.854,12.86l-0.724,0.723l-3.779,3.782l1.709-5.063l0.326-0.969l3.823-11.333H7.466c-2.837,0-4.368-1.835-4.368-4.674V10.07c0-2.838,1.531-4.219,4.368-4.219h30.366V41.093L37.832,41.093z" />' +
+		'</g>' +
+		'<circle style="fill:#FFFFFF;" cx="20.477" cy="58.294" r="5.348" />' +
+		'<polygon style="fill:#45A3DB;" points="20.466,58.458 36.22,42.542 24.746,45.715 " />' +
+		'</svg>';
+	
+		var icon = new H.map.Icon(svg);
+		
+		var m = new H.map.Marker({
+			lat: 40.74258,
+			lng: -73.88151
+		}, 
+		{icon: icon});
+	
+		map.addObject(m);
+		map.setCenter(new H.geo.Point(40.74258,-73.88151));
+</script>

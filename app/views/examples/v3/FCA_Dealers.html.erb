@@ -1,0 +1,204 @@
+<% content_for :title, "CLE FCA Dealer Search" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>FCA Dealer Search via CLE</p>
+	<table>
+		<tr>
+			<td><h3>Search</h3></td>
+			<td>
+			<input class="form-control input-wide" type="text" id="search">
+			</td>
+		</tr>
+	</table>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+		/* 
+			author domschuette
+			(C) HERE 2019
+		*/
+		
+		// Check whether the environment should use hi-res maps
+		var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		var mapContainer = document.getElementById('mapContainer');
+		
+		var secure = (location.protocol === 'https:') ? true : false;
+		
+		// Create a platform object to communicate with the HERE REST APIs
+		var platform = new H.service.Platform({
+				useHTTPS: secure,
+				app_id: app_id,
+				app_code: app_code
+			}),
+			maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+			
+			layerId_cle2 = "FCA_DEALERS",
+
+			// Instantiate a map in the 'map' div, set the base map to normal
+			map = new H.Map(mapContainer, maptypes.normal.map, {
+				center: new H.geo.Point(52, 11),
+				zoom: 4,
+				pixelRatio: hidpi ? 2 : 1
+			}),
+			
+			geocoder = platform.getGeocodingService(),
+		
+			// Enable the map event system
+			mapevents = new H.mapevents.MapEvents(map),
+			
+			// Enable map interaction (pan, zoom, pinch-to-zoom)
+			behavior = new H.mapevents.Behavior(mapevents),
+
+			// Enable the default UI
+			ui = H.ui.UI.createDefault(map, maptypes),
+			
+			group = new H.map.Group(),
+			currentBubble;
+			
+		map.addObject(group);
+			
+		window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+		
+		var createIcon = function (line1, line2, color) {
+			var div = document.createElement("div");
+			var svgMarker = svgMarkerImage_Line;
+
+			svgMarker = svgMarker.replace('#ffffff', color);
+			svgMarker = svgMarker.replace(/__line1__/g, line1);
+			svgMarker = svgMarker.replace(/__line2__/g, line2);
+			svgMarker = svgMarker.replace(/__width__/g, line1.length  * 4 + 57);
+			svgMarker = svgMarker.replace(/__widthAll__/g, line1.length  * 4 + 120);
+			div.innerHTML = svgMarker;
+
+			return new H.map.Icon(svgMarker, {
+				anchor: new H.math.Point(24, 57)
+			});;
+		};
+		
+		var	autoSuggestUrl = 'http://places.demo.api.here.com/places/v1/autosuggest',
+			cleUrl = 'http://cle.api.here.com/2/search/all.json';
+			
+		if(secure)
+		{
+			autoSuggestUrl = 'https://places.demo.api.here.com/places/v1/autosuggest';
+			cleUrl = 'https://cle.api.here.com/2/search/all.json';
+		}
+		
+		function getReady() 
+		{
+			var deferredReady = $.Deferred();
+			$(document).ready(function()
+			{
+				deferredReady.resolve();
+			});
+			return deferredReady.promise();
+		}		
+
+		$.widget("custom.autocompleteHighlight", $.ui.autocomplete, {
+			_renderItem : function (ul, item) {
+				return $('<li>' + item.label + '</li>').appendTo(ul);
+			}
+		});
+
+		$("#search").autocompleteHighlight({
+			source : function (request, response) {
+				
+				cleRequest = $.ajax({
+					url : cleUrl,
+					dataType : "json",
+					data : {
+						layer_id : layerId_cle2,
+						filter : "SEARCHTERM.like('%" + request.term.toUpperCase() + "%')",
+						app_id : app_id,
+						app_code : app_code
+					}
+				});
+				
+				
+				placesRequest = $.ajax({
+					url : autoSuggestUrl,
+					dataType : "json",
+					data : {
+						size : 100,
+						q : request.term,
+						app_id : app_id,
+						app_code : app_code,
+						"X-Map-Viewport" : "-24.2649,32.8804,52.4424,69.5605"
+					}
+				});
+				
+				$.when( getReady(), cleRequest, placesRequest).done( function( readyResponse, cleResponse, placesResponse ) 
+				{
+					group.removeAll();
+					var g = $.map(cleResponse[0].geometries, function (data) 
+					{
+						var html = "";
+						var name = data.attributes.COMPANY_NAME,
+							longitude = parseFloat(data.geometry.split(" ")[0].match(/[+-]?\d+(\.\d+)?/)),
+							latitude = parseFloat(data.geometry.split(" ")[1].match(/[+-]?\d+(\.\d+)?/));
+						
+						var marker = new H.map.Marker(new H.geo.Point(latitude, longitude), 
+							{
+								icon: createIcon(name, latitude + " " + longitude , "#ffffff")
+							});
+						group.addObject(marker);
+						
+						return {
+							label : "(C) " + name,
+							value : {type: "CLE", lat: latitude, lng: longitude }
+						}
+					});
+					
+					var p = $.map(placesResponse[0].results, function (item) {
+						if(item.resultType == "place")
+						{
+							var value = item.title + " " + (item.vicinity !== undefined ? item.vicinity.replace(/(<br\/>)/gm, ', ') : ""),
+								name = item.title + " " + (item.vicinity !== undefined ? item.vicinity.replace(/(<br\/>)/gm, ', ') : ""),
+								marker = new H.map.Marker(new H.geo.Point(item.position[0], item.position[1]), 
+								{
+									icon: createIcon(name, item.position[0] + " " + item.position[1] , "#aaaaaa")
+								});
+
+							group.addObject(marker);
+							
+							return {
+								label : "(P) " + name,
+								value : {type: "Places", lat: item.position[0], lng: item.position[1], bbox: item.bbox}
+							}
+						}
+					});
+					var result = g.concat(p);
+					response(result);
+				});
+			}, 
+			minLength : 2,
+			select : function (event, ui) {
+				event.preventDefault();
+				if (ui.item) {
+					selectItem(ui.item.value);
+				}
+				return true;
+			},
+		});
+
+		$("#search").keypress(function (e) {
+			if (e.which == 13) {
+				$(".ui-menu-item").hide();
+			}
+		});
+
+		function selectItem (obj)
+		{
+			if(obj)
+			{
+				map.setCenter(new H.geo.Point(obj.lat, obj.lng));
+				map.setZoom(14);
+			}
+		}
+		
+</script>

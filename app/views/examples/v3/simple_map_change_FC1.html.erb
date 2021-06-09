@@ -1,0 +1,239 @@
+<% content_for :title, "Simple HERE Map Display" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+	
+	<tr>
+		<td>HLP Service releases which are used in this demo:</td>
+		<td>
+			<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+		</td>
+	</tr>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2017
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	function TileToQuadKey ( x, y, zoom){ 
+		var quad = ""; 
+		for (var i = zoom; i > 0; i--){
+			var mask = 1 << (i - 1); 
+			var cell = 0; 
+			if ((x & mask) != 0) 
+				cell++; 
+			if ((y & mask) != 0) 
+				cell += 2; 
+			quad += cell; 
+		} 
+		return quad; 
+	}
+    
+    var oldRed = 228, oldGreen = 137, oldBlue = 174;
+    var newRed = 128, newGreen = 128, newBlue = 128;
+
+    
+    function changeColInUri(img) {
+        // create fake image to calculate height / width
+        /*var img = document.createElement("img");
+        img.src = data;
+        img.async = false;
+        img.style.visibility = "hidden";
+        document.body.appendChild(img);
+        */
+        if(img.offsetWidth == 0 || img.offsetHeight == 0)
+            return null;
+
+        var canvas = document.createElement("canvas");
+        canvas.width = 256; //img.offsetWidth;
+        canvas.height = 256; // img.offsetHeight;
+
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img,0,0);
+
+        // remove image
+        img.parentNode.removeChild(img);
+
+        // do actual color replacement
+        var imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+        var data = imageData.data;
+
+        var r,g,b;
+        for(var x = 0, len = data.length; x < len; x+=4) {
+            r = data[x];
+            g = data[x+1];
+            b = data[x+2];
+
+                    if((r == oldRed) && (g == oldGreen) && (b == oldBlue)) {
+                        data[x] = newRed;
+                        data[x+1] = newGreen;
+                        data[x+2] = newBlue;
+                    } 
+        }
+
+        ctx.putImageData(imageData,0,0);
+
+        return canvas.toDataURL();
+    }
+    
+
+	var infoProvider = new H.map.provider.ImageTileProvider({
+		label: "Tile Info Overlay",
+		descr: "",
+		min: 0,
+		max: 20,
+		opacity: 0.6,
+		getURL: function( col, row, level ) 
+        {
+            var url = "http://1.base.maps.api.here.com/maptile/2.1/maptile/newest/normal.day/" + level + "/" + col + "/" + row + "/256/png?app_id=" + app_id + "&app_code=" + app_code + "&output=base64"; // &output=base64
+            
+            var request = new XMLHttpRequest();
+
+            request.open('GET', url, true);
+            request.send(null);
+
+            if (request.status === 200) 
+            {
+                var img = new Image();
+                // img.src = url;
+                img.src = 'data:image/png8;base64,' + request.responseText.trim().substring(1, request.responseText.trim().length-1);
+                
+                img.onload=function()
+                {
+                    return changeColInUri(this);
+                }
+                
+                /*
+                var data = 'data:image/png;base64,' + request.responseText.trim().substring(1, request.responseText.trim().length-1);
+                // data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAW0lEQVR42mNgQALCi7//J4QZcAFiNOM1hJANBA0h1QC83iHFizDJ/dgww/7/LAQNwKUZbkjDfya8YQZXiCqJagilBmAzhLYGYDNsJBhAMD3gS854NS/6vg+fZgDKvmW19S7PRAAAAABJRU5ErkJggg==';
+                return changeColInUri(data);
+                
+                // create fake image to calculate height / width
+                var img = document.createElement("img");
+                img.src = data;
+                img.style.visibility = "hidden";
+                document.body.appendChild(img);
+
+                var canvas = document.createElement("canvas");
+                canvas.width = img.offsetWidth;
+                canvas.height = img.offsetHeight;
+
+                var ctx = canvas.getContext("2d");
+                ctx.drawImage(img,0,0);
+
+                // remove image
+                img.parentNode.removeChild(img);
+
+                // do actual color replacement
+                var imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+                var data = imageData.data;
+
+                var r,g,b;
+                for(var x = 0, len = data.length; x < len; x+=4) {
+                    r = data[x];
+                    g = data[x+1];
+                    b = data[x+2];
+
+                    if((r == oldRed) && (g == oldGreen) && (b == oldBlue)) {
+                        data[x] = newRed;
+                        data[x+1] = newGreen;
+                        data[x+2] = newBlue;
+                    } 
+                }
+
+                ctx.putImageData(imageData,0,0);
+
+                return canvas.toDataURL();
+                */
+            }
+               /* 
+                // img.onload=function()
+                {
+                    
+                    var c = document.createElement('canvas');
+                    var ctx = c.getContext("2d");
+                    var w = 256;
+                    var h = 256;
+
+                    c.width = w;
+                    c.height = h;
+
+                    // draw the image on the temporary canvas
+                    ctx.drawImage(img, 0, 0, w, h);
+
+                    
+                    // pull the entire image into an array of pixel data
+                    var imageData = ctx.getImageData(0, 0, w, h);
+
+                    // examine every pixel, 
+                    // change any old rgb to the new-rgb
+                    for (var i=0;i<imageData.data.length;i+=4)
+                    {
+                        // is this pixel the old rgb?
+                        if(imageData.data[i] == oldRed && imageData.data[i+1]==oldGreen && imageData.data[i+2]==oldBlue)
+                        {
+                            // change to your new rgb
+                            imageData.data[i] = newRed;
+                            imageData.data[i+1] = newGreen;
+                            imageData.data[i+2] = newBlue;
+                        }
+                    }
+                    
+                    // put the altered data back on the canvas  
+                    ctx.putImageData(imageData,0,0);
+                    
+                    // put the re-colored image back on the image
+                    // var img1=document.getElementById("image1");
+                    return c.toDataURL('image/png8');
+                 
+                    // return 'data:image/png8;base64,' + request.responseText.trim().substring(1, request.responseText.trim().length-1);
+                }
+                
+            }*/
+		}
+	});
+
+	var infoLayer = new H.map.layer.TileLayer(infoProvider);
+
+	map.setBaseLayer(infoLayer);
+
+</script>

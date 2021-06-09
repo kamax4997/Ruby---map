@@ -1,0 +1,56 @@
+<% content_for :title, "3D Map with Custom Styling" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<table id="content"></table>
+	<div id="status"></div>
+	<div>HLP Service releases which are used in this demo:</div>
+	<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author johernan
+	(C) HERE 2016
+	*/
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	var mapContainer = document.getElementById('mapContainer'),
+
+	platform = new H.service.Platform({
+		app_code: app_code,
+		app_id: app_id,
+		useHTTPS: secure
+	}),
+
+     fleetLayer = new H.service.vector.Layer(
+        platform.getVectorMapService()
+        ),
+
+
+	map = new H.Map(mapContainer, fleetLayer,
+		{
+			engineType: H.Map.EngineType.P3D,
+			center: {lat:41.88457,lng:-87.63875},
+			zoom: 14,
+		}
+	);
+    
+    var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+    var ui = H.ui.UI.createDefault(map, fleetLayer);
+    ui.getControl('panorama').setVisibility(false);
+
+    // Change the park color to white.
+    fleetLayer.findDataLayerByName('park').setStyle("#park{polygon-color:rgba(255, 0, 0, 0.5);}");
+
+    x = map.getViewModel().getLookAtData;
+    x.tilt = 65;
+    map.getViewModel().setLookAtData(x);
+
+	//add JS API Release information
+	releaseInfoTxt.innerHTML+="JS API: 3."+ H.buildInfo().version;
+</script>

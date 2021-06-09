@@ -1,0 +1,336 @@
+<% content_for :title, "Waste Management Map Display" %>
+
+<div class="ctrl-panel">
+	<form id="fParams">
+		<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+		<label for="rsnapfile">Route snapshot: </label><input id="rsnapfile" type='file' accept='application/json' onchange='openFile(event)'><br>
+		<label for="rconffile"> Route confirmation: </label><input id="rconffile" type='file' accept='application/json' onchange='openFile(event)'><br>
+		<label for="rgpsfile"> Route GPS: </label><input id="rgpsfile" type='file' accept='application/json' onchange='openFile(event)'><br>
+		<label> RME response: </label>
+		<!--p><textarea id="rme_res" rows="10" cols="50" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly ng-model-options="{ updateOn: 'blur' }"></textarea></p-->
+		<div id="rme_res" style="overflow: auto; width: 200px; height: 200px; display: none;"></div>
+		<p><button type='button' onclick='resetApp(event)'>Clear</button></p>
+		<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+		<div id="feedb"></div>
+	</form>
+</div>
+
+<div id="spinner"></div>
+<div id="pageblock"></div>
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author Alexander Sadovoy
+	(C) HERE 2019
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	var mapContainer = document.getElementById('mapContainer');
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	platform = new H.service.Platform({
+		app_code: app_code,
+		app_id: app_id,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	router = platform.getRoutingService(),
+
+	map = new H.Map(mapContainer, maptypes.normal.map,
+		{
+			center: center,
+			zoom: zoom
+		}
+	);
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+	// add behavior control
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+	//add JS API Release information
+	releaseInfoTxt.innerHTML+="JS API: 3."+ H.buildInfo().version;
+
+	//add MRS Release information
+	loadMRSVersionTxt();
+
+	//helper
+	var releaseRoutingShown = false;
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	var formParams = document.getElementById('fParams');
+	var rsnapfile = document.getElementById('rsnapfile');
+	var rconffile = document.getElementById('rconffile');
+	var rgpsfile = document.getElementById('rgpsfile');
+	var rme_res = document.getElementById('rme_res');
+	var feedbackTxt = document.getElementById('feedb');
+
+	var
+		grp = new H.map.Group(),
+		grpSnap = new H.map.Group(),
+		grpConf = new H.map.Group(),
+		grpGps = new H.map.Group();
+	map.addObject(grp);
+	grp.addObject(grpSnap);
+	grp.addObject(grpConf);
+	grp.addObject(grpGps);
+	
+	var routeTypes = {
+		rsnapfile: {
+				lineWidth: 6,
+				color: "rgba(0, 250, 0, 0.7)",
+				grp: grpSnap
+			},
+		rconffile: {
+				lineWidth: 9,
+				color: "rgba(250, 0, 0, 0.7)",
+				grp: grpConf
+			},
+		rgpsfile: {
+				lineWidth: 12,
+				color: "rgba(0, 0, 250, 0.7)",
+				grp: grpGps
+			}
+	},
+	scale = 1.0;
+
+	// create SVG markup for marker's icon
+	var iconMarkup = '<svg style="left:-{{{LEFT}}}px;top:-{{{TOP}}}px;"' +
+		'xmlns="http://www.w3.org/2000/svg" width="{{{WIDTH}}}px" height="{{{HEIGHT}}}px" >'
+	+ '<g transform="scale({{{SCALE}}})"><path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 ' +
+		'28 13 28 C 16.3 28 19 29.3 19 31 Z" fill="#000" fill-opacity=".2"></path>'
+	+ '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 ' +
+		'19.5 3.8 21.9 L 13 31 L 22.2 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 ' +
+		'6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="#fff"></path>'
+	+ '<path d="M 13 2.2 C 6 2.2 2.3 7.2 2.1 12.8 C 2.1 16.1 3.1 18.4 5.2 20.5 L ' +
+		'13 28.2 L 20.8 20.5 C 22.9 18.4 23.8 16.2 23.8 12.8 C 23.6 7.07 20 2.2 ' +
+		'13 2.2 Z" fill="{{{COLOR}}}"></path>'
+	+ '<text transform="matrix( 1 0 0 1 13 18 )" x="0" y="0" fill-opacity="1" '
+	+ 'fill="{{{FONTCOLOR}}}" text-anchor="middle" '
+	+ 'font-weight="bold" font-size="13px" font-family="arial">{{{TEXT}}}</text></g></svg>';
+
+
+	function openFile(e){
+		Spinner.showSpinner();
+		//console.log("file: ", e);
+		var input = event.target;
+
+		var reader = new FileReader();
+		reader.onload = function(){
+			clearMapObjects();
+			var
+				text = reader.result,
+				jData = JSON.parse(reader.result),
+				data = [];
+			//console.log("jData:: ", jData);
+			if(input.id == "rsnapfile"){
+				data[0] = jData.data.ROUTEDATA.ROUTEORDERLIST.ROUTEORDER.CUSTOMERORDERLIST.CUSTOMERORDER;
+				rconffile.value = null;
+				rgpsfile.value = null;
+			}else if(input.id == "rconffile"){
+				rsnapfile.value = null;
+				rgpsfile.value = null;
+				for(var i=0,len=jData.data.length; i<len; i++){
+					data.push(jData.data[i].CONFIRMATIONDATA.CUSTOMERORDERRESULTLIST.CUSTOMERORDERRESULT);
+				}				
+			}else if(input.id == "rgpsfile"){
+				rconffile.value = null;
+				rsnapfile.value = null;
+				for(var i=0,len=jData.data.length; i<len; i++){
+					data.push(jData.data[i].CONFIRMATIONDATA.GPSLIST);
+				}
+			}
+			var
+				csvDataHead = ["latitude", "longitude"].join(","),
+				csvDataLines = [csvDataHead],
+				lastLine = "";
+			for(var iR=0,lenR=data.length; iR<lenR; iR++){
+				//console.log("coords:: ", data[iR]);
+				for(var i=0,len=data[iR].length; i<len; i++){					
+					var line = [data[iR][i].LATITUDE, data[iR][i].LONGITUDE].join(",");
+					if(line == lastLine || line == ","){
+						continue;
+					}
+					csvDataLines.push( line );
+					lastLine = line;
+				}
+				var csvData = csvDataLines.join("\n");
+				console.log("startReq");
+				calcRME(csvData, input.id);
+				console.log("endReq");
+			}
+			
+		};
+		reader.readAsText(input.files[0]);
+	}
+
+	function calcRME(csvData, dataSource){
+		//var url = 'https://rme.api.here.com/2/matchroute.json?'+
+		var url = 'https://fleet.api.here.com/2/calculateroute.json?'+
+			[
+				'routeMatch=1',
+				'app_id=' + app_id,
+				'app_code=' + app_code,
+				'mode=fastest;truck',
+				'filetype=CSV'
+			].join("&");
+		$.ajax({
+			url: url,
+			dataType: "json",
+			async: true,
+			type: 'post',
+			contentType: false,
+			processData: false,
+			data: csvData,
+			success: function(data) {
+				console.log("start calc");
+				//console.log("RME resp:: ", data.response.route[0].leg[0].link[0]);
+				rme_res.innerHTML = JSON.stringify(data);
+
+				var strip = new H.geo.Strip(),
+					link = data.response.route[0].leg[0].link,
+					i,
+					l = link.length,
+					sCoord = new H.geo.Point(link[0].shape[0], link[0].shape[1]),
+					sMarkerDiv = document.createElement("div"),
+					curType = routeTypes[dataSource];
+				sMarkerDiv.setAttribute("style", "margin-left:-14px; margin-top:-32px;");
+				sMarkerDiv.innerHTML = iconMarkup
+					.replace('{{{FONTCOLOR}}}', "#300303")
+					.replace('{{{COLOR}}}', curType.color)
+					.replace('{{{TEXT}}}', "S")
+					.replace('{{{SCALE}}}', scale)
+					.replace('{{{LEFT}}}', scale * 14)
+					.replace('{{{TOP}}}', scale * 36)
+					.replace("{{{WIDTH}}}", scale * 28)
+					.replace("{{{HEIGHT}}}", scale * 36);
+				var	sMarker = new H.map.DomMarker(
+						sCoord,
+						{
+		  					icon: new H.map.DomIcon(sMarkerDiv)
+						}
+					),
+					curGrp = curType.grp;
+				
+				curGrp.addObject(sMarker);
+
+				
+				for(i = 0; i < l; i++)
+				{
+					//strip.pushLatLngAlt.apply(strip, shape[i].shape.map(function(item) { return parseFloat(item); }));
+					for (var c = 0; c < link[i].shape.length; c += 2){
+						strip.pushLatLngAlt(link[i].shape[c], link[i].shape[c+1], null);
+					}
+				}
+				
+				
+
+				var polyline = new H.map.Polyline(strip,
+					{
+						style:
+						{
+							lineWidth: curType.lineWidth,
+							strokeColor: curType.color
+						}
+					});
+				
+				
+				polyline.setArrows({
+						width: 1,
+						fillColor: "rgba(0, 0, 0, 1)"
+					});
+				
+				
+				curGrp.addObject(polyline);
+				Spinner.hideSpinner();
+				
+				map.setViewBounds(polyline.getBounds(), true);
+				rme_res.setAttribute("style", "display:block; overflow: auto; width: 250px; height: 250px;");
+				console.log("end calc");
+
+			},
+			error: function(xhr, status, e) {
+				//console.log("xhr:: ", xhr);
+				var errorResp = (xhr.responseJSON || {
+					"message": "unknown error occured"
+				});
+				feedbackTxt.innerHTML = "<font color=\"red\">" + errorResp.message + "</font>";
+					feedbackTxt.innerHTML += "<br/>";
+				}
+			});
+	}
+
+	function clearMapObjects(){
+		grpSnap.removeAll();
+		grpConf.removeAll();
+		grpGps.removeAll();
+	}
+	function resetApp(e){
+		formParams.reset();
+		clearMapObjects();
+		rme_res.setAttribute("style", "display: none;");
+		rme_res.innerHTML = "";
+	}
+
+
+	function calculateRoute()
+	{
+		var calculateRouteParams = {
+
+			'waypoint0' : '52.516222,13.388900',
+			'waypoint1' : '52.517175,13.395129',
+			'mode': 'fastest;car;traffic:disabled',
+			'representation': 'display'
+		},
+		onResult = function(result) {
+			//add Routing Release number if not already done
+			if (releaseRoutingShown== false){
+				releaseInfoTxt.innerHTML+="<br />HLP Routing: "+result.response.metaInfo.moduleVersion;
+				releaseRoutingShown = true;
+			}
+			var strip = new H.geo.Strip(),
+			shape = result.response.route[0].shape,
+			i,
+			l = shape.length;
+
+			for(i = 0; i < l; i++)
+			{
+				strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+			}
+			var polyline = new H.map.Polyline(strip,
+				{
+					style:
+					{
+						lineWidth: 10,
+						strokeColor: "rgba(0, 128, 0, 0.7)"
+					}
+				});
+
+				map.addObject(polyline);
+				map.setViewBounds(polyline.getBounds(), true);
+		},
+		onError = function(error) {
+			console.log(error);
+		}
+		router.calculateRoute(calculateRouteParams, onResult, onError);
+	}
+
+	var displayReady = function(e)
+	{
+		map.removeEventListener("mapviewchangeend", displayReady);
+	};
+
+	map.addEventListener("mapviewchangeend", displayReady);
+</script>

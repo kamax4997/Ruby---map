@@ -1,0 +1,492 @@
+.label-l {
+  color: white;
+  margin-left: 48px;
+  margin-top: 3px;
+  font-weight: normal;
+  transition: .2s;
+  cursor: pointer;
+  font-size: 13px;
+  display: inline-block;
+  margin-right: 10px;
+}
+
+.delays {
+  text-align: center;
+}
+.traffic-l {
+  color: rgba(255,49,84,1);
+}
+.weather-l {
+  color: rgba(255,130,66,1);
+}
+.curves-l {
+  color: rgba(62,200,119,1);
+}
+.slopes-l {
+  color: rgba(24,88,196,1);
+}
+
+.duration {
+  color: rgba(255,255,255,0.5);
+  text-align: center;
+  position: relative;
+  top: 140px;
+}
+
+.eta-duration, .pta-duration, .diff-duration {
+  display: inline-block;
+  margin-left: 20px;
+}
+
+.duration .time {
+  color: white;
+}
+
+
+.switchers {
+  margin-bottom: 10px;
+}
+
+.chart-title {
+  font-size: 18px;
+  color: white;
+  text-align: center;
+  margin-bottom: 20px;
+  margin-top: 0px;
+}
+
+.trafficflow ~ .label {
+  color: rgba(255,49,84,1);
+}
+.weather ~ .label {
+  color: rgba(255,130,66,1);
+}
+.slopes ~ .label {
+  color: rgba(24,88,196,1);
+}
+.curves ~ .label {
+  color: rgba(62,200,119,1);
+}
+
+
+input:checked + .trafficflow-slider {
+  background-color: rgba(255,49,84,1) !important;
+}
+input:checked + .weather-slider {
+  background-color: rgba(255,130,66,1) !important;
+}
+input:checked + .slopes-slider {
+  background-color: rgba(24,88,196,1) !important;
+}
+input:checked + .curves-slider {
+  background-color: rgba(62,200,119,1) !important;
+}
+
+
+
+
+.loading {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  background: #333942;
+  z-index: 1;
+  background-image: url('../assets/spinner.gif');
+  background-size: 83px;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.8;
+  display: none;
+}
+
+.controls {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 250px;
+  user-select: none;
+  font-family: "Fira Sans";
+}
+
+.group {
+  margin-bottom: 10px;
+}
+
+.origin {
+  position:relative;
+  margin-top: 20px; 
+  margin-bottom: 27px;
+}
+
+.destination {
+  position:relative;
+  margin-top: 20px; 
+  margin-bottom: 20px;
+}
+
+.marker-icon {
+  width: 40px;
+  height: 60px;
+  background-image: url('../assets/origin.svg');
+  position: absolute;
+  top: -47px;
+  left: -4px;
+}
+
+.dest {
+  background-image: url('../assets/destination.svg');
+  top: -27px;
+}
+
+label {
+  color: #57D9CF;
+  margin-bottom: 4px;
+  font-weight: bold;
+  width: 100px;
+}
+
+.inplace-textfield {
+  color: white;
+  background-color:rgba(0,0,0,0.5);
+  border:0;
+  display:block;
+  text-align:left;
+  width:250px;
+  padding: 4px 34px;
+  -webkit-transition: all 0.4s ease-out;
+  -moz-transition: all 0.4s ease-out;
+  -ms-transition: all 0.4s ease-out;
+  -o-transition: all 0.4s ease-out;
+  transition: all 0.4s ease-out;
+  outline: none;
+  font-size:14px;
+  border-radius: 2px;
+}
+
+.inplace-textfield:hover {
+  background-color:rgba(0,0,0,0.7);
+}
+
+.title {
+  font-weight: bold;
+  color: white;
+  opacity: 1;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+
+
+
+
+.warning {
+  color: #FF3154;
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+
+
+.legend-wrapper.minimize {
+  height: 20px !important;
+}
+.legend-wrapper {
+  font-family: "Fira Sans";
+  height: 300px;
+  width: 100%;
+  bottom: 0;
+  left: 0;
+  margin: 0;
+  position: fixed;
+  -webkit-transition: height 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+  -moz-transition: height 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+  -ms-transition: height 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+  -o-transition: height 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+  transition: height 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.legend-wrapper .legend {
+  background-color: rgba(39,49,66,1);
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+.legend-wrapper .legend .content {
+  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  overflow-y: hidden;
+  padding: 30px 10% 30px 10%;
+}
+.legend-wrapper .legend .content h1 {
+  font-size: 12px;
+  color: black;
+  font-style: normal;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.legend-wrapper .legend .content h2 {
+  font-size: 14px;
+  color: black;
+  font-style: italic;
+  font-weight: 400;
+  margin: 0;
+  margin-bottom: 4px;
+}
+.legend-wrapper .legend .content p {
+  font-size: 12px;
+  color: #666666;
+  font-weight: 400;
+  line-height: 20px;
+  margin: 6px 0;
+}
+.legend-wrapper .legend .content a {
+  color: blue;
+  font-size: 13px;
+}
+.legend-wrapper .legend .content a {
+  color: blue;
+  font-size: 13px;
+  text-decoration: none;
+  border-bottom: 1px solid green;
+  -webkit-transition: all 0.3s ease-out;
+  -moz-transition: all 0.3s ease-out;
+  -ms-transition: all 0.3s ease-out;
+  -o-transition: all 0.3s ease-out;
+  transition: all 0.3s ease-out;
+}
+.legend-wrapper .legend .content a:hover {
+  color: red;
+  border-bottom: 1px solid red;
+}
+.legend-wrapper .show-hide-button {
+  width: 25px;
+  height: 25px;
+  background-color: black;
+  border-radius: 50%;
+  background-image: url(../assets/show-hide.svg);
+  background-position: -25px 0;
+  position: absolute;
+  top: -13px;
+  right: 30px;
+  cursor: pointer;
+  z-index: 2;
+  -webkit-transition: background-color 0.3s ease-out;
+  -moz-transition: background-color 0.3s ease-out;
+  -ms-transition: background-color 0.3s ease-out;
+  -o-transition: background-color 0.3s ease-out;
+  transition: background-color 0.3s ease-out;
+}
+.legend-wrapper .show-hide-button:hover {
+  background-color: #48DAD0;
+}
+.legend-wrapper .show-hide-button.minimize {
+  background-position: 0 0;
+}
+
+
+
+
+/* The switch - the box around the slider */
+.switcher{
+  margin-bottom: 4px;
+  overflow: visible;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+}
+
+/* Hide default HTML checkbox */
+.switch input {display:none;}
+
+/* The slider */
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,0,0,0.9);
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  border: 1px solid black;
+  -webkit-transition: .4s;
+  transition: .4s;
+  box-shadow: 0 0 10px 0 rgba(0,0,0,0.3);
+}
+
+input:checked + .slider {
+  background-color: #48DAD0;
+}
+
+input:checked + .slider:before {
+  border: 1px solid rgba(0,0,0,0);
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #48DAD0;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(20px);
+  -ms-transform: translateX(20px);
+  transform: translateX(20px);
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 24px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+.label {
+  color: white;
+  opacity: 0.5;
+  width: 200px;
+  margin-left: 48px;
+  margin-top: 3px;
+  font-weight: normal;
+  transition: .2s;
+  cursor: pointer;
+  font-size: 13px;
+  display: inline-block;
+  margin-right: 10px;
+}
+
+input:checked ~ .label {
+  opacity: 1;
+}
+
+
+/* The switch - the box around the slider */
+.car-switcher .title {
+  display: inline-block;
+  position: relative;
+  bottom: 10px;
+  left: 5px;
+  font-weight: normal;
+}
+
+.car-switch {
+  position: relative;
+  display: inline-block;
+  width: 112px;
+  height: 65px;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Hide default HTML checkbox */
+.car-switch input {display:none;}
+
+/* The slider */
+.car-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,0,0,0.3);
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+.car-slider:before {
+  position: absolute;
+  content: "";
+  height: 100%;
+  width: 56px;
+  left: 0px;
+  bottom: 0px;
+  background-color: #48DAD0;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+
+
+.truck-icon {
+  opacity: 1;
+  width: 40px;
+  height: 40px;
+  position: absolute;
+  left: 9px;
+  bottom: 12px;
+  background-image: url('../assets/truck-icon.svg');
+  -webkit-transition: .2s;
+}
+
+.car-icon {
+  opacity: 0.3;
+  width: 40px;
+  height: 40px;
+  position: absolute;
+  left: 64px;
+  bottom: 7px;
+  background-image: url('../assets/car-icon.svg');
+  -webkit-transition: .2s;
+}
+
+.car-switcher input:checked ~ .truck-icon {
+  opacity: 0.3;
+}
+
+.car-switcher input:checked ~ .car-icon {
+  opacity: 1;
+}
+
+/*
+input:checked + .car-slider {
+  opacity: 1;
+}*/
+
+input:focus + .car-slider {
+  box-shadow: 0 0 1px #48DAD0;
+}
+
+
+input:checked + .car-slider:before {
+  -webkit-transform: translateX(56px);
+  -ms-transform: translateX(56px);
+  transform: translateX(56px);
+}
+
+/* Rounded sliders */
+.car-slider.round {
+  border-radius: 2px;
+}
+
+.car-slider.round:before {
+  border-radius: 2px;
+}
+
+.herelogo
+{
+  opacity: 1;
+  width: 100px;
+  height: 100px;
+  position: absolute;
+  left: 9px;
+  bottom: 12px;
+  background-image: url('../assets/HERE_Logo_Watermark_Drk_M.svg');
+}

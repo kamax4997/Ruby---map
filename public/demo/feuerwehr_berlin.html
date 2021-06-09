@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Matrix Routing Feuerwehr Berlin</title>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css">
+
+	<script>
+		var app_id = "inCUge3uprAQEtRaruyaZ8",
+			app_code = "9Vyk_MElhgPCytA7z3iuPA";
+	</script>
+
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-pano.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-clustering.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-data.js"></script>
+
+
+	<link rel="shortcut icon" type="image/x-icon" href="/assets/favicon.ico" />
+	<link rel="stylesheet" media="screen" href="/assets/application.css" data-turbolinks-track="true" />
+	<script src="/assets/application.js" data-turbolinks-track="true"></script>
+</head>
+
+<body>
+	<nav class="navbar navbar-default navbar-fixed-top">
+		<div class="container-fluid">
+			<div class="row">
+				<div class="col-xs-1">
+					<div class="navbar-header">
+						<a class="navbar-brand" href="https://tcs.ext.here.com/"><img alt="HERE logo" src="/assets/logo.svg" width="60" height="44" /></a>
+					</div>
+				</div>
+				<div class="col-xs-10">
+					<div class="header-text">Matrix Routing Feuerwehr Berlin</div>
+				</div>
+			</div>
+		</div>
+	</nav>
+	<div id="content-padder"></div>
+	<div id="content-real">
+
+		<div class="ctrl-panel">
+			<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+			<p>This example shows how a Matrix Routing can be used to find the fire stations and </br>
+				emergency vehicles with the shortest route and ETA</p>
+
+			<div class="form-group">
+				<label class="control-label col-sm-3" for="dest">Destination:</label>
+				<div class="col-sm-9">
+					<input type='text' id='dest' class='form-control input-wide' size='40' value='Torstraße 75 Berlin' onkeydown="if (event.keyCode == 13)geocode();" />
+				</div>
+				<div class="col-sm-9">
+					<label><input id="trafficOn" type="checkbox" value="" onchange="geocode();" checked>Traffic Mode on / off</label>
+				</div>
+				<div class="col-sm-9">
+					<label><input id="truckOn" type="checkbox" value="" onchange="geocode();" checked>Truck Mode on / off</label>
+				</div>
+				<div class="col-sm-9">
+					<label><input id="allRoutes" type="checkbox" value="" onchange="geocode();">Get all Routes on / off</label>
+				</div>
+				<div class="col-sm-4">
+					<input class="btn btn-default btn-sm" type="button" id="start" value="Calculate Matrix" onclick="geocode();">
+				</div>
+			</div>
+		</div>
+
+		<div id="pageblock"></div>
+		<div id="spinner"></div>
+		<div id="mapContainer"></div>
+
+		<script type="text/javascript">
+			/*
+									author domschuette
+									(C) HERE 2019
+								*/
+
+			// Check whether the environment should use hi-res maps
+			var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+			var mapContainer = document.getElementById('mapContainer');
+
+			// check if the site was loaded via secure connection
+			var secure = (location.protocol === 'https:') ? true : false;
+
+			var platform = new H.service.Platform({
+					app_code: app_code,
+					app_id: app_id,
+					useCIT: true,
+					useHTTPS: secure
+				}),
+				defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+				router = platform.getRoutingService(),
+				geocoder = platform.getGeocodingService(),
+
+				map = new H.Map(mapContainer, defaultLayers.satellite.traffic, {
+					center: new H.geo.Point(52.537936779264825, 13.781671681000603),
+					zoom: 10
+				});
+
+			// Enable traffic incidents layer
+			map.addLayer(defaultLayers.incidents);
+
+			// Do not draw under control panel
+			map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+			// add behavior control
+			new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+			// Enable the default UI
+			var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+			// setup the Streetlevel imagery
+			platform.configure(H.map.render.panorama.RenderEngine);
+
+			window.addEventListener('resize', function() {
+				map.getViewPort().resize();
+			});
+
+			var resultContainer = new H.map.Group();
+			map.addObject(resultContainer);
+
+			var startWps = ["52.51164,13.44462", "52.53992,13.40668", "52.52268,13.33371", "52.49552,13.40314", "52.49864,13.42919", "52.52186,13.36622", "52.55373,13.35197", "52.58735,13.34086", "52.61539,13.30878", "52.5866,13.28618", "52.54329,13.37001", "52.58213,13.42899", "52.54465,13.21011", "52.52097,13.20457", "52.50907,13.29607", "52.48752,13.32046", "52.50175,13.33264", "52.53226,13.2824", "52.43718,13.26535", "52.45597,13.33037", "52.46698,13.38387", "52.48462,13.35676", "52.4293,13.18466", "52.42957,13.31551", "52.42959,13.3805", "52.469,13.43844", "52.4342,13.46834", "52.45027,13.51015", "52.43535,13.56914", "52.535,13.5367", "52.52559,13.58244", "52.55645,13.45977", "52.52319,13.49287", "52.48402,13.52074", "52.5266,13.38928", "52.54522,13.44061", "52.63695,13.30123", "52.6067,13.2113", "52.5708,13.22892", "52.58192,13.40723", "52.60714,13.43518", "52.61774,13.38767", "52.58583,13.37002", "52.57306,13.4155", "52.6375,13.50218", "52.611,13.48303", "52.54347,13.15058", "52.4897,13.18066", "52.45472,13.14523", "52.39248,13.41224", "52.41699,13.49686", "52.43922,13.54969", "52.4015112,13.5740896", "52.42408,13.52887", "52.46427,13.51231", "52.44658,13.62613", "52.4367,13.71615", "52.41057,13.66441", "52.3753,13.64824", "52.34707,13.64578", "52.4221339,13.5788805", "52.54205,13.56231", "52.50926,13.55631", "52.50687,13.588", "52.51161,13.61553", "52.53014,13.58985", "52.54506,13.50815", "52.56963,13.54615", "52.57475,13.51575", "52.59296,13.45199", "52.57146,13.43731", "52.51692,13.41468", "52.52458,13.44097", "52.53495,13.36985", "52.5714,13.41407", "52.6314,13.51124", "52.56301,13.15695", "52.51929,13.27617", "52.51861,13.3116", "52.49158,13.29343", "52.47397,13.32667", "52.50336,13.36502", "52.54396,13.24793", "52.44377,13.32093", "52.44391,13.38031", "52.42492,13.35063", "52.40869,13.37936", "52.4059,13.56928", "52.43976,13.59405", "52.51937,13.56698", "52.50743,13.59216", "52.50194,13.4839", "52.53226,13.2824", "52.535,13.5367", "52.53226,13.2824"];
+			var destinationWps = ["52.53096,13.38441"];
+
+			var imageR = "data:image/gif;base64,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";
+			var imageB = "data:image/gif;base64,R0lGODlhfQDCAPQdAAELHgEMHgIMHw8LHRALHR8KGyAKGxEbLCEqOzE5SUBIVkFIV2Fnc3B1gHF2gYCFjoCFj4+UnJCVnZ+jqqCkq6+yuLCzuc/R1NDS1d/g4uDh4+/v8PDw8f///wAAAAAAACH5BAEAAB4ALAAAAAB9AMIAAAX+oCeOJCmcaKqubOu+cCyvZW2XxKzvfO+vhNvN8Csaj0eD0IRsOp+vpQdKrUKF1qy2aNt6v7MSEUwup5Qjs9o8yq3f3uAUTteK6vjqPc9v7vuAP3OBhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnCkICwoMEA4KCwidWgsSGB2trq+uFxEKqEcHHhUcsLu8HRsTHge1OwgTvcfIE6fDLwcQyNDIEMLMKs4b0dm9G9PVJwkZ2uK9GQnVDOPpvQzDEervuxGdBxXw9q8V1JgHF/f+rRf0VeL3r2DAS/UKFqxgSYLChxIooXv4kF2kBBQzmnt0IFzGhxkELnr2kSIERwf+sJV8uEEkIpIrH55chCDmx2WJKNjMSEHRgZ0fXQaaCLRiIgtFKfZEpDJpwQ2IFjiluOCQw6kKIxrqh9Xgoa4Pv4ItaKjm2H84AUk9668qobVs7bkNBDPuOweF6tpNN5PuXnh43/59N1ftYHWF+2A8PC4tIMbjxELOdojVZGgYrF6GprUQ3M28EgfSBXoXh6Oldy09RDR1K4uHfrp2JTSQztmrEZl17fiQ3st9fZLezKG2od+Mgy86oGGzhoubN0JqPRh2pKuDO09C+tfCpQOW42IwzjH82PGaDnAHa4H8JOxTtXOiDtQ6qgTNgWqQzszZ8I8cKOeNMyV14w0LCNz+VhAFvR1oDQMU/CcOBxQw4J6DKqhi3jGyiIZhD58s4MAoC5jy4Ykopqjiiiy26OKLMMYo44w01mgjIIPcqMMfOoaRY48x8AgkDCIMMGQMA6RxZBQjFLBkCwWU8CQLXUyJAhZWShEJAAIE0GUAYIYp5phenkAmmCpw2YIUIjjZiJpbwKlClGyOYOQiclYBQJ4nJFknloXwCcWeKfxp6KGIJiplFn4q6uijkNagRaORVmrpoYxeqummS2TK6aeg/ugEpaGWGqkVpJqqaqJjXLHqq47qAeush7bqBK24/klFrrwuYSsSvQZb5a3CFiuCG34Ya+wTyhqL7BHNLptstMHTEktttcBeiy202m7LRbe9Zgsur9yOm2u55uJqRLrkfsuuuoK8C68P8uL664710upDqvmaei+S/erLA78Bh/qsDAQXDOrACsN6MAwJN8zpDhFLrOnDLlRs8aX4bqxqxx6b6mPIIstA8qomn1wykSqv7ELLLq8Jc6ksz7wwkzbfLHPOn+LM86b/nvCzzjQMzWnQRvdMZdKbYsz0xEU/fenDUm8addWVHoy1pipszTEKGnuta59iWwp22WYLEDbaWqrNdqVuvw1p3HI/unbdeOetN6whAAA7";
+
+			var createSvgMarkerIconWithImg = function(line1, txtColor, base64Img) {
+				var textColor = txtColor ? txtColor : "#000000",
+					ua = navigator.userAgent.toLowerCase(),
+					img = base64Img != undefined ? base64Img : imageB;
+				var svg =
+					'<svg style="margin-left: -21px;margin-top: -48px;" width="220" height="150" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"  >' +
+					'<g>' +
+					'<rect id="label-box" ry="3" rx="3" stroke="#000000" height="40" width="170" x="40" fill="#ffffff"/>' +
+					'<text id="label-text" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="10" font-weight="bold" stroke-width="0" fill="__textColor__" x="45" y="3">__line1__</text>' +
+					'<image width="50" height="50" overflow="visible" xlink:href=' + img + ' />' +
+					'</g>' +
+					'</svg>';
+
+				svg = svg.replace(/__line1__/g, line1);
+				svg = svg.replace(/__textColor__/g, textColor);
+
+				return new H.map.DomIcon(svg);
+			};
+
+			var geocode = function() {
+				resultContainer.removeAll();
+				Spinner.showSpinner();
+				geocoder.search({
+						searchText: document.getElementById('dest').value
+					},
+					function(result) {
+						var pos;
+						if (result.Response.View[0].Result[0].Location != null) {
+							pos = result.Response.View[0].Result[0].Location.DisplayPosition;
+						} else {
+							pos = result.Response.View[0].Result[0].Place.Locations[0].DisplayPosition;
+						}
+
+						if (result.Response.View[0].Result[0].Location != null) {
+							address = result.Response.View[0].Result[0].Location.Address;
+						} else {
+							address = result.Response.View[0].Result[0].Place.Locations[0].Address;
+						}
+
+						line1 = pos.Latitude + "," + pos.Longitude;
+						line2 = address.Label.length > 27 ? address.Label.slice(0, 26) : address.Label;
+
+						var marker = new H.map.DomMarker(new H.geo.Point(pos.Latitude, pos.Longitude), {
+							icon: createSvgMarkerIconWithImg("<tspan x='50' dy='1.0em'>Destination:</tspan><tspan x='50' dy='1.0em'>" + line1 + "</tspan><tspan x='50' dy='1.0em'>" + line2 + "</tspan>", "rgba(255,0,0,1)", imageR)
+
+						});
+						resultContainer.addObject(marker);
+						destinationWps.pop();
+						destinationWps.push(line1);
+						calculateMtxRoute();
+					},
+					function(error) {
+						Spinner.hideSpinner();
+						alert("Geoding failed");
+					}
+				);
+			}
+
+			var Requests = {};
+
+			function calculateMtxRoute() {
+				var starts = "",
+					trafficOn = document.getElementById("trafficOn").checked,
+					truckOn = document.getElementById("truckOn").checked;
+				for (var i = 0; i < startWps.length; i++) {
+					starts += "&start" + i + "=" + startWps[i];
+				}
+
+				var urlRoutingReq = [
+					"https://matrix.route.api.here.com",
+					"/routing/7.2/calculatematrix.json",
+					"?app_id=",
+					app_id,
+					"&app_code=",
+					app_code,
+					starts,
+					"&destination0=" + destinationWps[0],
+					trafficOn ? ("&mode=fastest;" + (truckOn ? "truck" : "car") + ";traffic:enabled") : ("&mode=fastest;" + (truckOn ? "truck" : "car") + ";traffic:disabled"),
+					"&matrixAttributes=ix,su",
+					"&summaryattributes=all",
+					trafficOn ? "&departure=now" : "",
+					"&jsoncallback=onMatrixCalculated"
+				].join("");
+
+				script = document.createElement("script");
+				script.src = urlRoutingReq;
+				document.body.appendChild(script);
+			}
+
+			function onMatrixCalculated(r) {
+				if (r && r.response) {
+					var that = this,
+						l = 0,
+						results = {},
+						response = r.response.matrixEntry,
+						request = r.request,
+						metric = "km";
+
+
+					response.sort(function(a1, a2) {
+						var summary1 = a1.summary,
+							summary2 = a2.summary;
+
+						if (summary1 && summary2) {
+							dTravelTime = summary1.travelTime - summary2.travelTime,
+								dCostFactor = summary1.costFactor - summary2.costFactor;
+
+							if (dTravelTime == 0) {
+								return dCostFactor;
+							} else {
+								return dTravelTime;
+							}
+						}
+					});
+
+					for (var i = 0, lR = response.length; i < lR; i++) {
+						var item = response[i],
+
+							summary = item.summary;
+
+						if (summary !== undefined) {
+							var t = summary.travelTime,
+								d = summary.distance / 1000,
+								c = summary.costFactor,
+								s = "<tspan x='50' dy='1.0em'>" + Math.floor(t / 60) + " min" + "</tspan><tspan x='50' dy='1.0em'>" + d + " " + metric + "</tspan><tspan x='50' dy='1.0em'>" + c + " cost factor</tspan>";
+
+							if (t == 0 && d == 0) {
+								s = "";
+							}
+
+							if (s !== "") {
+								var currStart = startWps[item.startIndex];
+								var point = new H.geo.Point(currStart.split(",")[0], currStart.split(",")[1]);
+
+								var nameFunc = "onRouteCalculated" + i;
+								Requests[nameFunc] = parseRoute.bind({
+									text: s,
+									rIdx: i
+								});
+								if (i == 0 || document.getElementById("allRoutes").checked)
+									calculateSimpleRoute(currStart, destinationWps[item.destinationIndex], nameFunc);
+							}
+						}
+					}
+				}
+			}
+
+			function parseRoute(result) {
+
+				var strip = new H.geo.Strip(),
+					route = result.response.route[0],
+					shape = route.shape,
+					i,
+					l = shape.length;
+
+				for (i = 0; i < l; i++) {
+					strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) {
+						return parseFloat(item);
+					}));
+				}
+
+				var polyline = new H.map.Polyline(strip, {
+					style: {
+						lineWidth: 4,
+						strokeColor: this.rIdx === 0 ? "rgb(255, 0, 0)" : "rgba(0, 0, 255, 0.7)"
+					}
+				});
+
+				var point = {
+					lat: route.waypoint[0].mappedPosition.latitude,
+					lng: route.waypoint[0].mappedPosition.longitude
+				};
+
+				var marker = new H.map.DomMarker(
+					point, {
+						icon: createSvgMarkerIconWithImg(this.text, this.rIdx === 0 ? "rgb(255, 0, 0)" : "rgba(0, 0, 255, 0.7)", this.rIdx === 0 ? imageR : null)
+
+					});
+
+				resultContainer.addObject(marker);
+				resultContainer.addObject(polyline);
+
+				if (this.rIdx === 0) {
+					polyline.setZIndex(10);
+					map.setViewBounds(polyline.getBounds(), true);
+					Spinner.hideSpinner();
+				}
+			}
+
+			function calculateSimpleRoute(wp0, wp1, nameFunc) {
+				var trafficOn = document.getElementById("trafficOn").checked,
+					truckOn = document.getElementById("truckOn").checked;
+				var urlRoutingReq = [
+					"https://route.api.here.com",
+					"/routing/7.2/calculateroute.json",
+					"?", [
+						["app_id", app_id].join("="), ["app_code", app_code].join("="), ["waypoint0", wp0].join("="), ["waypoint1", wp1].join("="), ["mode", trafficOn ? ("fastest;" + (truckOn ? "truck" : "car") + ";traffic:enabled") : ("fastest;" + (truckOn ? "truck" : "car") + ";traffic:disabled")].join("="), ["representation", "display"].join("="), ["depature", trafficOn ? "now" : ""].join("="), ["jsoncallback", "Requests." + nameFunc].join("=")
+					].join("&")
+				].join("");
+
+				script = document.createElement("script");
+				script.src = urlRoutingReq;
+				document.body.appendChild(script);
+			}
+		</script>
+
+		<footer>
+			<div id="footer" class="footer">
+				<div class="col-xs-11">
+					<a target="_blank" href="https://legal.here.com/terms/serviceterms">Terms Of use </a>
+				</div>
+				<div class="col-xs-1">
+					&copy; 2019 HERE
+				</div>
+
+			</div>
+		</footer>
+		<div id="frame-container"></div>
+</body>
+
+</html>

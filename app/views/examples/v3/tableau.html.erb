@@ -1,0 +1,411 @@
+<%= javascript_include_tag "costcodata" %>
+<% content_for :title, "Tableau meets HERE" %>
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>Tableau meets HERE</p>
+	<div id="result" class="form-group"></div>
+	<div id="bar1" style="position:relative">
+		<div id="text1">Clientes no manejan m&aacute;s de: 15 min</div>
+	</div><br />
+	<input id="routing" class="btn btn-default btn-sm" type="button" value="Calcular"/><br />
+	<div id="text2"></div>
+</div>
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+/*
+	author ManuRami
+	(C) HERE 2017
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	bar1 = document.getElementById("bar1"),
+	text1 = document.getElementById("text1"),
+	slider1 = addSlider(bar1,text1,1);
+	
+	// Read the provided location for analysis from URL. If no location was provided, use a default one
+	var urlParams = readURLParams();
+	var siteCoord;
+	var driveTime=900;
+	var waypoint_first,waypoint_last,polyline, firstMarker,lastMarker,
+	selectedCustomers=[];
+	
+	
+		// just making sure we have a valid location
+	if (typeof(urlParams.lat) !=  "undefined" && typeof(urlParams.lon) != "undefined" && !isNaN(parseFloat(urlParams.lat)) && !isNaN(parseFloat(urlParams.lon)) ){
+		siteCoord = new H.geo.Point(urlParams.lat,urlParams.lon);
+	}else {
+		// a default location in case no location is provided
+		siteCoord = new H.geo.Point(19.44044,-99.20606);
+	}
+	
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: siteCoord,
+		zoom: 15,
+		pixelRatio: hidpi ? 2 : 1
+	});
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	/***
+	** 		Display customers around this area
+	**
+	***/
+	
+	var aMarker;
+	var container = new H.map.Group();
+	var group = new H.map.Group();
+	map.addObject(container);
+	map.addObject(group);
+	var readyToUpdate=false,
+		isolinePolygon,
+		isolineCenter;
+	var clickCoords;
+	
+	var svgDef='<svg height="10" width="10" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="5" r="4" stroke="black" stroke-width="1" fill="{color}" /></svg>',
+	svgIcon = new H.map.Icon(svgDef.replace('{color}','red'));
+          
+	for (var i=0; i<costcodata.length; i++){
+		aMarker = new H.map.Marker(new H.geo.Point(costcodata[i].lat,costcodata[i].lng),{icon: svgIcon});
+		aMarker.setData({id : costcodata[i].id,electronica : costcodata[i].electronica,lineaBlanca : costcodata[i].lineaBlanca,mueblesYHogar : costcodata[i].mueblesYHogar,
+			vinosYLicores : costcodata[i].vinosYLicores,comidaYBebida:costcodata[i].comidaYBebida});
+		container.addObject(aMarker);
+	}
+	
+	/***
+	**		Calculate an isoline polygon around the current location
+	***/
+	
+	
+	// Define a callback function to process the isoline response.
+	var onResult = function(result) {
+		var center = new H.geo.Point(result.response.center.latitude, result.response.center.longitude),
+		isolineCoords = result.response.isoline[0].component[0].shape,
+		linestring = new H.geo.LineString();
+
+	// Add the returned isoline coordinates to a linestring:
+		isolineCoords.forEach(function(coords) {
+			linestring.pushLatLngAlt.apply(linestring, coords.split(','));
+		});
+
+	// Create a polygon and a marker representing the isoline:
+		isolinePolygon = new H.map.Polygon(linestring);
+		isolineCenter = new H.map.Marker(center,{icon:createCostcoIcon()});
+
+	// Add the polygon and marker to the map:
+		map.addObjects([isolineCenter, isolinePolygon]);
+
+	// Center and zoom the map so that the whole isoline polygon is
+	// in the viewport:
+		isolinePolygon.setData("polygon");
+		map.setViewBounds(isolinePolygon.getBounds());
+		readyToUpdate=true;
+	};
+
+	// Get an instance of the routing service:
+	var router = platform.getRoutingService();
+
+	function calculateIsoline(){
+		// Route Params
+		var routingParams = {
+			'mode': 'fastest;car;traffic:enabled',
+			'start': 'geo!' + siteCoord.lat + "," + siteCoord.lng,
+			'range': driveTime,
+			'rangetype': 'time'
+		};
+	
+		// Call the Routing API to calculate an isoline:
+		router.calculateIsoline(
+			routingParams,
+			onResult,
+			function(error) {
+				alert(error.message);
+			}
+		);
+	}
+	
+	function createCostcoIcon(){
+		var div = document.createElement("div");
+		var img = document.createElement("img");
+		img.src = "/assets/costco/costco.png";
+		div.appendChild(img);
+		
+		return new H.map.Icon(img, {
+					anchor: { x: 25, y: 7 }
+				});
+	}
+	
+	/***
+	**		Update Report
+	**
+	***/
+	var electronica,lineaBlanca,mueblesYHogar,vinosYLicores,comidaYBebida;
+			
+	function updateReport(){
+		var pixelCoord,
+		marker,
+		mapFeatures,
+		greenIcon = new H.map.Icon(svgDef.replace('{color}','green')),
+		redIcon=new H.map.Icon(svgDef.replace('{color}','red')),
+		strResult,
+		intSelected=0;
+		
+		electronica=0;
+		lineaBlanca =0;
+		mueblesYHogar=0;
+		vinosYLicores=0;
+		comidaYBebida=0;
+		readyToUpdate = false;	// Solo correr reporte despues de calcular una isoline, cuando ya esta lista.
+		selectedCustomers=[];
+		selectedCustomers.push(["customerId","totalSales"]);
+		
+		for(var i=0; i<container.getObjects().length; i++){
+			marker=container.getObjects()[i];
+			pixelCoord= map.geoToScreen(marker.getPosition());
+			mapFeatures = map.getObjectsAt(pixelCoord.x,pixelCoord.y);
+			
+			
+			for (var mapFeature in mapFeatures){
+				
+				if(mapFeatures[mapFeature].getData() === "polygon"){
+					marker.setIcon(greenIcon,{anchor: { x: 25, y: 7 }});
+					electronica+=marker.getData().electronica;
+					lineaBlanca+=marker.getData().lineaBlanca;
+					mueblesYHogar+=marker.getData().mueblesYHogar;
+					vinosYLicores+=marker.getData().vinosYLicores;
+					comidaYBebida+=marker.getData().comidaYBebida;
+					intSelected++;
+					selectedCustomers.push([marker.getData().id,marker.getData().electronica+marker.getData().lineaBlanca+marker.getData().mueblesYHogar+marker.getData().vinosYLicores+marker.getData().comidaYBebida]);
+					break;
+				}else{
+					marker.setIcon(redIcon,{anchor: { x: 25, y: 7 }});
+				}
+			}
+			
+		}
+		
+		strResult='<table><tr><td colspan="2" align="center"><img src="/assets/costco/Costco_Logo-1.png" style="width:254px;height:73px;"></td></tr><tr><td colspan="2" align="center">An&aacute;lisis de &aacute;rea de influencia</td></tr>' +
+			'<tr><td colspan="2" align="center" title="Click para descargar clientes seleccionados" onclick="descargarClientes()">Clientes Seleccionados : ' + intSelected +'</td></tr><tr><td>Departamento</td><td>Consumo Total</td></tr><tr><td>Electr&oacute;nica</td><td>$' + addCommas(electronica.toFixed(2).toString()) + '</td></tr><tr><td>Linea Blanca</td><td>$' + addCommas(lineaBlanca.toFixed(2).toString()) +'</td></tr>' +
+			'<tr><td>Muebles Y Hogar</td><td>$' + addCommas(mueblesYHogar.toFixed(2).toString()) + '</td></tr><tr><td>Vinos Y Licores</td><td>$'+ addCommas(vinosYLicores.toFixed(2).toString()) + '</td></tr><tr><td>Comida Y Bebida</td><td>$' + addCommas(comidaYBebida.toFixed(2).toString()) + '</td></tr></table>';
+		
+		var divResult = document.getElementById('result');
+		divResult.innerHTML=strResult;
+		
+	}
+	
+	
+	map.addEventListener('mapviewchangeend',function(){
+		if(readyToUpdate)
+			updateReport(); });
+	
+	var calcroute = document.getElementById("routing");
+	calcroute.onclick = function ()
+	{
+		driveTime=slider1.value * 60;
+		readyToUpdate=false;
+		map.removeObject(isolinePolygon);
+		map.removeObject(isolineCenter);
+		calculateIsoline();
+	};
+	
+	calculateIsoline();
+	
+	/**
+	***	A Context menu to allow routing
+	***
+	**/
+	
+	map.addEventListener('contextmenu',function(e){
+		
+		clickCoords = map.screenToGeo(e.viewportX, e.viewportY);
+		
+		// add routing options 
+        e.items.push(new H.util.ContextItem({
+            label: 'Ruta desde',
+            callback: function(){
+				removeObjects(false);
+				waypoint_first = clickCoords;
+				firstMarker = addMarker(clickCoords);
+				waypoint_last = "";
+                    
+			}
+		}));
+		e.items.push(new H.util.ContextItem({
+			label: 'Ruta hasta',
+			callback: function(){
+				removeObjects(true);
+				waypoint_last = clickCoords;
+				lastMarker = addMarker(clickCoords);
+				calculateRouteFromAtoB();
+				routeNotCalculated = false;
+			}
+		}));
+	});
+	
+	function calculateRouteFromAtoB(){
+    
+        var routeRequestParams = {
+            mode: 'fastest;car',
+            representation: 'display',
+            routeattributes: 'waypoints,summary,shape,legs',
+            maneuverattributes: 'direction,action',
+            waypoint0: waypoint_first.lat + "," + waypoint_first.lng,
+            waypoint1: waypoint_last.lat + "," + waypoint_last.lng
+        };
+        
+        // calculate route
+        router.calculateRoute(routeRequestParams, addRouteShapeToMap, function(e){
+            console.log(e);
+        });
+    }
+	
+	    // add route to map
+    function addRouteShapeToMap(result){
+        try {
+            var route = result.response.route[0];
+            var strip = new H.geo.Strip(), routeShape = route.shape, minutos;
+			
+			minutos = route.summary.trafficTime / 60;
+			
+			var summary = "La ruta mide " + route.summary.distance / 1000 + " km y se recorre en " + minutos.toFixed(0) + " min";
+			var text2 = document.getElementById('text2');
+			text2.innerHTML='<b>' + summary + '</b>';
+            
+            routeShape.forEach(function(point){
+                var parts = point.split(',');
+                strip.pushLatLngAlt(parts[0], parts[1]);
+            });
+            
+            polyline = new H.map.Polyline(strip, {
+                style: {
+                    lineWidth: 4,
+                    strokeColor: 'rgba(0, 128, 255, 0.7)'
+                }
+            });
+            // Add the polyline to the map
+            group.addObject(polyline);
+            // And zoom to its bounding rectangle
+            map.setViewBounds(polyline.getBounds(), true);
+        } 
+        catch (e) {
+            console.log(e);
+        }
+        
+        
+    }
+    
+    // function creates a marker , adds to map
+    function addMarker(coordinates){
+        var marker = new H.map.Marker({
+            lat: clickCoords.lat,
+            lng: clickCoords.lng
+        });
+        group.addObject(marker);
+        return marker;
+    }
+    
+    // function removes objects from map as required
+    function removeObjects(onlyPolyline){
+        if (onlyPolyline) {
+            if (group.contains(polyline)) 
+                group.removeObject(polyline);
+            if (group.contains(lastMarker)) 
+                group.removeObject(lastMarker);
+        }
+        else {
+			var text2 = document.getElementById('text2');
+			text2.innerHTML='';
+            group.removeAll();
+        }
+    }
+    
+	// A function to read parameters from URL
+	
+	function readURLParams(){	
+		var match,
+			pl     = /\+/g,  // Regex for replacing addition symbol with a space
+			search = /([^&=]+)=?([^&]*)/g,
+			decode = function (s) { return decodeURIComponent(s.replace(pl, " ")); },
+			query  = window.location.search.substring(1);
+
+			var urlParams = {};
+			while (match = search.exec(query))
+				urlParams[decode(match[1])] = decode(match[2]);
+			return urlParams;
+	}
+	function addCommas(nStr){
+		nStr += '';
+		x = nStr.split('.');
+		x1 = x[0];
+		x2 = x.length > 1 ? '.' + x[1] : '';
+		var rgx = /(\d+)(\d{3})/;
+		while (rgx.test(x1)) {
+			x1 = x1.replace(rgx, '$1' + ',' + '$2');
+		}
+		return x1 + x2;
+	}
+	
+	function addSlider(parent,text,no){
+		var slider = document.createElement('input');
+		slider.setAttribute('type', 'range');
+		slider.setAttribute('orient', 'horizontal');
+
+		slider.min = "0";
+		slider.max = "60";
+		
+		slider.style.width = "200px";
+		slider.value = "15";
+		slider.style.cursor = "pointer";
+		parent.appendChild(slider);
+
+		slider.onchange = function() { updateTextValue(slider.value,text) };
+		slider.onmousemove = function() {updateTextValue(slider.value,text) };
+		return slider;
+	}
+	
+	var updateTextValue = function (value,text)
+	{
+		
+		text.innerHTML = "Clientes no manejan m&aacute;s de: " + value +" min";
+		
+
+	};
+	
+	function descargarClientes(){
+		var csvContent = "data:text/csv;charset=utf-8,";
+		selectedCustomers.forEach(function(infoArray, index){
+			dataString = infoArray.join(",");
+			csvContent += index < selectedCustomers.length ? dataString+ "\n" : dataString;
+		}); 
+		var encodedUri = encodeURI(csvContent);
+		var link = document.createElement("a");
+		link.setAttribute("href", encodedUri);
+		link.setAttribute("download", "downloadReport.csv");
+		document.body.appendChild(link); // Required for FF
+
+		link.click(); // This will download the data file 
+	}
+		
+</script>

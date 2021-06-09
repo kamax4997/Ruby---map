@@ -1,0 +1,160 @@
+<% content_for :title, "Show the location of an exit number on Highways" %>
+
+<div class="ctrl-panel">
+	Enter the Highway name followed by Exit number : 
+	<input class="form-control" type='text' id='geoCode' size='25' value='A66 8' />
+	<input id="geoCode" class="btn btn-default btn-sm" type="button" value="Show the exit on Highway" onclick="geocode();"/><br />
+	<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>	
+</div>
+
+<div id="mapContainer"></div>
+
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2016
+	*/
+
+	var positionMarker = null;
+	
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		useHTTPS: secure,
+		app_id: app_id,
+		app_code: app_code
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+	geocoder = platform.getGeocodingService();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), maptypes.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+
+	//add MRS Release information
+	loadMRSVersionTxt();
+
+	//helper
+	var releaseGeocoderShown = false;
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+	
+	var point;
+	group = new H.map.Group();
+
+	geocode = function()
+	{
+		//add Geocoder Release information if not already done
+		if (releaseGeocoderShown== false){
+			loadGeocoderVersionTxt();
+			releaseGeocoderShown = true;
+		}
+		var searchText = document.getElementById("geoCode").value;
+		geocoder.search(
+			{
+				searchText: searchText,
+				categoryids : '116'
+			},
+			function(result) {
+				
+				var size=result.Response.View[0].Result.length;
+				console.log(result);
+				
+				for(var count=0;count<size;count++){
+				if( result.Response.View[0].Result[count].Place){
+					pos = result.Response.View[0].Result[count].Place.Locations[0].DisplayPosition;
+				}else{
+						pos = result.Response.View[0].Result[count].Location.DisplayPosition;
+				}
+				console.log(pos);
+			
+				point = new H.geo.Point(pos.Latitude, pos.Longitude);
+
+				line1 = pos.Latitude + " " + pos.Longitude;
+				line2 = result.Response.View[0].Result[count].MatchLevel;
+				
+				addMarkerToPosition(point);
+
+				}
+					map.setCenter(point);
+					map.setZoom(18);
+			},
+			function(error) {
+				alert(error);
+			}
+		);
+		
+			function addMarkerToPosition(pos) {
+		if (positionMarker){
+			
+		}
+		//map.removeObject(positionMarker);
+		/*positionMarker = new H.map.DomMarker(pos, {
+			icon: createMarkerIcon("red")
+		});*/
+		
+		positionMarker=new H.map.Marker(pos);
+		map.addObject(positionMarker);
+		map.setCenter(pos);
+	};
+
+	/**
+	* Creates a simple DOM icon.
+	*/
+	function createMarkerIcon(color) {
+		var div = document.createElement("div");
+		var img = '<img src="/assets/icons/marker_' + color + '.png" />';
+
+		div.innerHTML = img;
+
+		return new H.map.DomIcon(div, {
+			width: 50,
+			height: 50,
+			anchorX: 20,
+			anchorY: 24,
+			drawable: false
+		})
+	};
+		
+		
+	},
+
+	createIcon = function (line1, line2) {
+		var div = document.createElement("div");
+
+		var div = document.createElement("div");
+		var svgMarker = svgMarkerImage_Line;
+
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line2);
+		svgMarker = svgMarker.replace(/__width__/g, line1.length  * 4 + 57);
+		svgMarker = svgMarker.replace(/__widthAll__/g, line1.length  * 4 + 120);
+		div.innerHTML = svgMarker;
+
+		return new H.map.Icon(svgMarker, {
+			anchor: new H.math.Point(24, 57)
+		});;
+	};
+</script>

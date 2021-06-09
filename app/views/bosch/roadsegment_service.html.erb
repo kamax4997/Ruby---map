@@ -1,0 +1,246 @@
+<% content_for :title, "Road Segment Service Demo" %>
+
+<style type="text/css">
+	.H_ib_body {
+		width: 220px;
+	}
+	textarea
+	{
+		color: black;
+		font-size: 12px;
+	}
+	.color-box {
+	    width: 10px;
+	    height: 10px;
+	    display: inline-block;
+	    background-color: #ccc;
+	}
+	table{
+		color:white;
+	}
+</style>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<h6>Long Click on the Map to retrieve Road Segments</h6>
+	<hr class="separator">
+	<div class="col-sm-9">
+		<label><input id="fc2" type="checkbox" onclick="handleFC2Selection()"> Include FC2</input></label>
+	</div>
+	<div class="col-sm-9">
+		<input id="savebutton" class="btn btn-default btn-sm" type="button" value="Save Tile to File" onclick="save()"/>
+	</div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2018
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	var mapContainer = document.getElementById('mapContainer'),
+		host = (secure ? "https://":"http://") + "tcs.ext.here.com",
+		currentBubble;
+	
+	platform = new H.service.Platform({
+		app_code: app_code,
+		app_id: app_id,
+		useCIT: true,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+
+	map = new H.Map(mapContainer, maptypes.normal.map,
+		{
+			center: center,
+			zoom: zoom
+		}
+	);
+	
+	var tile = null;
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+	// add behavior control
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+	var group = new H.map.Group(),
+		geojsonLayer = null,
+		lastClickedPos;
+		
+	map.addObject(group);
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// add long click in map event listener
+	map.addEventListener('longpress', handleLongClickInMap);
+
+	function handleLongClickInMap(currentEvent)
+	{
+		lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+		requestRoadSegments(lastClickedPos.lat + "," + lastClickedPos.lng);
+	}
+	
+	function drawBBox(tileX, tileY, tileSizeDegree)
+	{
+		var miny = tileY * tileSizeDegree -  90.0,
+			minx = tileX * tileSizeDegree - 180.0,
+			maxy = miny + tileSizeDegree - 0.00001,
+			maxx = minx + tileSizeDegree - 0.00001;
+
+		var bounds = new H.geo.Rect(maxy, minx, miny, maxx);
+
+		var rectangle = new H.map.Rect(bounds, {
+				style: {
+					lineWidth: 5,
+					strokeColor: "rgba(0, 0, 255, 0.2)",
+					fillColor: "rgba(0, 0, 0,0)",
+					lineJoin: "round"
+				}
+			});
+        group.addObject(rectangle);
+	}
+	
+	function requestRoadSegments(prox)
+	{
+		var includeFC2 = document.getElementById('fc2').checked;
+		
+		if(geojsonLayer)
+			map.removeLayer(geojsonLayer);
+		group.removeAll();
+
+		// FC1
+		var lat = Number(prox.split(",")[0]),
+			lng = Number(prox.split(",")[1]),
+			level = 9,
+			tileSizeDegree = 180.0 / (1 << level),
+			tileX = Math.floor((lng + 180.0) / tileSizeDegree),
+			tileY = Math.floor((lat +  90.0) / tileSizeDegree);
+		drawBBox(tileX, tileY, tileSizeDegree);
+		
+		if(includeFC2)
+		{
+			// FC2
+			level = 10;
+			tileSizeDegree = 180.0 / (1 << level);
+			
+			drawBBox(tileX * 2, tileY * 2, tileSizeDegree);
+			drawBBox(tileX * 2+ 1, tileY * 2, tileSizeDegree);
+			drawBBox(tileX * 2, tileY * 2 + 1, tileSizeDegree);
+			drawBBox(tileX * 2 + 1, tileY * 2 + 1, tileSizeDegree);
+		}
+
+		// test the prox interface
+		/*
+		url = [host, 
+			   "/RoadSegmentService/get?",
+			   "prox=",
+				prox, 
+				"&app_id=",
+				app_id, 
+				"&app_code=",
+				app_code
+			  ].join("");
+		*/
+		
+		url = [host, 
+			   "/RoadSegmentService/get?",
+			   "tilexy=",
+				tileX,
+				",",
+				tileY,
+				"&app_id=",
+				app_id, 
+				"&app_code=",
+				app_code,
+				"&jsoncallback=parseGeoJson",
+				includeFC2 ? "&fc2=true" : ""
+			  ].join("");
+
+		script = document.createElement("script");
+		script.src = url;
+		document.body.appendChild(script);
+	}
+	
+	function parseGeoJson(geojson)
+	{
+		
+		var lat = Number(lastClickedPos.lat),
+			lng = Number(lastClickedPos.lng),
+			level = 9,
+			tileSizeDegree = 180.0 / (1 << level),
+			tileX = Math.floor((lat +  90.0) / tileSizeDegree),
+			tileY = Math.floor((lng + 180.0) / tileSizeDegree);
+
+		tile = { content : JSON.stringify(geojson), X : tileX ,Y : tileY };
+		
+		var reader = new H.data.geojson.Reader(null, 
+		{
+			// This function is called each time parser detects a new map object
+			style: function (mapObject) {
+				if (mapObject instanceof H.map.Marker)
+				{
+					mapObject.addEventListener("tap", function(e)
+					{
+						if(currentBubble)
+						{
+							ui.removeBubble(currentBubble);
+							currentBubble = null;
+						}
+						
+						var json = JSON.stringify(e.target.getData(), undefined, 4);
+						var html = "<textarea rows='10' cols='25'>" + json + "</textarea>";
+						
+						currentBubble = new H.ui.InfoBubble(e.target.getPosition(), { content: html });
+						ui.addBubble(currentBubble);
+					});
+				}
+			}
+		});
+		reader.parseData(geojson);
+		geojsonLayer = reader.getLayer();
+		map.addLayer(geojsonLayer);
+	}
+	
+	function handleFC2Selection()
+	{
+		if(geojsonLayer)
+			map.removeLayer(geojsonLayer);
+		group.removeAll();
+		if(lastClickedPos)
+			requestRoadSegments(lastClickedPos.lat + "," + lastClickedPos.lng);
+	}
+	
+	function save()
+	{
+		if(tile !== undefined)
+			saveTile(tile);
+	}
+	
+	function saveTile(tile)
+	{
+		var filename = tile.X + '_' + tile.Y + '.json'
+
+		var data = tile.content;
+
+		var blob = new Blob([data], {type: 'text/json'}),
+			e    = document.createEvent('MouseEvents'),
+			a    = document.createElement('a')
+
+		a.download = filename
+		a.href = window.URL.createObjectURL(blob)
+		a.dataset.downloadurl =  ['text/json', a.download, a.href].join(':')
+		e.initMouseEvent('click', true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null)
+		a.dispatchEvent(e)
+	}
+</script>

@@ -1,0 +1,57 @@
+
+<% content_for :title, "Platform Data Extension" %>
+
+<div class="subheader">Static content <%= params[:content] %> </div>
+<p class="content-text"><%= raw(@json['description'])%></p>
+
+<table class="pde_table" cellpadding="4" cellspacing="0" border="1" width="90%">
+	<thead>
+		<tr>
+			<th width="30%">Attribute</th>
+			<th width="70%">Description</th>
+		</tr>
+	</thead>
+	<tbody id="maps_table_body">
+
+		<% @json['attributes'].each do |attribute, description| %>
+			<tr>
+				<td><%= attribute %></td>
+				<td><%= raw(description) %></td>
+			</tr>
+		<% end %>
+
+		<% if @json.empty? %>
+			<tr><td colspan="2" class="empty">No static content for this layer</td></tr>
+		<% end %>
+
+	</tbody>
+</table>
+
+<p class="content-text">
+	Show table content as:
+	<% parameters = "region=" + params[:region] + "&release=" + params[:release]+ "&url_root=" + params[:url_root] %>
+	<% sampleTypes = ["json", "txt"] %>
+
+	<% sampleTypes.each do |sampleType| %>
+		<%=
+			link_to sampleType, [
+				"https://" + params[:url_root] + "/1/static." + sampleType + "?",
+				"&" + parameters,
+				"&content=" + params[:content],
+				"&app_id=" + Rails.application.config.app_id,
+				"&app_code=" + Rails.application.config.app_code
+			].join("\n") + "\n", 
+			:class=>"pde"
+		%>
+	<% end %>
+</p>
+
+<p class="content-text">Layers referencing this static content</p>
+
+<ul>
+	<% @json['referencingLayers'].each do |layer| %>
+		<li>
+			<td><%= link_to layer, "/pde/layer" + "?layer=" + layer + "&" + parameters %></td>
+		</li>
+	<% end %>
+</ul>

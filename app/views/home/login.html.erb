@@ -1,0 +1,34 @@
+<% content_for :title, "Login" %>
+<div class="content-block" >
+
+
+<div class="wrapper">
+		<div id="cookie-welcome" class="" style="display: block;">
+			<h2>Welcome to HERE Technical Customer Support</h2>
+			<p>HERE helps people navigate their lives and make sense of the world with intelligent and personal maps. HERE Technical Customer Support is the company’s official Support Team for <u>all</u> HERE products. </p>
+		</div>
+	</div>
+</div>
+<ul class="here-menu-modern">
+	<li>
+		<div id="message" class="hvr-overline-reveal">
+			To view the page please Sign In with your HERE Account. Click
+			<a href="#" onclick="javascript:openLogin()">
+			<b>here</b>
+			</a>
+			to Sign In or Register for your HERE Account.
+		</div>
+	</li>
+	<li style="display:none">
+		<div class="hvr-overline-reveal" >
+			If not redirected automatically after Sign In click <a id="redirect" href='<%= @original_url%>'><u><b>here</b></u></a>
+		</div>
+	</li>
+
+</ul>
+
+<script>
+	
+		document.getElementById("logoutButton").style.display="none";
+		openLogin();
+</script>

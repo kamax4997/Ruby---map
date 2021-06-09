@@ -1,0 +1,783 @@
+<%= javascript_include_tag "custom-location-extension-2.js" %>
+<%= javascript_include_tag "quadkey.js" %>
+<%= javascript_include_tag "jszip.min.js" %>
+<%= javascript_include_tag "center-utils.js" %>
+<%= javascript_include_tag "wellknown.js" %>
+
+<% content_for :title, "YARD Maps CLE" %>
+<style>
+  li {
+    list-style-type: square;
+    font-size: large;
+  }
+
+  .caption {
+    background: rgba(0, 85, 170, 0.6);
+    border: 0.1em solid white;
+    border-radius: 0.2em;
+    color: white;
+    font-family: sans-serif;
+    font-size: medium;
+    font-weight: bold;
+    padding: 0.2em;
+  }
+
+  .distance {
+    background: rgba(0, 85, 170, 0.6);
+    border: 0.05em solid white;
+    border-radius: 0.1em;
+    color: white;
+    font-style: italic;
+    font-family: sans-serif;
+    font-size: smaller;
+    padding: 0.1em;
+  }
+  
+  .smallButton {
+    padding:0;
+    margin:0;
+  }
+	
+	.H_ib_body {
+		width: 220px;
+	}
+	textarea
+	{
+		resize: none;
+		color: black;
+		font-size: 12px;
+	}
+
+  .form-group    { margin-left: 2px; margin-right: 2px; margin-top: 2px; margin-bottom: 2px; }
+  .form-control,
+  .control-label { margin-left: 0px; margin-right: 0px; margin-top: 0px; margin-bottom: 0px; }
+</style>
+
+<div class="ctrl-panel">
+  <span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<h6>
+		This demo can be used to import Yard Map geometries from XYZ Space to CLE and display them. 
+	</h6>
+  <div class="form-horizontal">
+   	<div class="form-group">
+			<label class="control-label col-sm-4" for="environment">Endpoint:</label>
+			<div class="col-sm-8">
+        <input class="form-control input-wide" type="text" name="environment" id="environment" size="33" autocomplete="off" onchange="setVariables();" placeholder="URL with http or https and host" list="environments" >
+			</div>
+		</div>
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="customAppId">App id:</label>
+      <div class="col-sm-8">
+        <input class="form-control input-wide" type="text" id="customAppId" value="" placeholder="Leave empty for demo account" autocomplete="off" onchange="setVariables();">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="customAppCode">App code:</label>
+      <div class="col-sm-8">
+         <input class="form-control input-wide" type="text" id="customAppCode" value="" placeholder="Leave empty for demo account" autocomplete="off" onchange="setVariables();">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="xyzSpaceId">XYZ SpaceId:</label>
+      <div class="col-sm-8">
+        <input class="form-control input-wide" type="text" id="xyzSpaceId" size="33" value="" placeholder="SpaceId containing Yard Map data" autocomplete="off" onchange="setVariables();">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="mapName">Map Name:</label>
+      <div class="col-sm-8">
+        <input class="form-control input-wide" type="text" id="mapName" size="33" value="TESTYARD" placeholder="Overlay Map Name" autocomplete="off" onchange="setVariables();">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="importButton"> </label>
+      <div class="col-sm-8">
+        <input class="btn btn-default btn-sm" type="button" id="importButton" value="Import YARD Map Content" onclick="importToCle()">
+      </div>
+    </div>
+
+    <hr class="separator">
+    <h6>Search YARD Map CLE Layers</h6>
+    <p>The proximity search can be used with a long click into the map.</p>
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="searchType ">Search Type:</label>
+      <div class="col-sm-8">
+        <select id="searchType" class="form-control input-wide" onchange="searchSelect()" >
+          <option value="all"       selected = "true" >All</option>
+          <option value="bbox"                        >Bounding Box</option>
+          <option value="proximity"                   >Proximity</option>
+        </select>
+      </div>
+    </div>
+       
+    <div class="form-group" id="searchRadiusLabel" style="display:none">
+      <label class="control-label col-sm-4" >Radius in meter:</label>
+        <div class="col-sm-8">
+          <input class="form-control input-wide" type="text" id="searchRadius" value="3000" autocomplete="off">                
+      </div>
+    </div>
+
+    <div class="form-group" id="seachParameters" style="display:none">
+      <label class="control-label col-sm-4" for="maxDistance">Search Parameters:</label>
+        <div class="col-sm-8">
+          <input class="form-control input-wide" type="text" id="searchclause" value="" autocomplete="off">                
+        </div>
+    </div>
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="startButton"> </label>
+      <div class="col-sm-8">
+        <input class="btn btn-default btn-sm" type="button" id="startButton" value="Search Layers" onclick="searchCle()">
+      </div>
+    </div>
+    
+    </div>
+
+    <hr class="separator">
+    <h6>Select Layers for display</h6>
+    <div class="form-group">
+      <label class="checkbox-inline" style="color:lightblue;" >
+        <input type="checkbox" checked="true" id="pois" onchange="onPoisSelect()"><b>POIS</b>
+      </label>
+      <label class="checkbox-inline" style="color:red;" >
+        <input type="checkbox" checked="true" id="lines" onchange="onLinesSelect()"><b>LINES</b>
+      </label>
+      <label class="checkbox-inline" style="color:lightseagreen;" >
+        <input type="checkbox" checked="true" id="polygons" onchange="onPolygonsSelect()"><b>POLYGONS</b>
+      </label>
+      <label class="checkbox-inline" style="color:maroon;" >
+        <input type="checkbox" checked="true" id="2dfs" onchange="on2DFSSelect()"><b>2D Footprints</b>
+      </label>
+      <!-- <div class="checkbox control-label col-sm-3"> <label><input type="checkbox" checked="true" id="lines"><b><font color='#00FF00'>LINES</font></b></label></div>
+      <div class="checkbox control-label col-sm-3"> <label><input type="checkbox" checked="true" id="polygons"><b><font color='#0000FF'>POLYGONS</font></b></label></div>
+      <div class="checkbox control-label col-sm-3"> <label><input type="checkbox" checked="true" id="2dfs"><b><font color='#0000FF'>2D Footprints</b></label></div> -->
+    </div>	
+    <div class="form-group">
+        <label for="logArea">Request/Response Log:</label><input class="btn btn-default btn-xs" type="button" id="startButton" value="Clear" onclick="clearLog()">
+        <textarea class="form-control" id="logArea" cols="52" rows="10" autocomplete="off"></textarea>
+    </div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+    /**
+    * @author Gokul
+    * @copyright (C) HERE 2020
+    */
+
+    var centerLat = 50.852599;
+    var centerLon = 9.733390;
+
+    // Prefill values from URL if passed.
+    (function setValuesFromUrl() {
+      var indexOf = window.location.href.indexOf('?');
+      if (indexOf < 0) return;
+      var vars = window.location.href.slice(indexOf + 1).split('&');
+
+      for (var i = 0; i < vars.length; i++) {
+        nameVal = vars[i].split('=');
+        var paramName = nameVal[0];
+        if (!paramName) continue;
+        var paramValue = nameVal[1];
+        if (paramName === 'lat') centerLat = paramValue;
+        if (paramName === 'lon') centerLon = paramValue;
+        if (paramName === 'xyzSpaceId') document.getElementById("xyzSpaceId").value = paramValue;
+        if (paramName === 'map_name') document.getElementById("mapName").value = paramValue;
+        if (paramName === 'app_id') document.getElementById("customAppId").value = paramValue;
+        if (paramName === 'app_code') document.getElementById("customAppCode").value = paramValue;
+        if (paramName === 'endpointurl') document.getElementById("environment").value = paramValue;
+      }
+
+    })();
+
+    var polygonsStyle = {
+      style: {
+        fillColor: 'rgba(32, 178, 170, 0.3)',
+        strikeColor: 'rgba(32, 178, 170, 0.0)',
+        lineWidth: 3
+      }
+    };
+
+    var linesStyle = {
+      style: {
+        strokeColor: 'rgba(255, 0, 0, 0.3)',
+        lineWidth: 3,
+        fillColor: 'rgba(255, 0, 0, 0.3)'
+      }
+    };
+
+    var poisStyle = {
+      style: {
+        fillColor: 'rgba(173, 216, 230, 0.0)',
+        lineWidth: 0
+      }
+    };
+
+    var fsStyle = {
+      style: {
+        fillColor: 'rgba(128, 0, 0, 0.3)',
+        strokeColor: 'rgba(128, 0, 0, 0.0)',
+        lineWidth: 3
+      }
+    };
+
+
+    var searchGeometryOptions = {
+      style: {
+        fillColor: 'rgba(0, 0, 0, 0.0)',
+        lineWidth: 2,
+        strokeColor: 'red'
+      }
+    };
+
+    var distanceOptions = {
+      style: {
+        fillColor: 'rgba(0, 0, 0, 0.0)',
+        lineWidth: 2,
+        lineDash: [5, 5],
+        strokeColor: 'red'
+      }
+    };
+
+    // Check whether the environment should use hi-res maps
+    var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	  // check if the site was loaded via secure connection
+    var secure = (location.protocol === 'https:') ? true : false;
+	
+    // Create a platform object to communicate with the HERE REST APIs
+    var platform = new H.service.Platform({
+        useHTTPS: secure,		app_id: app_id,
+        app_code: app_code
+    });
+    maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+    var defaultCenter = new H.geo.Point(centerLat, centerLon);
+    var defaultZoom = 13;
+    var map = new H.Map(document.getElementById('mapContainer'), maptypes.normal.map, {
+        center: defaultCenter,
+        zoom: defaultZoom,
+        pixelRatio: hidpi ? 2 : 1
+    });
+
+    // Enable the map event system
+    var mapevents = new H.mapevents.MapEvents(map);
+
+    // Enable map interaction (pan, zoom, pinch-to-zoom)
+    var behavior = new H.mapevents.Behavior(mapevents);
+
+    // Enable the default UI
+    var ui = H.ui.UI.createDefault(map, maptypes);
+
+    //add JS API Release information
+    // releaseInfoTxt.innerHTML += "JS API: 3." + H.buildInfo().version; -->
+
+    //add MRS Release information
+    // loadMRSVersionTxt();
+
+    window.addEventListener('resize', function () {
+        map.getViewPort().resize();
+    });
+
+     //when the page loads then there is no enviornment is set
+    window.onload = setVariables;
+
+	  map.addEventListener('longpress', mapLongpress);
+
+	  function mapLongpress(e) {		
+      if(document.getElementById('searchType').value === 'proximity'){
+        var p = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+        map.removeObjects(map.getObjects());
+        if(currentBubble)
+          ui.removeBubble(currentBubble);
+        var searchRadius = document.getElementById('searchRadius').value;
+        var circle = new H.map.Circle(p, searchRadius, searchGeometryOptions);
+        map.addObject(circle);
+        map.addObject(new H.map.Marker(p));
+        map.setViewBounds( circle.getBounds(), true );
+        document.getElementById('searchclause').value='proximity='+p.lat.toFixed(4)+','+p.lng.toFixed(4);
+        searchCle();
+      }
+	  }
+	
+    var cle = platform.ext.getCustomLocationService( document.getElementById('environment').value, document.getElementById('environment').value );
+    var currentBubble = null; 
+    var xyzSpaceId, mapName;
+    var searchGeometry;
+    var xyzToken = "AeQ-cpPFQSmnO5McXONG_QA"; // Currently hard-coded for Yard Maps. YMC uploads all yard map content tp same XYZ space.
+    var poisGroup = new H.map.Group();
+    var linesGroup = new H.map.Group();
+    var polygonsGroup = new H.map.Group();
+    var fsGroup = new H.map.Group();
+    var generalGroup = new H.map.Group();
+    map.addObject(poisGroup);
+    map.addObject(linesGroup);
+    map.addObject(polygonsGroup);
+    map.addObject(fsGroup);
+    // generalGroup.addObject(poisGroup);
+    // generalGroup.addObject(linesGroup);
+    // generalGroup.addObject(polygonsGroup);
+    // generalGroup.addObject(fsGroup);
+
+    function onPoisSelect() {
+      if(document.getElementById('pois').checked) map.addObject(poisGroup);
+      else map.removeObject(poisGroup);
+    }
+
+    function onLinesSelect() {
+      if(document.getElementById('lines').checked) map.addObject(linesGroup);
+      else map.removeObject(linesGroup);
+    }
+
+    function onPolygonsSelect() {
+      if(document.getElementById('polygons').checked) map.addObject(polygonsGroup);
+      else map.removeObject(polygonsGroup);
+    }
+
+    function on2DFSSelect() {
+      if(document.getElementById('2dfs').checked) map.addObject(fsGroup);
+      else map.removeObject(fsGroup);
+    }
+
+    var logArea = document.getElementById('logArea');
+    logArea.log = function (str) {
+        logArea.value += str + '\n';
+        logArea.scrollTop = logArea.scrollHeight;
+    };    
+    logArea.delim = function () {
+        logArea.log("--------------------------------------------------");
+    };
+    logArea.strongDelim = function () {
+        logArea.log("=================================================");
+    };
+    
+    
+    function clearLog() {
+         logArea.value = "";
+    }
+ 
+    function searchSelect() {
+        var type= document.getElementById('searchType').value;
+        switch( type ) {
+            case 'proximity':
+                document.getElementById('searchclause').value= 'proximity=50.85259,9.73339';
+                document.getElementById('searchRadius').value = '1000'
+                document.getElementById('searchRadiusLabel').style.display = 'block'
+                document.getElementById('searchRadius').style.display = 'block'
+                document.getElementById('seachParameters').style.display = 'block'
+                break;
+            case 'bbox':
+                document.getElementById('searchclause').value= 'bbox=50.85324,9.73475;50.85103,9.73799'
+                document.getElementById('seachParameters').style.display = 'block'
+                document.getElementById('searchRadiusLabel').style.display = 'none'
+                document.getElementById('searchRadius').style.display = 'none'
+                break;
+            case 'all':
+                document.getElementById('searchclause').value= '';
+                document.getElementById('seachParameters').style.display = 'none'
+                document.getElementById('searchRadiusLabel').style.display = 'none'
+                document.getElementById('searchRadius').style.display = 'none'
+                break;
+            default: console.alert("Unknown search type: " + type)
+        }
+    }
+    
+    function refreshDemo() {
+      if( cle.endpoint === "" ) {
+          alert("Please enter an endpoint.");
+          return;
+      }
+    }
+      
+    function setVariables() {
+      var environment = document.getElementById('environment').value;
+      var appId = document.getElementById('customAppId').value;
+      var appCode = document.getElementById('customAppCode').value;
+      xyzSpaceId = document.getElementById('xyzSpaceId').value;
+      mapName = document.getElementById('mapName').value;
+
+      if( appId.length > 0 && appCode.length > 0 ) {
+          if( cle.setCredentials( appId, appCode ) ) {
+              logArea.log( 'Credentials updated.' );
+          }
+      }
+    }
+
+    function importToCle() {
+      setVariables();
+      if(currentBubble) {
+        ui.removeBubble(currentBubble);
+      }
+      map.removeObjects(map.getObjects());
+      cle.importFromXYZ(xyzSpaceId, xyzToken, mapName, onCleImportResponse);
+    }
+
+    function onCleImportResponse( url, resp, err ) {
+        logArea.log( "Request:" );
+        logArea.log( url );
+        logArea.delim();
+        
+        if (err) {
+          logArea.log('ERROR!: '+ resp.issues[0].message + '['+resp.error_id+']');
+          logArea.strongDelim();
+          return;
+        }
+
+        var geometryResponse = null;
+        if (resp.layers != null) {
+            logArea.log("Layers imported from Yard XYZ space: " + resp.layers);
+        } else {
+           logArea.log("No layers imported from XYZ space, possible warning: " + (resp.warning != null ? resp.warnings : null));
+        }
+        logArea.strongDelim();
+    }
+
+    
+
+    function searchCle() {
+		  if(currentBubble) {
+        ui.removeBubble(currentBubble);
+      }
+      var layerIds = xyzSpaceId.toUpperCase() + "_POIS," + xyzSpaceId.toUpperCase() + "_LINES," + xyzSpaceId.toUpperCase() + "_POLYGONS," + xyzSpaceId.toUpperCase() + "_2DFS";
+			
+		  var searchClause = document.getElementById('searchclause').value;
+      var name = mapName.includes("OVERLAY") ? mapName.replace("OVERLAY", "GEOMETRY") : "GEOMETRY" + mapName
+
+      var options = {
+          layer_ids:	layerIds,
+          filter:		  '',
+          map_name:   name.toUpperCase(),
+          geom:       "full"
+        };
+      map.removeObjects(map.getObjects());
+		
+      switch( document.getElementById('searchType').value ) {
+      case 'proximity':		
+        searchGeometry = getGeometryBySearchClause( searchClause );
+        map.addObject( searchGeometry );
+        var radius = document.getElementById('searchRadius').value;
+        searchClause += "," + radius;
+        cle.searchProximity( options.layer_ids, searchClause, options, onCheckPositionChanged );
+        break;
+
+      case 'all':
+        searchGeometry = getGeometryBySearchClause( 'all= ' );
+        map.addObject( searchGeometry );
+		    if( searchClause !== null && searchClause.length > 0 ) {
+			    if( !searchClause.startsWith('searchtext=') ) alert('Searchtype "All" supports searchParameter "searchtext=".\r\n Ignoring "Search Parameters".');
+			      if( searchClause !== null && searchClause.length > 0) options.searchtext= searchClause;
+		    }
+        cle.searchAll( options.layer_ids, options, onCheckPositionChanged );
+         break;
+     
+      case 'bbox':
+        searchGeometry = getGeometryBySearchClause( searchClause );
+        map.addObject( searchGeometry );
+        var layers = layerIds.split(',');
+        for (var i = 0; i < layers.length; i++) {
+          cle.searchBbox( layers[i], searchClause, options, onCheckPositionChanged );
+        }
+        break;
+
+      default: 
+        alert('Unknown searchtype in call to CLE');
+      }
+        
+      map.setViewBounds( searchGeometry.getBounds(), true );
+    }
+	
+	  function getGeometryBySearchClause( searchClause ) {
+      var searchGeometry= null;
+      var splitAtEqual= searchClause.split( /[=&]/ );
+      if( splitAtEqual.length === 1 ) {
+        logArea.log( 'Error: Bad Search parameter. It should be like proximity=lat/lon (without radius), corridor=..., quad_key=..., bbox=upperLeftLat,upperLeftLon,lowerRightLat,LowerRightLon .' )
+        return null;
+      }
+      
+      var type= document.getElementById( 'searchType' ).value;
+      switch( document.getElementById( 'searchType' ).value ) {
+        case 'proximity':
+          var splitAtCommas= splitAtEqual[1].split(',');
+          if( splitAtCommas.length !== 2 ) {
+            logArea.log( 'Proximity requires latitude, longitude and radius in meter, e.g. proximity=52.308056,8.623056' );
+            break;
+          }
+          var center= new H.geo.Point( splitAtCommas[ 0 ], splitAtCommas[ 1 ] );
+          searchGeometry = new H.map.Circle( center, document.getElementById('searchRadius').value, searchGeometryOptions );
+          break;
+                  
+        case 'all':
+          searchGeometry = new H.map.Rect( new H.geo.Rect( 89.9, -179.9, -89.9, 179.9 ), searchGeometryOptions );
+          break;
+                      
+        case 'bbox':
+          var regex=/[,;]/;
+          var splitAtCommas= splitAtEqual[1].split( regex );
+          if( splitAtCommas.length !== 4 ) {
+            logArea.log( 'The bounding box upper, left, lower and right coordinates in WGS84 degrees, e.g. bbox=37.8,-122.1;37.2,-122.0' );
+            break;
+          }
+          searchGeometry = new H.map.Rect( new H.geo.Rect( splitAtCommas[0], splitAtCommas[1], splitAtCommas[2], splitAtCommas[3] ), searchGeometryOptions );
+          break;
+                  
+        default: 
+          logArea.log( 'Error: Bad Search parameter. It should be like proximity=lat/lon (without radius), corridor=..., quad_key=..., bbox=upperLeftLat,upperLeftLon,lowerRightLat,LowerRightLon' );
+      }
+      
+      return searchGeometry;
+    }
+
+    function addPolygonToMap(poly, text, options, mapGroup) {
+      var polygonStrip = new H.geo.Strip();
+      var borderStrips = [new H.geo.Strip()];
+      for (var k = 0; k < poly.length - 1; k++) {
+          polygonStrip.pushPoint(new H.geo.Point(poly[k][1], poly[k][0]));
+          borderStrips[borderStrips.length - 1].pushPoint(new H.geo.Point(poly[k][1], poly[k][0]));
+          if (poly[k][2] === 'artificial') {
+              borderStrips.push(new H.geo.Strip());
+          }
+      }
+      // If the polygon was joining in non artificial points.
+      if (k > 0 && !poly[k][2] && !poly[0][2]) {
+        borderStrips[borderStrips.length - 1].pushPoint(new H.geo.Point(poly[k][1], poly[k][0]));
+      }
+
+      var polygon = new H.map.Polygon(polygonStrip, options);
+      polygon.$text = JSON.stringify(text, undefined, 4);
+      polygon.addEventListener("tap", function(e)
+      {
+        if (currentBubble) 
+          ui.removeBubble(currentBubble);
+        
+        var centroid = calculateCentroid(polygonStrip);
+            
+        currentBubble = new H.ui.InfoBubble({lat:centroid.lat, lng:centroid.lng}, {
+          content: "<textarea rows='10' cols='30'>" + e.target.$text + "</textarea>"
+        });
+        ui.addBubble(currentBubble);
+      });
+      mapGroup.addObject(polygon);
+
+      for (var i = 0; i < borderStrips.length; i++) {
+          var borderStrip = borderStrips[i];
+          if (borderStrip.getPointCount() <= 1) continue;
+          mapGroup.addObject(new H.map.Polyline(borderStrip, options));
+      }
+
+      return calculateCentroid(polygonStrip);
+    }
+
+    function addPointToMap(point, text, options, mapGroup) {
+		  var marker = new H.map.Marker(new H.geo.Point(point[1], point[0]), options);
+      marker.$text = JSON.stringify(text, undefined, 4);
+		  marker.addEventListener("tap", function(e)
+      {
+        if (currentBubble) 
+          ui.removeBubble(currentBubble);
+        
+        var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+            
+        currentBubble = new H.ui.InfoBubble(pos, {
+          content: "<textarea rows='10' cols='30'>" + e.target.$text + "</textarea>"
+        });
+        ui.addBubble(currentBubble);
+      });
+      mapGroup.addObject(marker);   
+      return [new H.geo.Point(point[1], point[0]), 0];     
+    }
+
+    function addLineToMap(line, text, options, mapGroup) {
+      var lineStrip = new H.geo.Strip();
+      for (var k = 0; k < line.length; k++) {
+        // Found an element  "artifical" which causes an error
+        // added the check to avoid error when parsing such elements
+        if(line[k] instanceof Array) {
+          lineStrip.pushPoint(new H.geo.Point(line[k][1], line[k][0]));
+        }
+      }
+      var polyline = new H.map.Polyline(lineStrip, options);
+      polyline.$text = JSON.stringify(text, undefined, 4);
+      polyline.addEventListener("tap", function(e)
+      {
+        if (currentBubble) 
+          ui.removeBubble(currentBubble);
+        
+        var centroid = calculateCentroid(lineStrip);
+            
+        currentBubble = new H.ui.InfoBubble({lat:centroid.lat, lng:centroid.lng}, {
+          content: "<textarea rows='10' cols='30'>" + e.target.$text + "</textarea>"
+        });
+        ui.addBubble(currentBubble);
+      });
+      mapGroup.addObject(polyline);   
+      return calculateCentroid(lineStrip);   
+    }
+
+    function onCheckPositionChanged( url, resp, err ) {
+      logArea.log( "Request:" );
+      logArea.log( url );
+      logArea.delim();
+      
+      if (err) {
+        logArea.log('ERROR!: '+ resp.issues[0].message + '['+resp.error_id+']');
+        logArea.strongDelim();
+        return;
+      }
+
+      var geometryResponse = null;
+      if (resp.polygons != null) {
+          geometryResponse = resp.polygons
+      } else {
+          geometryResponse = resp.geometries;
+      }
+		
+      if(geometryResponse!=null && (geometryResponse.length<200 || confirm('There are too many geometries ('+ geometryResponse.length +') to be rendered on the map. Are you sure?'))){
+        var centroids = [];
+        for (var i = 0; i < geometryResponse.length; i++) {
+          var rawGeom = geometryResponse[i];
+          var geom = parseWKT(rawGeom.geometry);
+          var cleLayer;
+          if (rawGeom.layerId != null) cleLayer = rawGeom.layerId.replace(xyzSpaceId.toUpperCase() + "_", "");
+          else if (resp.meta != null && resp.meta.length > 0 && resp.meta[0].layerId != null) cleLayer = resp.meta[0].layerId.replace(xyzSpaceId.toUpperCase() + "_", "");
+          var dist = rawGeom.distance;
+          var mapGroup;
+          switch(cleLayer) {
+            case 'POIS' :
+              mapGroup = poisGroup;
+              break;
+            case 'POLYGONS' :
+              mapGroup = polygonsGroup;
+              break;
+            case 'LINES' :
+              mapGroup = linesGroup;
+              break;
+            case '2DFS' :
+              mapGroup = fsGroup;
+              break;
+            default: mapGroup = generalGroup;
+          }
+        
+          centroids[i] = [];
+          switch ( geom.type ) {
+          
+            case 'MultiPolygon':
+              for (var j = 0; j < geom.coordinates.length; j++) {
+                for (var k = 0; k < geom.coordinates[j].length; k++) {
+                  style = (cleLayer === '2DFS') ? fsStyle : polygonsStyle;
+                  centroids[i].push(addPolygonToMap(geom.coordinates[j][k], rawGeom.attributes, style, mapGroup));
+                }
+              }
+              break;
+              
+            case 'MultiPoint':
+              for (var j = 0; j < geom.coordinates.length; j++) {
+                var pp;
+                if (rawGeom.attributes.DISPLAY_LAT) {
+                  pp = [+rawGeom.attributes.DISPLAY_LON / 100000, +rawGeom.attributes.DISPLAY_LAT / 100000];
+                } else {
+                  pp = geom.coordinates[j][0];
+                }
+                centroids[i].push(addPointToMap(pp, rawGeom.attributes, poisStyle, mapGroup));
+              }
+              break;
+              
+            case 'MultiLineString':
+              for (var j = 0; j < geom.coordinates.length; j++) {
+              centroids[i].push(addLineToMap(geom.coordinates[j], rawGeom.attributes, linesStyle, mapGroup));
+              }
+              break;
+              
+            case 'Polygon':
+              for (var k = 0; k < geom.coordinates.length; k++) {
+                style = (cleLayer === '2DFS') ? fsStyle : polygonsStyle;
+                centroids[i].push(addPolygonToMap(geom.coordinates[k], rawGeom.attributes, style, mapGroup));
+              }
+              break;
+              
+            case 'Point':
+              var pp;
+              if (rawGeom.attributes.DISPLAY_LAT) {
+                pp = [+rawGeom.attributes.DISPLAY_LON / 100000, +rawGeom.attributes.DISPLAY_LAT / 100000];
+              } else {
+                pp = geom.coordinates;
+              }
+              centroids[i].push(addPointToMap(pp, rawGeom.attributes, poisStyle, mapGroup));
+              break;
+              
+            case 'LineString':
+              centroids[i].push(addLineToMap(geom.coordinates, rawGeom.attributes, linesStyle, mapGroup));
+              break;            
+              
+            default:
+              window.alert( "Cannot draw matching geometry for type " + geom.type );
+          }
+        }
+      // map.setViewBounds(map.getObjects());
+
+      logArea.log(geometryResponse.length + ' matches: ');
+        // Draw geometry captions then so they are over.
+      for (var i = 0; i < geometryResponse.length; i++) {
+  			var label = "";
+
+  			var keys= Object.keys( geometryResponse[i].attributes );
+  			for(var j = 0; j < keys.length; j++) {
+  				if( typeof geometryResponse[i].attributes[ keys[ j ] ] !== "undefined" ) {
+  					label = label + geometryResponse[i].attributes[ keys[ j ] ] + ' ';
+  				}
+  				else {
+  					logArea.log( "WARNING: Attribute " + labels[j] + " doesn't exist!" );
+          }
+  			}
+  			
+  			if( label === null )
+  			  label= "<no attribute>";
+  			// addGeometryCaption(calculateWeightedCentroid(centroids[i]), label);
+  			if(geometryResponse[i].hasOwnProperty('relevance')) 
+  				label= label + "relevance: " + (Math.round( (100.0 * geometryResponse[i].relevance) ) / 100).toFixed(2);
+  			logArea.log( label + ' (' + centroids[i][0][0].lat + ',' + centroids[i][0][0].lng + ')' );
+      }        
+      logArea.strongDelim();
+      // Keep the search area on top.
+      map.removeObject( searchGeometry );
+      map.addObject( searchGeometry );
+	    } // end if      
+    }
+
+    function addGeometryCaption(p, caption) {
+      if(caption != null)
+      {
+        var markerElement = document.createElement('div');
+        markerElement.className = 'caption';
+        markerElement.innerHTML = caption;
+        map.addObject(new H.map.DomMarker(p, {
+          icon: new H.map.DomIcon(markerElement)
+        }));
+      }
+    }
+
+    function addLineToNearestPoint(assetPosition, fenceLat, fenceLon, distance) {
+      if (distance === -99999999) {
+        // Cannot draw because distance is not available.
+        return;
+      }
+      var strip = new H.geo.Strip();
+      strip.pushPoint(assetPosition);
+      strip.pushPoint({lat: fenceLat, lng: fenceLon});
+      map.addObject(new H.map.Polyline(strip, distanceOptions));
+      var markerElement = document.createElement('div');
+      markerElement.className = 'distance';
+      markerElement.innerHTML = distance;
+      map.addObject(new H.map.DomMarker({
+        lat: (assetPosition.lat + fenceLat) / 2,
+        lng: (assetPosition.lng + fenceLon) / 2
+      }, {icon: new H.map.DomIcon(markerElement)}));
+    }
+
+    function getLabelAttributes() {
+        return document.getElementById('labelAttributes').value;
+    }
+</script>

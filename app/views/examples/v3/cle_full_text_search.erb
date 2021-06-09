@@ -1,0 +1,426 @@
+<% content_for :title, "CLE - Full text search" %>
+<%= javascript_include_tag "wellknown.js" %>
+
+<div class="ctrl-panel bigger" style="max-width: 900px">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>This demo showcases the Search capabilities on custom maps using the Here Custom Location API <br>
+	<p>The demo layer contains the following columns: <b>POI_NAME, STREET_NAME, CITY, COUNTRY, POSTAL_CODE</b>
+	<br>The Layer covers Pizza Hut, Starbucks and Some Cafes in United Kingdom, Germany, France and Italy (COUNTRY)
+	<br>
+	<br>Try combinations of attributes to narrow the search. Some Examples:
+	<p><b>POI_NAME.like('%Hut%')&amp;&amp;CITY.like('London')</b> -> Shows Pizza Huts in London
+	<br><b>POI_NAME.like('%Starbucks%')&amp;&amp;Country.like('Germany')</b> -> Shows Starbucks in Germany
+	<br><b>POI_NAME.like('%Cafe%')&amp;&amp;STREET_NAME.like('%Bahnhof%') </b> -> Finds Cafes around Bahnhofs
+	</p>
+	
+
+	<hr class="separator">
+
+	<div class="form-horizontal">
+		 <div class="form-group">
+			<label class="control-label col-sm-4" for="environment">Endpoint:</label>
+			<div class="col-sm-8">
+
+				<input class="form-control col-sm-6" type="text" id="endpoint" size="33" value="http://cle.api.here.com/" placeholder="URL with http or https and host" list="environments"  onkeydown="if (event.keyCode == 13)showPOIs()" />
+				
+			</div>
+			<label class="control-label col-sm-4" for="layer">Layer Name</label>
+            <div class="col-sm-8">
+            	<input class="form-control col-sm-6" type="text" id="layer" size="33" value="FASTFOODIDX" placeholder="Enter the layer name to search"  onkeydown="if (event.keyCode == 13)showPOIs()" />
+            </div>
+         	<label class="control-label col-sm-4" for="query"> Search query</label>
+            <div class="col-sm-8">
+            	<input class="form-control col-sm-6" type="text" id="query" size="33" value="POI_NAME.like('%Cafe%')&amp;&amp;STREET_NAME.like('%Bahnhof%') " placeholder="enter a search string" onkeydown="if (event.keyCode == 13)showPOIs()" />
+				<input class="btn btn-default btn-sm" type="button" value="Display Results" id="display" onclick="showPOIs()"/>
+            </div>
+
+			<label class="control-label col-sm-4" for="startButton">No Results?</label>
+			<div class="col-sm-8">
+				<input class="btn btn-default btn-sm" type="button" id="startButton" value="Refresh Demo Layer" onclick="refreshDemo('CLE','upload')">
+			</div>
+			
+		</div>
+	</div>
+	
+
+
+	
+	<hr class="separator">
+	<div class="form-group">
+		<div id="feedbackTxt"></div>
+	</div>
+
+	<div>HLP Service releases which are used in this demo:</div>
+	<div id="releaseInfoTxt" value="Used Service Releases:/n"></div>
+
+</div>
+<div id="mapContainer"></div>
+<div id="pageblock"></div>
+<div id="spinner"></div>
+<style>
+	#notecontent a {
+		color : white;
+	}
+	#notecontent a:hover {
+		color : red;
+	}
+	details {
+		display: none
+	}
+	.input-details {
+		display: none
+	}
+	.endpoint-details {
+		display: none
+	}
+	#custom-rest-times {
+		display: none
+	}
+
+	table td, table td * {
+		vertical-align: top;
+	}
+
+	textarea {
+		white-space: pre;
+		word-wrap: normal;
+		overflow: scroll;
+	}
+
+	ul.timeline {
+		width: 400px;
+		font-size: x-small;
+		list-style-position: inside;
+		padding: 0;
+		vertical-align: middle;
+		font-weight: bold;
+	}
+
+	ul.timeline li {
+	}
+
+	li.accStarts, li.accEnds {
+		color: #59b354;
+	}
+
+	li.stStarts, li.stEnds {
+		color: #1b5fcc;
+	}
+
+	li.arr {
+		color: red;
+	}
+
+	li.dep {
+		color: white;
+	}
+
+	li.at {
+		color: yellow;
+	}
+
+	li.before {
+		color: orange;
+	}
+	.cont-time {
+		z-index: 999;
+		float: left;
+		height: 21px;
+		padding: 7px 10px 1px 5px;
+		font-family: Arial,Helvetica,sans-serif;
+		font-weight: bold;
+		font-size: 10px;
+		display: none;
+	}
+	.menubkg {
+		background-color: #f8f8f8;
+		border-radius: 15px;
+		color: black;
+	}
+	.menubkg select {
+		font-size: 10px;
+		vertical-align: middle;
+	}
+	.menubkg select option:checked {
+		background-color: #999;
+	}
+	.tselect {
+		background-image: url(/assets/examples/traffic_timebw30x34s.png);
+		width: 30px;
+		height: 34px;
+		margin-top: 2px;
+		display: block;
+		z-index: 999;
+		float: left;
+		cursor: pointer;
+		text-decoration: none;
+	}
+	.cursorPointer {
+		cursor: pointer;
+	}
+	.wrap {
+		width: 700px;
+		overflow-x: auto;
+	}
+
+	.wrap table {
+		width: 300px;
+		table-layout: fixed;
+	}
+
+	table tr td {
+		padding: 5px;
+		border: 1px solid #eee;
+		width: 110px;
+		word-wrap: break-word;
+		overflow-x: hidden;
+	}
+
+	table.head tr td {
+		background: #eee;
+	}
+	
+
+	.inner_table {
+		height: 200px;
+		overflow-y: auto;
+		overflow-x: hidden;
+	}
+</style>
+
+
+<script type="text/javascript">
+	/*
+	author knut.strobeck@here.com
+	(C) HERE 2015
+	*/
+
+	/*  Set authentication app_id and app_code
+	*  WARNING: this is a demo-only key
+	*  please register on http://developer.here.com/
+	*  and obtain your own API key
+	*/
+
+	$( document ).ready(function() {
+		// Change the selector if needed
+		var $table = $('table.scroll'),
+			$bodyCells = $table.find('tbody tr:first').children(),
+			colWidth;
+
+		// Adjust the width of thead cells when window resizes
+		$(window).resize(function() {
+			// Get the tbody columns width array
+			colWidth = $bodyCells.map(function() {
+				return $(this).width();
+			}).get();
+			
+			// Set the width of thead columns
+			$table.find('thead tr').children().each(function(i, v) {
+				$(v).width(colWidth[i]);
+			});    
+		}).resize(); // Trigger resize handler
+	});
+
+	var secure = secure = (location.protocol === 'https:') ? true : false;
+	var noneExampleTxt=  getUrlParameter( 'destinations' );
+	var custom_app_id=   getUrlParameter( 'app_id' );
+	var custom_app_code= getUrlParameter( 'app_code' );
+	
+
+	//var startDate= new Date( document.getElementById("departureDate").value );
+	var startDate= new Date(2016, 9, 14, 7, 30, 0 );
+	startDate.setMinutes( startDate.getMinutes() - 120 - startDate.getTimezoneOffset() );
+	var effTime= startDate.toLocaleTimeString('en-US', { hour12: false });
+	
+	if( custom_app_id !== null && custom_app_code !== null )
+	{
+		app_id = custom_app_id;
+		app_code = custom_app_code;
+		document.getElementById("endpointDetails").style.display= "table-row";
+	}
+
+	
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	var globalRoutingMode="";
+
+	var mapContainer = document.getElementById('mapContainer');
+
+	platform = new H.service.Platform({
+		app_code: app_code,
+		app_id: app_id,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	router = platform.getRoutingService(),
+	basemaptileService = platform.getMapTileService({'type': 'base'}),
+	greyTileLayer = basemaptileService.createTileLayer("maptile", "normal.day.grey", hidpi ? 512 : 256, "png8", null);
+
+	map = new H.Map( mapContainer, greyTileLayer,
+		{
+			center: center,
+			zoom: zoom
+		}
+	);
+
+	
+	// add behavior control, e.g. for mouse
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+	// enable UI components and remove the unnecessary
+	var ui = H.ui.UI.createDefault( map, maptypes );
+	ui.removeControl('panorama');
+	ui.removeControl('mapsettings');
+
+	//add JS API Release information
+	releaseInfoTxt.innerHTML+="JS API: 3."+ H.buildInfo().version;
+
+	//add MRS Release information
+	loadMRSVersionTxt();
+
+	//helper
+	var releaseGeocoderShown = false;
+	var releaseRoutingShown = false;
+	
+	var zIndex = 1;
+    var currentColor ="rgba(0,85,170,";
+	var wayPointColor ="#A9D4FF";
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	
+
+	var svgMarkerImage_POI='<svg width="__widthAll__" height="60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+                                '<g>' +
+                                '<rect id="label-box" ry="3" rx="3" stroke="#000000" height="30" width="__width__" y="11" x="45" fill="#ffffff"/>'+
+                                '<text id="label-text" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="12" font-weight="bold" y="24" x="55" stroke-width="0" fill="#000000">__line1__</text>' +
+                                '<text id="label-desc" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="11" y="36" x="55" stroke-width="0" fill="#000000">__line2__</text>'+
+                                '<image width="50" height="50" x="8.5" y="9.5" xlink:href="data:image/png;base64,R0lGODlhfQDCAPQdAAELHgEMHgIMHw8LHRALHR8KGyAKGxEbLCEqOzE5SUBIVkFIV2Fnc3B1gHF2gYCFjoCFj4+UnJCVnZ+jqqCkq6+yuLCzuc/R1NDS1d/g4uDh4+/v8PDw8f///wAAAAAAACH5BAEAAB4ALAAAAAB9AMIAAAX+oCeOJCmcaKqubOu+cCyvZW2XxKzvfO+vhNvN8Csaj0eD0IRsOp+vpQdKrUKF1qy2aNt6v7MSEUwup5Qjs9o8yq3f3uAUTteK6vjqPc9v7vuAP3OBhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnCkICwoMEA4KCwidWgsSGB2trq+uFxEKqEcHHhUcsLu8HRsTHge1OwgTvcfIE6fDLwcQyNDIEMLMKs4b0dm9G9PVJwkZ2uK9GQnVDOPpvQzDEervuxGdBxXw9q8V1JgHF/f+rRf0VeL3r2DAS/UKFqxgSYLChxIooXv4kF2kBBQzmnt0IFzGhxkELnr2kSIERwf+sJV8uEEkIpIrH55chCDmx2WJKNjMSEHRgZ0fXQaaCLRiIgtFKfZEpDJpwQ2IFjiluOCQw6kKIxrqh9Xgoa4Pv4ItaKjm2H84AUk9668qobVs7bkNBDPuOweF6tpNN5PuXnh43/59N1ftYHWF+2A8PC4tIMbjxELOdojVZGgYrF6GprUQ3M28EgfSBXoXh6Oldy09RDR1K4uHfrp2JTSQztmrEZl17fiQ3st9fZLezKG2od+Mgy86oGGzhoubN0JqPRh2pKuDO09C+tfCpQOW42IwzjH82PGaDnAHa4H8JOxTtXOiDtQ6qgTNgWqQzszZ8I8cKOeNMyV14w0LCNz+VhAFvR1oDQMU/CcOBxQw4J6DKqhi3jGyiIZhD58s4MAoC5jy4Ykopqjiiiy26OKLMMYo44w01mgjIIPcqMMfOoaRY48x8AgkDCIMMGQMA6RxZBQjFLBkCwWU8CQLXUyJAhZWShEJAAIE0GUAYIYp5phenkAmmCpw2YIUIjjZiJpbwKlClGyOYOQiclYBQJ4nJFknloXwCcWeKfxp6KGIJiplFn4q6uijkNagRaORVmrpoYxeqummS2TK6aeg/ugEpaGWGqkVpJqqaqJjXLHqq47qAeush7bqBK24/klFrrwuYSsSvQZb5a3CFiuCG34Ya+wTyhqL7BHNLptstMHTEktttcBeiy202m7LRbe9Zgsur9yOm2u55uJqRLrkfsuuuoK8C68P8uL664710upDqvmaei+S/erLA78Bh/qsDAQXDOrACsN6MAwJN8zpDhFLrOnDLlRs8aX4bqxqxx6b6mPIIstA8qomn1wykSqv7ELLLq8Jc6ksz7wwkzbfLHPOn+LM86b/nvCzzjQMzWnQRvdMZdKbYsz0xEU/fenDUm8addWVHoy1pipszTEKGnuta59iWwp22WYLEDbaWqrNdqVuvw1p3HI/unbdeOetN6whAAA7" />'+
+                                '</g>'+
+                                '</svg>';
+        
+
+	//--- Create marker with 2 text lines
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_POI;
+		var lengthMax = Math.max(line1.length, line2.length);
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line2);
+		svgMarker = svgMarker.replace(/__width__/g, lengthMax*5  + 50);
+		svgMarker = svgMarker.replace(/__widthAll__/g, lengthMax*6  + 80);
+		svgMarker = svgMarker.replace(/font-size=\"8\"/g, 10);
+		return new H.map.Icon(svgMarker, { anchor: new H.math.Point(24, 57)	});
+	};
+	
+	
+
+
+
+
+
+	//////////REST API CALLERS
+
+	var restHelper = {
+		CLE: {
+			hostname: document.getElementById('endpoint').value,
+			resources: {
+				searchAll: {
+					path: '/2/search/all.json',
+					method: 'GET'
+				},
+				upload: {
+					path: '/2/layers/upload.json',
+					method: 'POST'
+				}
+			}
+		}
+    };	
+
+	var restAPICaller = function(service, resource, params, callbackFn) {
+		Spinner.showSpinner();
+		var url = (restHelper[service].hostname)+(restHelper[service].resources[resource].path);
+		url += "?app_id="   + app_id;
+		url += "&app_code=" + app_code;
+
+		$.ajax({
+			url: url,
+			dataType: "json",
+			async: true,
+			type: restHelper[service].resources[resource].method,
+			data: params,
+			success: function(data){
+					Spinner.hideSpinner();
+					callbackFn(data)
+				},
+			contentType: (restHelper[service].resources[resource].method=='POST')?false:'application/json',
+			processData: (restHelper[service].resources[resource].method=='POST')?false:true,
+			method: restHelper[service].resources[resource].method,
+			error: function(xhr, status, e) {
+				Spinner.hideSpinner();
+				var errorResp = (xhr.responseJSON.issues[0] || {
+					"message": "unknown error occured"
+				});
+				console.log(errorResp);
+			}
+		});
+    };
+	function showPOIs(){
+		loadFromCLE()
+	}
+
+	var poiMarkers = new H.map.Group();
+	map.addObject(poiMarkers);
+	var ajaxTime;
+	function loadFromCLE(layerName){
+		var params = {
+			layer_id: document.getElementById('layer').value,
+			filter: document.getElementById('query').value
+		};
+		ajaxTime= new Date().getTime();
+		restAPICaller("CLE", "searchAll", params, function(data){
+			displayResultsFromCLE(data.geometries);
+		});
+	}
+
+	function refreshDemo(service, resource) {
+		var url = (restHelper[service].hostname)+(restHelper[service].resources[resource].path);
+		url += "?app_id="   + app_id;
+		url += "&app_code=" + app_code;
+		
+		$.ajax({
+			url: "/sample_data/FastFood3.wkt",
+			type: 'GET',
+			success: function(response) {
+				var blob = new Blob([response], {type: 'text/plain'});
+				//console.log(blob);
+				var formData = new FormData();
+				formData.append('file', blob,'FastFood3.wkt');
+				formData.append('layer_id', document.getElementById('layer').value);
+				restAPICaller("CLE", "upload", formData, function(data){
+					if(data.response_code === '201 Created'){
+						alert('Layer refreshed: '+ document.getElementById('layer').value);
+					}
+				});
+			},
+			error: function(jqXHR, textStatus, errorMessage) {
+				console.log(errorMessage); // Optional
+			}
+		});
+	}
+
+	function displayResultsFromCLE(data){
+		var totalTime = new Date().getTime()-ajaxTime;
+		document.getElementById("feedbackTxt").innerHTML = data.length +" results fetched in " + totalTime +"ms";
+		document.getElementById("feedbackTxt").style.color= 'red';
+		poiMarkers.removeAll();
+		data.forEach(function(geom){
+			 var loc = parseWKT(geom.geometry);
+			 var point = {lat: loc.coordinates[1], lng: loc.coordinates[0]};
+			 poiMarkers.addObject(new H.map.Marker(point, { icon: createIconMarker(geom.attributes.POI_NAME, geom.attributes.STREET_NAME) }));
+		});
+		map.setViewBounds(poiMarkers.getBounds());
+	}
+	
+	
+		
+	
+</script>

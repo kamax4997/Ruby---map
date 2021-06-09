@@ -1,0 +1,91 @@
+<% content_for :title, "Zoom and BBox restricted HERE Map Display" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+	<tr>
+		<td>HLP Service releases which are used in this demo:</td>
+		<td>
+			<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+		</td>
+	</tr>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2017
+	*/
+    
+    // Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: center,
+		zoom: 3,
+		pixelRatio: hidpi ? 2 : 1
+	});
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+    
+    var bounds = new H.geo.Rect(-90, -150, 90, 150),
+        maxZoom = 3;
+    
+    map.getViewModel().addEventListener('sync', function() {
+        var center = map.getCenter();
+
+        if (!bounds.containsPoint(center)) 
+        {
+            if (center.lat > bounds.getTop()) 
+            {
+                center.lat = bounds.getTop();
+            }
+            else if (center.lat < bounds.getBottom()) 
+            {
+                center.lat = bounds.getBottom();
+            }
+          
+            if (center.lng < bounds.getLeft()) 
+            {
+                center.lng = bounds.getLeft();
+            } 
+            else if (center.lng > bounds.getRight()) 
+            {
+                center.lng = bounds.getRight();
+            }
+            map.setCenter(center);
+        }
+        
+        if(map.getZoom() <= maxZoom)
+            map.setZoom(maxZoom);
+    });
+  </script>
+</body>
+</html>

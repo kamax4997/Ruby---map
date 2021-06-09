@@ -1,0 +1,1595 @@
+<% content_for :title, "Leidos Demo" %>
+ <%= stylesheet_link_tag "leidos" %>
+
+<div id="left-col">
+	<div class="container-fluid">
+		<div class="form-horizontal">
+			<div class="form-group" style="background-color: #00778b; color:#ffffff">
+				<h3 class="col-xs-12 text-center">MLC Router</h3>
+			</div>
+
+			<div class="form-group" id="mlcLoadingDiv">
+					<br>
+					<div class="col-xs-offset-3 col-xs-1">
+						<img src="/assets/leidos_demo/spinner.gif" >
+					</div>
+					<label class="col-xs-6">Loading, please wait</label>
+			</div>
+
+			<div id="mlcLoadedDiv" hidden>
+				<div id="showPrimaryDisplayGroupDiv" class="checkbox" style="display: none;">
+				    <label>
+				      <input id='showPrimaryDisplayGroup' type="checkbox" > Show MLC Links
+				    </label>
+				 </div>
+
+				<div id="displayOptionsDiv" class="checkbox" style="display: none;">				    	
+		    		<div id="mlcDisplayValues" >
+		    			<div class="form-group">
+				    		<div id="displayDropdownDiv" class="col-xs-5">
+						    	<select name="displayDropdown" id="displayDropdown" class="form-control" >
+									<option value="all" selected="selected" >All</option>
+									<option value="custom">Custom</option>
+								</select>
+							</div>
+						</div>
+						<div id="displaceCustomSettings" hidden>
+							<div class="form-group">
+								<div class="col-xs-5">
+							    	<select name="lcCategorySelectForDisplay" id="lcCategorySelect0" class="form-control" >
+										<option value="0" selected="selected" >Wheeled one way</option>
+										<option value="1">Wheeled two way</option>
+										<option value="2">Tracked one way</option>
+										<option value="3">Tracked two way</option>
+									</select>
+								</div>
+						    
+					    		<div class="col-xs-3">
+									<input style="height:33px" type="number" class="form-control" id="mlcValueInputForDisplay" value="0" >
+								</div>
+								<div id="displayButtonDiv" class="col-xs-3">
+										<button style="padding:6px;margin:0px;" class="here-btn here-btn-1 pull-left" id = "loadMlcButton" type="button" onclick="parseLinksForDisplay()"> ↻ </button>										
+								</div>
+							</div>
+						</div>
+							
+						</div>
+					</div>
+
+					<hr class="leidos-border-color" style="margin-bottom: 0px;"><br>
+			  	</div>
+
+				
+				<div class="form-group">
+	    			<label class="col-xs-3">Route:</label>
+					<div class="col-xs-9">
+						<select name="routeSelect" id="routeSelect" class="form-control">
+							<option value='empty' >- None -</option>
+							<option value='{"start":{"lat":52.26382363977787, "lng":21.055726413033057},"end":{"lat": 52.30437113315299, "lng":21.089891830924984}}' selected="selected">Simple Route</option>
+							<option value='{"start":{"lat":53.80988, "lng":21.94727},"end":{"lat": 59.43642, "lng":24.75258}}'>Orzysz, 12-250 , Poland to Tallinn, Estonia</option>
+							<option value='{"start":{"lat":52.40947, "lng":16.93828},"end":{"lat":53.80988, "lng":21.94727}}'>Poznan, Poland - Orzysz, 12-250 , Poland</option>
+							<option value='{"start":{"lat":54.40489, "lng":18.67805},"end":{"lat": 53.52926, "lng":15.81454}}'>ulica mjr. Henryka Sucharskiego, 80-542 Gdansk, Poland to Drawsko Pomorskie, Poland</option>
+							<option value='customGeocode'>Custom</option>
+							<option value='custom'>Coordinates</option>
+						</select>
+					</div>
+				</div>
+
+				<div id="customRouteCoordinates" style="display: none;">
+					<div class="form-group">
+						<div class="col-xs-offset-1 col-xs-11">
+							<div class="form-group">
+								<label class="col-xs-3">Start</label>
+								<div class="col-xs-9" ><input style="font-size: 9px" type="text" class="form-control" id="startCoordinates" value=""></div>
+							</div>
+							<div class="form-group">
+								<label class="col-xs-3">End</label>
+								<div class="col-xs-9" ><input style="font-size: 8px" type="text" class="form-control" id="endCoordinates" value=""></div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div id="customRouteGeocode" style="display: none;">
+					<div class="form-group">
+						<div class="col-xs-offset-1 col-xs-11">
+							<!-- <div class="form-group">
+								<label class="col-xs-3">Start</label>
+								<div class="col-xs-9" ><input style="font-size: 9px" type="text" class="form-control" id="startCoordinates" value=""></div>
+							</div>
+							<div class="form-group">
+								<label class="col-xs-3">End</label>
+								<div class="col-xs-9" ><input style="font-size: 8px" type="text" class="form-control" id="endCoordinates" value=""></div>
+							</div> -->
+							<div class="form-group">
+	                			<div class="col-xs-3"><p class="form-control-static">From</p></div>
+								<div class="col-xs-9"><input autocomplete="off" style="font-size: 10px" type="text" class="form-control" id="searchTextInput1" onkeyup="autocompleteSuggestionFrom($(this).val())">
+									<div id="suggestionDiv1" style="display:block;position: absolute;background-color: #ffffff;font-size: 10px;border-style: solid;border-width: 1px;z-index:9999"></div>
+									<!-- style="display: block;top: 118.004px;left: 105.008px;position: absolute;background-color: #ecf1f3;font-size: 13px;border-style: solid;border-width: 1px;" -->
+								</div>
+							</div>
+							<div class="form-group">
+	                			<div class="col-xs-3"><p class="form-control-static">To</p></div>
+								<div class="col-xs-9"><input autocomplete="off" style="font-size: 10px" type="text" class="form-control" id="searchTextInput2" onkeyup="autocompleteSuggestionTo($(this).val())">
+									<div id="suggestionDiv2" style="display: block;position: absolute;background-color: #ffffff;font-size: 10px;border-style: solid;border-width: 1px;z-index:9999 "></div>
+									<!-- style="display: block;top: 118.004px;left: 105.008px;position: absolute;background-color: #ecf1f3;font-size: 13px;border-style: solid;border-width: 1px;" -->
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				
+
+				<div class="form-group">
+	    			<label class="col-xs-3">Vehicle</label>
+					<div class="col-xs-9">
+						<select name="vehicleSelect" id="vehicleSelect" class="form-control">
+							<option value='{"lc":"2","mlc":"25", "length": "","width":"","height":"","weight":""}'>Bradley (MLC Only)</option>
+							<option value='{"lc":"2","mlc":"25", "length": "258","width":"140","height":"120","weight":"65692"}'>Bradley</option>
+							<option value='{"lc":"2","mlc":"82", "length": "","width":"","height":"","weight":""}'>Abrams (MLC Only)</option>
+							<option value='{"lc":"2","mlc":"82", "length": "355","width":"144","height":"122","weight":"128679"}'>Abrams</option>
+							<option value='{"lc":"0","mlc":"4", "length": "","width":"","height":"","weight":""}'>HMMWV (MLC Only)</option>
+							<option value='{"lc":"0","mlc":"4", "length": "180","width":"86","height":"72","weight":"5380"}'>HMMWV</option>
+							<option value='{"lc":"0","mlc":"20","length": "","width":"","height":"","weight":""}'>Stryker w/ slat armor (MLC Only)</option>
+							<option value='{"lc":"0","mlc":"20","length": "319","width":"148","height":"142","weight":"41160"}'>Stryker w/ slat armor</option>
+						</select>
+					</div>
+				</div>
+
+				<div class="form-group">
+					<label class="col-xs-3">ROM Hours</label>
+					<div class="col-xs-4"><input style="height:33px" type="number" class="form-control" id="romValueInput" value=""></div>
+				</div>
+
+				<input id="addAvoidArea" class="btn btn-default btn-sm" type="button" value="Add Avoid Area"/>
+				<input id="clearAvoidArea" hidden class="btn btn-default btn-sm" type="button" value="Clear Avoid Area"/>
+				<hr class="leidos-border-color" style="margin-bottom: 0px;">
+				<button  id="vehicleDetailsButton" class="leidos-font-color center-block transparent-button" style="margin-top: -6px;" onclick="toggleVehicleDetails()">&#x25bc;</button>
+
+				<br>
+
+				<div id="vehicleDetails" style="display: none;">
+					<div class="form-group">
+	        			<label class="col-xs-5">MLC Category</label>
+						<div class="col-xs-7">
+							<select name="lcCategorySelect" id="lcCategorySelect" class="form-control">
+								<option value="0" selected="selected">Wheeled one way</option>
+								<option value="1">Wheeled two way</option>
+								<option value="2">Tracked one way</option>
+								<option value="3">Tracked two way</option>
+							</select>
+						</div>
+					</div>
+	    			<div class="form-group">
+						<label class="col-xs-5">MLC Value</label>
+						<div class="col-xs-7"><input type="number" class="form-control" id="mlcValueInput" value="0"></div>
+					</div>
+					<div class="form-group">
+						<label class="col-xs-5">Lim. Weight (lbs.)</label>
+						<div class="col-xs-7"><input type="number" class="form-control" id="limitedWeightInput" value=""></div>
+					</div>
+					<div class="form-group">
+						<label class="col-xs-5">Height (in.)</label>
+						<div class="col-xs-7"><input type="number" class="form-control" id="heightInput" value=""></div>
+					</div>
+					<div class="form-group">
+						<label class="col-xs-5">Width (in.)</label>
+						<div class="col-xs-7"><input type="number" class="form-control" id="widthInput" value=""></div>
+					</div>
+					<div class="form-group">
+						<label class="col-xs-5">Length (in.)</label>
+						<div class="col-xs-7"><input type="number" class="form-control" id="lengthInput" value=""></div>
+					</div>
+				</div>
+				
+				<div class="form-group">
+					<button class="here-btn here-btn-1 pull-right" id = "refreshButton" type="button" onclick="requestRoute()">Calculate Route</button>
+					<button class="here-btn here-btn-2 pull-right" id = "resetButton" type="button" onclick="resetRoute()">Reset Route</button>
+					<button class="here-btn here-btn-2 pull-right" id = "resetButton" type="button" onclick="resetWaypointsAndRoute()">Reset Waypoints and Route</button>
+				</div>
+				<div id="feedbackTxt"></div>
+				<hr class="leidos-border-color" style="margin-bottom: 0px;">
+				<h4>Directions</h4>
+				<label>
+			      <input id='showAlternateRouteCheckbox' type="checkbox" > Show Basic Truck Route
+			    </label>
+				<div id="instructions"></div>
+
+				</div>
+			</div>
+		</div>
+	</div>
+
+<!-- map container -->
+	<div id="middle-col">
+		<div id="mapContainer" style="width: calc(100% - 400px); height: calc(100%); position: absolute; top: 0; left: 400px; overflow:hidden"></div>
+	</div>
+
+
+
+	<script type="text/javascript">
+	/* 
+		author Jonathan Hernandez
+		TCS Chicago
+		(C) HERE 2020
+	*/
+	$('.navbar').remove();
+	
+	var app_id_cre= 'BWGgi7iKKdT4zEH7WC2d';
+	var app_code_cre= 't8bv4YJXA2-Vb_iEjxifsw';
+
+
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);    
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		useHTTPS: true,
+		app_id: app_id,
+		app_code: app_code,
+	});
+	  
+	var maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+		// Instantiate a map in the 'map' div, set the base map to normal
+		map = new H.Map(document.getElementById('mapContainer'), maptypes.normal.map, {
+		center: new H.geo.Point(50.06045,19.93243),
+		zoom: 14,
+		pixelRatio: hidpi ? 2 : 1,
+		renderBaseBackground: {lower: 3, higher:2}
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+
+	var address="";
+	var startMarker,endMarker;
+	var waypointGroup = new H.map.Group();
+    map.addObject(waypointGroup);
+
+
+    var routegroup = new H.map.Group();
+    var alternateRoute = null;
+    var displayMLCLinks;
+    var mlcLinkIds = [];
+    var foundIdxPolylineForWaypoint = false;
+    var routePolyline;
+    var responseRouteWaypoints = [];
+    var routeInDragWaypoints = [];
+    var currentlyDraggingRoute = false;
+    var currentEditMarker = null;
+
+
+    //map route hover marker
+    var routeEditMarkerSvg = '<svg height="20" width="20" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+	'<circle cx="10" cy="10" r="9" stroke="white" stroke-width="2" fill="#922896" />' +
+	'</svg>';
+
+	var routeHoverMarkerSVG = '<svg height="20" width="20" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+	'<circle cx="10" cy="10" r="9" stroke="white" stroke-width="2" fill="#00778b" />' +
+	'</svg>';
+	
+	var dragstartOnRouteHoverMarker = function (evt) {
+		routePolyline.dispatchEvent(evt);
+	};
+
+	var dragOnRouteHoverMarker = function(evt) {
+		var coord = map.screenToGeo((evt.pointers[0].viewportX), (evt.pointers[0].viewportY + 8));
+		evt.target.setPosition(coord);
+		routePolyline.dispatchEvent(evt);
+	};
+
+	var dragendOnRouteHoverMarker = function (evt) {
+		routePolyline.dispatchEvent(evt);
+	};
+
+	var moveOnRouteHoverMarker = function (evt) {
+		routePolyline.dispatchEvent(evt);
+	};
+
+	var enterOnRouteHoverMarker = function(evt){
+		console.log("Entered Marker with Index: " + evt.currentTarget.getData().index);
+		if(evt.currentTarget.getData().index != -1)
+			currentEditMarker = evt.currentTarget;
+		routePolyline.dispatchEvent(evt);
+	}
+
+	var leaveOnRouteHoverMarker = function(evt){
+		console.log("Left Marker with Index: " + evt.currentTarget.getData().index);
+		currentEditMarker = null;
+		routePolyline.dispatchEvent(evt);
+	}
+
+	var dbltapOnRouteHoverMarker = function(evt){
+		if(evt.currentTarget.getData().index != -1){
+
+			var newRouteWaypoints = [];
+			for(var iW = 0,lW = responseRouteWaypoints.length; iW < lW; iW++){
+				console.log("removing waypoint");
+				if(evt.currentTarget.getData().index != responseRouteWaypoints[iW].idxInStrip)
+					newRouteWaypoints.push(new H.geo.Point(responseRouteWaypoints[iW].mappedPosition.latitude,responseRouteWaypoints[iW].mappedPosition.longitude));
+			}
+
+			foundIdxPolylineForWaypoint = false;
+			currentEditMarker = null;
+			requestRoute(newRouteWaypoints);
+		}
+	}
+
+	var createRouteHoverMarker = function(latitude, longitude, index){
+		return createRouteHoverMarkerWithColor(latitude, longitude, -1, routeHoverMarkerSVG);
+	}
+
+	var createRouteEditMarker = function(latitude, longitude, index){
+		return createRouteHoverMarkerWithColor(latitude, longitude, index, routeEditMarkerSvg);
+	}
+
+
+	var createRouteHoverMarkerWithColor = function(latitude, longitude, index,svg){
+		var routeEditMarkerIcon = new H.map.Icon(svg);
+		var routeMarker = new H.map.Marker({lat: latitude, lng: longitude}, {
+			icon: routeEditMarkerIcon,
+			visibility: false,
+			zIndex: 1
+		});
+		routeMarker.addEventListener("dragstart", dragstartOnRouteHoverMarker, true);
+		routeMarker.addEventListener("drag", dragOnRouteHoverMarker, true);
+		routeMarker.addEventListener("dragend", dragendOnRouteHoverMarker, false);
+		routeMarker.addEventListener("pointerenter", enterOnRouteHoverMarker, false);
+		routeMarker.addEventListener("pointerleave", leaveOnRouteHoverMarker, false);
+		routeMarker.addEventListener("dbltap", dbltapOnRouteHoverMarker, false);
+		routeMarker.addEventListener("pointermove", moveOnRouteHoverMarker, false);
+
+		routeMarker.draggable = true;
+
+		var indexData = new Object();
+		indexData.index = index;
+		routeMarker.setData(indexData);
+
+		return routeMarker;
+	}
+
+
+
+	var routeHoverMarker = createRouteHoverMarker(50.12623, 8.627775, -1);
+	map.addObject(routeHoverMarker);
+
+    var group = new H.map.Group();//display group
+	map.addObject(group);
+
+
+    map.addEventListener('mapviewchangeend', function(e){
+    	if(map.getZoom() >9){
+    		$('#showPrimaryDisplayGroupDiv').show();
+    		if($('#showPrimaryDisplayGroup').prop('checked'))
+    			map.addObject(group);
+    	}
+
+    	else{
+    		$('#showPrimaryDisplayGroupDiv').hide();  
+    		try{ 		
+    			map.removeObject(group);
+    		}
+    		catch(err){}
+    	}
+    });
+
+	// add context menu listner  
+    map.addEventListener('contextmenu', function(e){
+    	var clickCoords = map.screenToGeo(e.viewportX, e.viewportY);
+        // add routing options 
+        e.items.push(new H.util.ContextItem({
+            label: 'Route from here',
+            callback: function(){
+                if(startMarker != null){
+
+                	try{
+	                	waypointGroup.removeObject(startMarker);
+	                }
+	                catch(err){};
+
+                }
+                var waypoint_first = clickCoords;
+                startMarker = createMarker(clickCoords);
+                waypointGroup.addObject(startMarker);   
+                $("#startCoordinates").val(clickCoords.lat + ',' + clickCoords.lng);  
+
+                reverseGeocode($("#searchTextInput1")[0], clickCoords.lat, clickCoords.lng);
+
+                var toggleCustom = false;
+			    $( "#routeSelect option:selected" ).each(function() {
+	                if( $(this).val() === 'custom' || $(this).val() === 'customGeocode')
+			    		return;
+			    	else{
+			    		toggleCustom  = true
+			    	}
+			    });
+			    if(toggleCustom){
+					$('#routeSelect').val('customGeocode');
+					$("#customRouteCoordinates").hide();  
+	                $("#customRouteGeocode").show(); 
+			    }
+			              
+            }
+        }));
+
+        e.items.push(new H.util.ContextItem({
+            label: 'Route to here',
+            callback: function(){
+                if(endMarker != null){
+                	try{
+	                	waypointGroup.removeObject(endMarker);
+	                }
+	                catch(err){};
+                }
+                var waypoint_last = clickCoords;
+                endMarker = createMarker(clickCoords);
+                waypointGroup.addObject(endMarker);
+                $("#endCoordinates").val(clickCoords.lat + ',' + clickCoords.lng);
+
+                reverseGeocode($("#searchTextInput2")[0], clickCoords.lat, clickCoords.lng);
+                
+                var toggleCustom = false;
+                $( "#routeSelect option:selected" ).each(function() {
+	                if( $(this).val() === 'custom' || $(this).val() === 'customGeocode')
+			    		return;
+			    	else{
+			    		toggleCustom = true;
+			    	}
+			    });
+
+			    if(toggleCustom){
+			    	$('#routeSelect').val('customGeocode');   
+	                $("#customRouteCoordinates").hide();  
+	                $("#customRouteGeocode").show(); 
+			    }
+            }
+        }));        
+    });
+
+    //Avoid Area Functionality
+    var avoidAreaPolygon = null, paintReady = false;
+	var avoidAreaPolystrip = new H.geo.Strip();
+
+    map.addEventListener("pointerdown", function(e) {
+		if(paintReady)
+		{
+			//push a point into array
+			avoidAreaPolystrip.pushPoint(map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY));
+			//create a polygon if points array has one point inside.
+			if(avoidAreaPolystrip.getPointCount() == 3) {
+				pushPolygon();
+			}
+			else if(avoidAreaPolystrip.getPointCount() == 2){
+				pushPolyline();
+			}
+		}
+	});
+
+	map.addEventListener("pointermove", function(e) {
+		if(paintReady)
+		{
+			// update polygon shape by pointermove event
+			if (avoidAreaPolystrip.getPointCount() > 2) updatePolygon(map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY));
+		}
+	});
+
+	var avoidAreaString = "";
+	map.addEventListener("dbltap", function(e) {
+		if(paintReady)
+		{
+			//stop event propagation
+			e.originalEvent.stopImmediatePropagation();
+
+			//set path and fillColor of polygon to finish the digitizer
+			avoidAreaPolygon.setStrip(avoidAreaPolystrip);
+
+			//set paintReady flag to false to prevent painting polygon
+			paintReady = false;
+			avoidAreaPolystrip = new H.geo.Strip();
+
+			var array = avoidAreaPolygon.getStrip().getLatLngAltArray();
+			for(var i = 0; i < array.length; i= i + 3){
+				avoidAreaString += array[i]+','+ array[i+1] + ';';
+			}
+			avoidAreaString += array[0]+','+ array[1] + ';'
+			console.log("Strip is2  : " + avoidAreaString);
+		}
+	});
+
+	var addAvoidAreaBtn = document.getElementById("addAvoidArea");
+	addAvoidAreaBtn.onclick = function()
+	{
+		if(avoidAreaPolygon){
+			try{
+				map.removeObject(avoidAreaPolygon);
+			}
+			catch(err){}
+			avoidAreaString = "";
+		}
+		paintReady = true;
+		$(addAvoidAreaBtn).hide();
+		$(clearAvoidAreaBtn).show();
+	};
+
+	var clearAvoidAreaBtn = document.getElementById("clearAvoidArea");
+	$(clearAvoidAreaBtn).hide();
+	clearAvoidAreaBtn.onclick = function()
+	{
+		if(avoidAreaPolygon){
+			try{
+			map.removeObject(avoidAreaPolygon);
+			}
+			catch(err){}
+			avoidAreaString = "";
+		}
+		paintReady = false;
+		$(addAvoidAreaBtn).show();
+		$(clearAvoidAreaBtn).hide();
+	};
+
+
+
+	//update the shape of polygon by pointermove event
+	updatePolygon = function(point) {
+		avoidAreaPolygon.setStrip(new H.geo.Strip(avoidAreaPolystrip.getLatLngAltArray().concat(point.lat, point.lng, undefined)));
+	};
+
+	//push polygon to map
+	pushPolygon = function(){
+		map.removeObject(avoidAreaPolyline);
+		avoidAreaPolygon = new H.map.Polygon(
+			avoidAreaPolystrip, {
+				style: {
+					strokeColor: "#000",
+					lineWidth: 1
+				}
+			}
+		);
+		map.addObject(avoidAreaPolygon);
+	};
+	
+	//push polyline to map
+	pushPolyline = function(){
+		avoidAreaPolyline = new H.map.Polyline(
+			avoidAreaPolystrip, {
+				style: {
+					strokeColor: "#000",
+					lineWidth: 1
+				}
+			}
+		);
+		map.addObject(avoidAreaPolyline);
+	};
+
+	var display_overlay = function(counter)
+	{		
+		$("#mlcLoadingDiv").show();
+		if(counter == undefined)
+		{
+			geometryCount = 0;
+		}
+		
+		// var endpoint= 'https://cre.cit.api.here.com';
+		var endpoint = 'https://cle.api.here.com';
+		var display = '/2/search/all.json?map_name=OVERLAYMLCBRIDGES&geom=full'
+			+'&layer_id=TRUCK_RESTR_FC1,TRUCK_RESTR_FC2,TRUCK_RESTR_FC3,TRUCK_RESTR_FC4,TRUCK_RESTR_FC5,ROAD_GEOM_FC1,ROAD_GEOM_FC2,ROAD_GEOM_FC3,ROAD_GEOM_FC4,ROAD_GEOM_FC5'
+			+'&acceptMissingLayers=true&app_id='+app_id_cre+'&app_code='+app_code_cre;
+
+		var url = display.replace(/\r?\n/g, "") + '&callback=gotSearchAllResponse' + (counter != undefined ? '&start_geometry_id=' + counter + '&no_of_records=500' : "");
+		script =  document.createElement("script");
+		script.src = encodeUrlParameters(endpoint, url);
+		document.body.appendChild(script);
+	};
+	
+	var gotSearchAllResponse = function (respJsonObj)
+	{
+		if (respJsonObj.error != undefined) {
+			alert (respJsonObj.error);
+			feedbackTxt.innerHTML += JSON.stringify(respJsonObj, null, 2) + '\n';
+			return;
+		}
+		
+		var links = respJsonObj.geometries;
+
+		if(links == undefined || links === null || links.length == 0)
+			geometryCount = 0;
+
+		if(links != undefined && links !== null) {
+			if(displayMLCLinks != null)
+				displayMLCLinks = $.merge(displayMLCLinks, links)
+			else
+				displayMLCLinks = links;
+
+			for (var i = 0; i < links.length; i++)	{
+				var geometryId = links[i].attributes["GEOMETRY_ID"] != undefined ? parseInt(links[i].attributes["GEOMETRY_ID"]) : -1;
+
+				if(geometryCount < geometryId)
+					geometryCount = geometryId;
+			}
+		}
+
+		if(geometryCount !=0 )
+			display_overlay(geometryCount++);
+		else{
+			parseLinksForDisplay();
+			$("#mlcLoadedDiv").show();
+		}
+	};
+
+	var parseLinksForDisplay = function (){
+		$("#mlcLoadingDiv").show();
+
+		var showAll;
+		$( "#displayDropdown option:selected" ).each(function() {
+	    	showAll = $(this).val() == "all";
+	    });
+
+		var lcCategory;
+		$( "#lcCategorySelect0 option:selected" ).each(function() {
+	    	lcCategory = parseInt($(this).val());
+	    });
+		var mlcDisplayValue = parseInt($("#mlcValueInputForDisplay").val());
+
+		var inscrField = 'CUSTOM_RESTRICTION_PAIRS';
+		
+		var width= 8;
+
+		var links = displayMLCLinks;
+
+		try{
+			map.removeObject(group);
+			group = new H.map.Group();
+		}
+		catch(err){
+
+		}
+		
+
+		if(links !== null && links !== undefined) {
+			for (var i = 0; i < links.length; i++)	{
+				var color= 'rgb(0, 128, 0, 0.5)';
+				var strip = new H.geo.Strip();
+				
+				var lineString0 = new H.geo.LineString();
+				var lineString1 = new H.geo.LineString();
+				var shape = links[i].geometry.startsWith('LINESTRING')
+					? links[i].geometry.substring(11, links[i].geometry.length - 1).split(',') // LINESTRING(lat lon, lat lon, ...)
+					: links[i].geometry.substring(17, links[i].geometry.length - 2).split(',') // MULTILINESTRING((lat lon, lat lon, ...))
+				for (var j = 0; j < shape.length; j++) {
+					var lonLat = shape[j].trim().split(' ');
+					strip.pushLatLngAlt(parseFloat(lonLat[1]), parseFloat(lonLat[0]), 0);
+					if( j == 0 )				{ lineString0.pushPoint({lat: parseFloat(lonLat[1]), lng: parseFloat(lonLat[0]) }); lineString0.pushPoint({lat: parseFloat(lonLat[1]), lng: parseFloat(lonLat[0]) }); }
+					if( j == shape.length-1 )	{ lineString1.pushPoint({lat: parseFloat(lonLat[1]), lng: parseFloat(lonLat[0]) }); lineString1.pushPoint({lat: parseFloat(lonLat[1]), lng: parseFloat(lonLat[0]) }); }
+				}
+				
+
+				if( links[i].hasOwnProperty("attributes") && links[i].attributes.hasOwnProperty(inscrField) ) {
+
+					coords=  strip.getLatLngAltArray()
+					l= coords.length / 3; 
+					cl= Math.floor(l / 2);
+					var inscLat= (coords[0] + coords[3]) / 2;
+					var inscLon= (coords[1] + coords[4]) / 2;
+
+					if( coords.length > 6 )
+					{
+						inscLat= coords[cl*3]
+						inscLon= coords[cl*3+1]
+					}
+
+					var isCustomRestrictionAttributes = false;
+					var polylineData = "";
+					if( links[i].attributes.hasOwnProperty(inscrField) && links[i].attributes[inscrField].length )
+					switch( inscrField ) {
+
+						case "LINK_ID":
+						console.log("LINK_ID IN SWITCH");
+						break;
+
+						case "CUSTOM_RESTRICTION_PAIRS":
+						{
+							isCustomRestrictionAttributes = true;
+							var intArray= links[i].attributes[inscrField].split(',') ;
+							var str='' + (intArray[1] != 2147483647 ? intArray[1] : '-');
+							for( var j= 3; j < intArray.length; j+=2 ) str = str + ', ' + (intArray[j] != 2147483647 ? intArray[j] : '-');
+							
+							var mlcArrayValues = str.replace(/\-/g,"").replace(/\s/g,"").split(",");
+
+							if(!showAll){
+								var respectiveMLCValue = mlcArrayValues[lcCategory];
+								if(!respectiveMLCValue){
+									color = "rgba(255,255,0 ,0.5)";
+								}
+								else{
+									var respectiveMLCValueInt = parseInt(respectiveMLCValue);
+
+									if(respectiveMLCValue < mlcDisplayValue)
+										color = "rgba(255,0,0,0.5)";
+								}
+							}
+
+							mlcLinkIds.push(links[i].attributes.LINK_IDS.replace("-",""));
+						}
+						break;
+
+						default:
+							console.log("LINK_ID IN SWITCH");
+							break;
+					}
+
+					var polyline =  new H.map.Polyline(strip, { style: { lineWidth: width, strokeColor:color, fillColor: color, lineJoin: "round" } });
+
+					if(isCustomRestrictionAttributes){
+						polyline.setData(str);
+						polyline.addEventListener('tap', createTapLinkHandler(polyline));
+					}
+					group.addObject(polyline);
+
+				}
+			}
+		}
+		
+
+			if($("#showPrimaryDisplayGroup").prop("checked"))
+				map.addObject( group );
+			$("#mlcLoadingDiv").hide();
+	};
+	/**
+		Shows popup with link info
+	*/
+	// Info Bubbles for LinkInfo display
+	var linkDataInfoBubble;
+	function createTapLinkHandler(polyline) {
+		return function (e) {
+			var strip = polyline.getStrip();
+			var lowIndex = Math.floor((strip.getPointCount() - 1) / 2);
+			var highIndex = Math.ceil(strip.getPointCount() / 2);
+			var center;
+			if (lowIndex === highIndex) {
+				center = strip.extractPoint(lowIndex);
+			} else {
+			var lowPoint = strip.extractPoint(lowIndex);
+			var highPoint = strip.extractPoint(highIndex);
+				center = new H.geo.Point((lowPoint.lat + highPoint.lat ) / 2, (lowPoint.lng + highPoint.lng) / 2);
+			}
+
+			var linkInfo = JSON.stringify(polyline.getData(), undefined, 5);
+			
+			var linkInfoArray = linkInfo.split(',');
+			var newInfo = 'Wheeled One Way : ' + linkInfoArray[0].replace("\"","") + '<br>'; 
+			newInfo += 'Wheeled Two Way : ' + linkInfoArray[1].replace("\"","") + '<br>'; 
+			newInfo += 'Tracked One Way : ' + linkInfoArray[2].replace("\"","") + '<br>'; 
+			newInfo += 'Tracked Two Way : ' + linkInfoArray[3].replace("\"",""); 
+			
+
+			linkInfo = "<p style='background-color:black;border:0;font-size:10px;max-width:350px;max-height:400px;'>" + newInfo + "</p>";
+			if (!linkDataInfoBubble){
+				linkDataInfoBubble = new H.ui.InfoBubble(center,{content: linkInfo});
+				ui.addBubble(linkDataInfoBubble);	
+			}
+			else {
+				linkDataInfoBubble.setPosition(center);
+	  			linkDataInfoBubble.setContent(linkInfo);
+			}
+	  		linkDataInfoBubble.open();
+		};
+	}
+
+	var requestRoute = function(waypointList)
+	{
+		routegroup.removeAll();
+		alternateRoute = null;
+		feedbackTxt.innerHTML='';
+		instructions.innerHTML = '';
+		// var endpoint= 'https://cre.cit.api.here.com';
+		var endpoint = 'https://cle.api.here.com';
+		//TODO: space filter parameters and other cleaning
+		var lcCategory;
+		
+		$( "#lcCategorySelect option:selected" ).each(function() {
+	    	lcCategory = $(this).val();
+	    });
+
+		var limitedWeightParam = !$('#limitedWeightInput').val()? "": "&limitedWeight="+$('#limitedWeightInput').val()+ "lbs";
+		var heightParam = !$('#heightInput').val()? "": "&height="+$('#heightInput').val() + "in";
+		var widthParam = !$('#widthInput').val()? "": "&width="+$('#widthInput').val() + "in";
+		var lengthParam = !$('#lengthInput').val()?"": "&length="+$('#lengthInput').val()+ "in";
+
+		// var romParam  = !$("#romValueInput").val() || !$("#romRestValueInput").val()? "": "&restTimes=0,0,"+parseFloat($("#romValueInput").val()) * 3600+","+parseFloat($("#romRestValueInput").val()) * 60;
+
+		var waypointListString = '';
+		if(waypointList){
+			for(var i = 0; i < waypointList.length; i++){
+				waypointListString += '&waypoint'+(i)+'='+waypointList[i].lat+','+waypointList[i].lng;
+			}
+		}
+		else{
+			waypointListString += '&waypoint0='+ $("#startCoordinates").val()
+								+'&waypoint1='+ $("#endCoordinates").val();
+		}
+
+		if(avoidAreaString && avoidAreaString != ""){
+			avoidAreaParam = "&avoidAreas="+avoidAreaString;
+		}
+		else{
+			avoidAreaParam = "";
+		}
+
+		var routeCall = '/2/calculateroute.json'
+						+'?legattributes=li'
+						+waypointListString
+						+'&linkAttributes=sh,le,rt,rd,ma,fc,co,wn,cd,tz'
+						+'&customRestrLimit='+lcCategory + ':' + $("#mlcValueInput").val()
+						+'&attributes=ROAD_GEOM_FCn(BRIDGE)'
+						+limitedWeightParam + heightParam + widthParam + lengthParam 
+						+'&mode=fastest;truck;traffic:disabled&overlays=OVERLAYMLCBRIDGES'
+						+'&app_id='+app_id_cre+'&app_code='+app_code_cre
+						+ avoidAreaParam;
+		var url = routeCall.replace(/\r?\n/g, "") + '&jsoncallback=gotRoutingResponse';
+		script = document.createElement("script");
+		script.src = encodeUrlParameters( endpoint, url );
+		document.body.appendChild(script);
+
+
+		var routeCall2 = '/2/calculateroute.json'
+						+'?waypoint0='+ $("#startCoordinates").val() +'&waypoint1='+ $("#endCoordinates").val()
+						+'&mode=fastest;truck;traffic:disabled'
+						+'&app_id='+app_id+'&app_code='+app_code;
+		var url2 = routeCall2.replace(/\r?\n/g, "") + '&jsoncallback=gotSimpleRouteResponse';
+		script2 = document.createElement("script");
+		script2.src = encodeUrlParameters( endpoint, url2);
+		document.body.appendChild(script2);
+	};
+
+	var gotSimpleRouteResponse = function(respJsonRouteObj){
+		alternateRoute = parseRouteAddPolyline(respJsonRouteObj,"##4c4c4ccc", false);
+
+		if(alternateRoute != null && $("#showAlternateRouteCheckbox").prop("checked")){
+			routegroup.addObject(alternateRoute);
+		}
+	}
+
+	var gotRoutingResponse = function (respJsonRouteObj)
+	{
+		routePolyline
+		routePolyline = parseRouteAddPolyline(respJsonRouteObj, "#2a52beCC", true);
+
+		if(routePolyline == null)
+			return;
+
+		var romUnit;
+		$( "#romUnitSelect option:selected" ).each(function() {
+	    	romUnit = $(this).val();
+	    });
+
+		var romTarget = !$("#romValueInput").val() ? -1 : parseFloat($("#romValueInput").val()) * 3600;
+
+
+		routegroup.addObject(routePolyline);
+		routePolyline.draggable = true;
+
+		for(var i=1; i < responseRouteWaypoints.length-1; i++){
+			var waypointMarker = createRouteEditMarker(responseRouteWaypoints[i].mappedPosition.latitude,responseRouteWaypoints[i].mappedPosition.longitude, responseRouteWaypoints[i].idxInStrip);
+			waypointMarker.setVisibility(true);
+			routegroup.addObject(waypointMarker);
+		}
+
+		routePolyline.addEventListener('dragstart', function(evt){
+				currentlyDraggingRoute = true;
+				routeHoverMarker.setVisibility(false);
+
+			//	console.log("dragRoute[currentRoute].dragstartOnPolyline:: ", evt);
+				var currentPolyline = evt.currentTarget;
+				
+			//	console.log(" currentRoute value : " + currentRoute);
+				behavior.disable();
+
+				var viewportX = evt.pointers[0].viewportX,
+				viewportY = evt.pointers[0].viewportY,
+				pStrip = currentPolyline.getStrip(),
+				clipedPolyline = clipPolyline(currentPolyline, viewportX, viewportY, 8),
+				partPolyline = false;
+
+				foundIdxPolylineForWaypoint = currentEditMarker? currentEditMarker.getData().index : false;
+
+				if( !foundIdxPolylineForWaypoint ){
+					eachStripPointFn = function(lat, lng, alt, idx) {
+						if(foundIdxPolylineForWaypoint) return;
+						if(partPolyline[0] == lat && partPolyline[1] == lng) {
+							for(var iP=2,lP=partPolyline.length; iP<lP; iP+=2){
+								var stripPoint = pStrip.extractPoint(idx+iP/2);
+								if( stripPoint && stripPoint.lat==partPolyline[iP] && stripPoint.lng==partPolyline[iP+1]){
+									foundIdxPolylineForWaypoint = idx;
+								}
+								else{
+									foundIdxPolylineForWaypoint = false;
+								}
+							}
+						}
+
+					};
+					if(clipedPolyline[0]) {
+						partPolyline = clipedPolyline[0];
+						pStrip.eachLatLngAlt(eachStripPointFn);
+					};
+
+					var coords = map.screenToGeo(viewportX, viewportY);
+					currentEditMarker = createRouteEditMarker(coords.lat, coords.lng, foundIdxPolylineForWaypoint);
+					currentEditMarker.setVisibility(true);
+					routegroup.addObject(currentEditMarker);
+
+				}
+
+				console.log("dragstartOnPolyline foundIdxPolylineForWaypoint ",  foundIdxPolylineForWaypoint);
+		});
+
+		routePolyline.addEventListener("drag", function(evt){
+				currentPolyline = evt.currentTarget;	
+				var coord = map.screenToGeo((evt.pointers[0].viewportX), (evt.pointers[0].viewportY + 8));
+				currentEditMarker.setPosition(coord);
+		}, false);
+
+		routePolyline.addEventListener("dragend", function(evt){
+			currentlyDraggingRoute = false;
+			behavior.enable();
+
+			if(!foundIdxPolylineForWaypoint) return;
+
+			var coord = map.screenToGeo((evt.pointers[0].viewportX), (evt.pointers[0].viewportY + 8));
+
+			var routeInDragWaypoints = [];
+			for(var iW = 0,lW = responseRouteWaypoints.length; iW < lW; iW++){
+
+				var wPos = responseRouteWaypoints[iW].mappedPosition;
+
+				if(foundIdxPolylineForWaypoint == responseRouteWaypoints[iW].idxInStrip)
+					routeInDragWaypoints.push(coord);
+				else{
+					routeInDragWaypoints.push(new H.geo.Point(wPos.latitude, wPos.longitude));
+					if(foundIdxPolylineForWaypoint > responseRouteWaypoints[iW].idxInStrip && responseRouteWaypoints[iW+1] && foundIdxPolylineForWaypoint < responseRouteWaypoints[iW+1].idxInStrip){
+						routeInDragWaypoints.push(coord);
+					}
+				}
+			}
+
+			requestRoute(routeInDragWaypoints);
+		});
+
+		routePolyline.addEventListener('pointerenter', function(e){
+			// var x = e.target.getData();
+
+			// var clickCoords = map.screenToGeo(e.targetPointers[0].viewportX, e.targetPointers[0].viewportY + 8);
+			
+			// routeHoverMarker.setPosition(clickCoords);
+			routeHoverMarker.setVisibility(true);
+			console.log("pointerenter");
+
+		});
+
+
+
+		routePolyline.addEventListener('pointermove', function(evt){
+			currentPolyline = evt.currentTarget;
+				currentRoute=currentPolyline.routeNo;
+				var viewportX = evt.pointers[0].viewportX,
+				viewportY = evt.pointers[0].viewportY,
+				clipedPolyline = clipPolyline(currentPolyline, viewportX, viewportY, 8),
+				coord = map.screenToGeo(viewportX, (viewportY + 8));
+
+				if(clipedPolyline.length == 0) {
+					routeHoverMarker.setVisibility(false);
+					return;
+				}
+				routeHoverMarker.setPosition(coord);
+
+			console.log("pointerleave");
+		});
+
+		var maneuverDetails = '';
+
+		if(currentlyDraggingRoute)
+			return;
+		// show maneuver instructions
+		for (var l = 0; l < respJsonRouteObj.response.route[0].leg.length; l++)	{
+			var maneuvers = respJsonRouteObj.response.route[0].leg[l].maneuver;
+			maneuverDetails += '<h7>Travel Time: '+getTimeString(respJsonRouteObj.response.route[0].leg[l].travelTime)+'</h7>';
+			for (var i = 0; maneuvers && i < maneuvers.length; i++)	{
+				var lat = maneuvers[i].position.latitude;
+				var lon = maneuvers[i].position.longitude;
+				var point = new H.geo.Point(parseFloat(lat), parseFloat(lon));
+				var instr = maneuvers[i].instruction.replace(new RegExp("</span>", 'g'), "").replace(new RegExp('<span class="[a-z\-]+">', 'g'), "");
+				var marker = new H.map.Marker(point, { icon: createIconMarker(instr, '') });
+				maneuverDetails += '<h5>'+(i+1)+') '+instr+' ( '+getTimeString(maneuvers[i].travelTime) + ' )</h5>';
+				routegroup.addObject(marker);
+			}
+
+			
+				var links = respJsonRouteObj.response.route[0].leg[l].link;
+				var latestRemainDistance = respJsonRouteObj.response.route[0].leg[l].travelTime;
+				for (var j = 0; links && j < links.length; j++)	{
+
+					var point = new H.geo.Point(parseFloat(links[j].shape[0]), parseFloat(links[j].shape[1]));
+
+					//check for missing bridge
+					var roadGeomArray = links[j].attributes.ROAD_GEOM_FCN;
+					for(var k=0; roadGeomArray && k < roadGeomArray.length; k++){
+						if(roadGeomArray[k].BRIDGE == "Y" ){
+							console.log("Link with bridge: " + links[j].linkId.replace("-",""));
+							if(!mlcLinkIds.includes("B"+links[j].linkId.replace("-",""))){
+								var shape = links[j].shape;
+								var strip = new H.geo.Strip();
+								for (var h = 0; h < shape.length; h++) {
+									if (shape[h].toFixed != undefined) {  // &jsonattributes=41 -> array of lat, lon, lat, lon...
+										strip.pushLatLngAlt(shape[h], shape[h + 1], 0);
+										h++;
+									} else { // array of "lat,lon", "lat,lon", ...
+										var latLon = shape[h].split(",");
+										strip.pushLatLngAlt(parseFloat(latLon[0]), parseFloat(latLon[1]), 0);
+									}
+								}
+								var polyline = new H.map.Polyline(strip, { style: { lineWidth: 5, strokeColor: "#000000", lineJoin: "round" } });
+								polyline.setArrows( false );
+
+								routegroup.addObject(polyline);
+							}
+						}
+					}
+
+					//check for ROM time
+					if(romTarget > -1){
+						var dif = latestRemainDistance - links[j].remainTime;
+						
+						if(dif > romTarget){
+							latestRemainDistance = links[j].remainTime;
+							
+							var romMarker = new H.map.Marker(
+								point,
+								{
+									icon: createRomMarkerIcon()
+								});
+							// var romMarker = new H.map.Marker(point, { icon: createIconMarker('ROM  ', '') });
+							routegroup.addObject(romMarker);
+						}
+					}
+				}
+			
+		}
+
+		maneuverDetails += '<div class="form-group"><button class="here-btn here-btn-1 pull-right" id = "routeExportButton" type="button" onclick="">Download Route in GeoJSON format</button></div>';
+		instructions.innerHTML= maneuverDetails;
+		map.addObject(routegroup);
+		map.setViewBounds(routegroup.getBounds());
+	}
+
+	var clipPolyline = function(polyline, viewportX, viewportY, bboxSize){
+		var	pleft = viewportX - bboxSize,
+		pright = viewportX + bboxSize,
+		ptop = viewportY - bboxSize,
+		pbottom = viewportY + bboxSize,
+		coordLeftTop = map.screenToGeo(pleft, ptop),
+		coordRigthBottom = map.screenToGeo(pright, pbottom),
+		rect = new H.geo.Rect(coordLeftTop.lat,coordLeftTop.lng,coordRigthBottom.lat,coordRigthBottom.lng),
+		clipedPolyline = polyline.clip(rect);
+
+		return clipedPolyline;
+	};
+
+	var createRomMarkerIcon = function () {
+		var img = document.createElement("img");
+		img.src = "/assets/leidos_demo/romIcon1.png";
+
+		return new H.map.Icon(img, {
+			anchor: { x: 16, y: 72 }
+		});
+	};
+
+	var parseRouteAddPolyline = function(respJsonRouteObj, color, modifyRouteWaypoints){
+		var errmessage= null;
+		if (respJsonRouteObj.error != undefined) {
+			errmessage= respJsonRouteObj.error;
+		}
+		else if (respJsonRouteObj.issues != undefined && respJsonRouteObj.issues[0].message != undefined) {
+			errmessage= respJsonRouteObj.issues[0].message;
+		}
+		else if (respJsonRouteObj.message != undefined) {
+			errmessage= respJsonRouteObj.message;
+		}
+		
+		if( errmessage!== null )
+		{
+			feedbackTxt.innerHTML = '<h5>Cannot calculate route </h5>' + errmessage ;
+			return null;
+		}
+			
+		if( respJsonRouteObj.response == null){
+			feedbackTxt.innerHTML = '<h5>Error </h5>' + respJsonRouteObj.response_code + '\n';
+			return null;
+		}
+
+		if(modifyRouteWaypoints && responseRouteWaypoints.length > respJsonRouteObj.response.route[0].waypoint.length){
+			console.log("something's wrong? ");
+			console.log("I think");
+		}
+
+		responseRouteWaypoints = respJsonRouteObj.response.route[0].waypoint;
+
+		var strip = new H.geo.Strip();
+		for (var l = 0; l < respJsonRouteObj.response.route[0].leg.length; l++)	{
+			var links = respJsonRouteObj.response.route[0].leg[l].link;
+			for (var i = 0; i < links.length; i++)	{
+				var shape = links[i].shape;
+				for (var j = 0; j < shape.length; j++) {
+					if (shape[j].toFixed != undefined) {  // &jsonattributes=41 -> array of lat, lon, lat, lon...
+						strip.pushLatLngAlt(shape[j], shape[j + 1], 0);
+
+						if(modifyRouteWaypoints){
+							for(var iW = 0,lW = responseRouteWaypoints.length; iW < lW; iW++){
+								var wPos = responseRouteWaypoints[iW].mappedPosition;
+								if(wPos.latitude == shape[0] && wPos.longitude == shape[1]) 
+									responseRouteWaypoints[iW].idxInStrip = strip.getPointCount() - 1;
+							}
+						}
+						j++;
+					} 
+				}
+			}
+		}
+
+		if(modifyRouteWaypoints)
+			responseRouteWaypoints[responseRouteWaypoints.length-1].idxInStrip = strip.getPointCount()-1;
+
+		var polyline = new H.map.Polyline(strip, { style: { lineWidth: 5, strokeColor: color, lineJoin: "round" } });
+		polyline.setArrows( true );
+		
+		return polyline;
+	}
+
+	var encodeUrlParameters = function (endpoint, url) {
+		if( endpoint.endsWith("/") ) endpoint.substring( 0, endpoint.length-1 );
+		if( ! url.startsWith("/") ) url= '/' + url;
+		var urlParts= url.split('?');
+		var urlParams= urlParts[1].split('&');
+		
+		for (var i = 0; i < urlParams.length; i++) {
+			var nameValue= urlParams[i].split('=');
+			urlParams[i] = encodeURIComponent( nameValue[0] ) + '=' + (nameValue.length > 1 ? encodeURIComponent( nameValue[1] ) : "");
+		}
+		var allEncUrlParams= urlParams.join('&');
+		var result= [ endpoint, urlParts[0], '?', allEncUrlParams].join('');
+		console.log( result );
+		return result;
+	}
+
+	var printJson = function(json){	 
+	    $('#json').html(syntaxHighlight(json,undefined,2));
+	}
+
+	var syntaxHighlight = function(json) {
+		if (typeof json != 'string') {
+         json = JSON.stringify(json, undefined, 2);
+    	}	
+	    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+	        var cls = 'number';
+	        if (/^"/.test(match)) {
+	            if (/:$/.test(match)) {
+	                cls = 'key';
+	            } else {
+	                cls = 'string';
+	            }
+	        } else if (/true|false/.test(match)) {
+	            cls = 'boolean';
+	        } else if (/null/.test(match)) {
+	            cls = 'null';
+	        }
+	        return '<span class="' + cls + '">' + match + '</span>';
+	    });
+	}
+
+	var createMarker = function(coordinates){
+		// Define a variable holding SVG mark-up that defines an icon image:
+		 var svg = '<svg width="35" height="50" xmlns="http://www.w3.org/2000/svg">'+
+		'<path d="M5 30 A 13 13, 0, 1, 1, 28, 30 L 17 42 Z" fill="#3493a3" stroke="white" stroke-width="3"/>'+
+         '<text x="34" y="60" font-size="25pt" ' +
+		 'font-family="Arial" font-weight="bold" text-anchor="middle" ' +
+		 'fill="white"></text></svg>';
+
+		// Create an icon, an object holding the latitude and longitude, and a marker:
+		var icon = new H.map.Icon(svg),
+		marker = new H.map.Marker(coordinates, {icon: icon});
+		return marker;
+	}
+
+
+	var svgMarkerImage_Line='<svg width="__widthAll__" height="60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+	'<g>' +
+	'<rect id="label-box" ry="3" rx="3" stroke="#000000" height="30" width="__width__" y="11" x="45" fill="#ffffff"/>'+
+	'<text id="label-text" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="10" font-weight="bold" y="24" x="55" stroke-width="0" fill="#000000">__line1__</text>' +
+	'<text id="label-desc" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="8" y="36" x="55" stroke-width="0" fill="#000000">__line2__</text>'+
+	'<image width="50" height="50" x="8.5" y="9.5" xlink:href="data:image/png;base64,R0lGODlhfQDCAPQdAAELHgEMHgIMHw8LHRALHR8KGyAKGxEbLCEqOzE5SUBIVkFIV2Fnc3B1gHF2gYCFjoCFj4+UnJCVnZ+jqqCkq6+yuLCzuc/R1NDS1d/g4uDh4+/v8PDw8f///wAAAAAAACH5BAEAAB4ALAAAAAB9AMIAAAX+oCeOJCmcaKqubOu+cCyvZW2XxKzvfO+vhNvN8Csaj0eD0IRsOp+vpQdKrUKF1qy2aNt6v7MSEUwup5Qjs9o8yq3f3uAUTteK6vjqPc9v7vuAP3OBhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnCkICwoMEA4KCwidWgsSGB2trq+uFxEKqEcHHhUcsLu8HRsTHge1OwgTvcfIE6fDLwcQyNDIEMLMKs4b0dm9G9PVJwkZ2uK9GQnVDOPpvQzDEervuxGdBxXw9q8V1JgHF/f+rRf0VeL3r2DAS/UKFqxgSYLChxIooXv4kF2kBBQzmnt0IFzGhxkELnr2kSIERwf+sJV8uEEkIpIrH55chCDmx2WJKNjMSEHRgZ0fXQaaCLRiIgtFKfZEpDJpwQ2IFjiluOCQw6kKIxrqh9Xgoa4Pv4ItaKjm2H84AUk9668qobVs7bkNBDPuOweF6tpNN5PuXnh43/59N1ftYHWF+2A8PC4tIMbjxELOdojVZGgYrF6GprUQ3M28EgfSBXoXh6Oldy09RDR1K4uHfrp2JTSQztmrEZl17fiQ3st9fZLezKG2od+Mgy86oGGzhoubN0JqPRh2pKuDO09C+tfCpQOW42IwzjH82PGaDnAHa4H8JOxTtXOiDtQ6qgTNgWqQzszZ8I8cKOeNMyV14w0LCNz+VhAFvR1oDQMU/CcOBxQw4J6DKqhi3jGyiIZhD58s4MAoC5jy4Ykopqjiiiy26OKLMMYo44w01mgjIIPcqMMfOoaRY48x8AgkDCIMMGQMA6RxZBQjFLBkCwWU8CQLXUyJAhZWShEJAAIE0GUAYIYp5phenkAmmCpw2YIUIjjZiJpbwKlClGyOYOQiclYBQJ4nJFknloXwCcWeKfxp6KGIJiplFn4q6uijkNagRaORVmrpoYxeqummS2TK6aeg/ugEpaGWGqkVpJqqaqJjXLHqq47qAeush7bqBK24/klFrrwuYSsSvQZb5a3CFiuCG34Ya+wTyhqL7BHNLptstMHTEktttcBeiy202m7LRbe9Zgsur9yOm2u55uJqRLrkfsuuuoK8C68P8uL664710upDqvmaei+S/erLA78Bh/qsDAQXDOrACsN6MAwJN8zpDhFLrOnDLlRs8aX4bqxqxx6b6mPIIstA8qomn1wykSqv7ELLLq8Jc6ksz7wwkzbfLHPOn+LM86b/nvCzzjQMzWnQRvdMZdKbYsz0xEU/fenDUm8addWVHoy1pipszTEKGnuta59iWwp22WYLEDbaWqrNdqVuvw1p3HI/unbdeOetN6whAAA7" />'+
+	'</g>'+
+	'</svg>';
+
+	//--- Create marker with 2 text lines
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_Line;
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line2);
+		svgMarker = svgMarker.replace(/__width__/g, line1.length * 5 + 20);
+		svgMarker = svgMarker.replace(/__widthAll__/g, line1.length * 5 + 200);
+		return new H.map.Icon(svgMarker, { anchor: new H.math.Point(24, 57)	});
+	};
+
+	/** Menu UI**/
+	$("#showPrimaryDisplayGroup").change(function() {
+		if(group == undefined)
+			return;
+
+		if($("#showPrimaryDisplayGroup").prop("checked")){
+			$("#displayOptionsDiv").show();
+			map.addObject(group);
+		}
+		else{
+			$("#displayOptionsDiv").hide();
+			try{
+				map.removeObject(group);
+			}
+			catch(err){
+
+			}
+		}
+
+	}).trigger('change');
+
+	$("#showAlternateRouteCheckbox").change(function() {
+		if(routegroup == undefined || alternateRoute == null)
+			return;
+
+		if($("#showAlternateRouteCheckbox").prop("checked")){
+			routegroup.addObject(alternateRoute);
+		}
+		else{
+			routegroup.removeObject(alternateRoute);
+		}
+
+	}).trigger('change');
+
+	
+
+	$( "#routeSelect" ).change(function() {
+	    $( "#routeSelect option:selected" ).each(function() {
+	    	if( $(this).val() === 'custom'){
+	    		$("#customRouteCoordinates").show();
+	    		$("#customRouteGeocode").hide();
+
+	    	}
+	    	else if($(this).val() === 'customGeocode'){
+	    		$("#customRouteGeocode").show();
+	    		$("#customRouteCoordinates").hide();
+
+	    	}
+	    	else if($(this).val() === 'empty'){
+	    		waypointGroup.removeAll();
+	    		$("#customRouteCoordinates").hide();
+	    		$("#customRouteGeocode").hide();
+	    		$("#startCoordinates").val('');  
+		    	$("#endCoordinates").val(''); 
+		    	$("#searchTextInput1").val('');  
+		    	$("#searchTextInput2").val(''); 
+	    	}
+	    	else{
+	    		$("#customRouteCoordinates").hide();
+	    		$("#customRouteGeocode").hide();
+	    		waypointGroup.removeAll();
+
+	    		var predefinedRoute = $.parseJSON($(this).val());
+	    		if(predefinedRoute.start != undefined){
+		    		startMarker = createMarker(predefinedRoute.start);
+		    		endMarker = createMarker(predefinedRoute.end);
+		    		waypointGroup.addObject(startMarker);
+		    		waypointGroup.addObject(endMarker);
+		    		$("#startCoordinates").val(predefinedRoute.start.lat+","+ predefinedRoute.start.lng);  
+		    		$("#endCoordinates").val(predefinedRoute.end.lat +","+predefinedRoute.end.lng);  
+		    		map.setViewBounds(waypointGroup.getBounds());
+		    	}
+	    	}
+	    });
+	}).trigger( "change" );
+
+	$( "#vehicleSelect" ).change(function() {
+	    $( "#vehicleSelect option:selected" ).each(function() {
+	    	var vehicleDetails = $.parseJSON($(this).val());
+	    	// $('#lcCategorySelect option[value='+vehicleDetails.lc+']').attr('selected','selected'); 
+	    	$('[name=lcCategorySelect]').val(vehicleDetails.lc+''); 
+    		$('#mlcValueInput').val(vehicleDetails.mlc);
+    		$('#limitedWeightInput').val(vehicleDetails.weight);
+    		$('#heightInput').val(vehicleDetails.height);
+    		$('#widthInput').val(vehicleDetails.width);
+    		$('#lengthInput').val(vehicleDetails.length);
+	    });
+	}).trigger( "change" );
+
+	$( "#displayDropdown" ).change(function() {
+	    $( "#displayDropdown option:selected" ).each(function() {
+	    	var value = $(this).val();
+	    	if(value == "all"){
+	    		$("#mlcLoadingDiv").show();
+	    		$('#displaceCustomSettings').hide();
+	    		parseLinksForDisplay();
+	    	}
+	    	else{
+	    		$('#displaceCustomSettings').show();
+	    	}
+	    });
+	}).trigger( "change" );
+
+	var toggleVehicleDetails = function(){
+		if( $("#vehicleDetails").is(":visible")){
+			$("#vehicleDetails").hide();
+			$("#vehicleDetailsButton").html('&#x25bc;');
+		}
+		else{
+			$("#vehicleDetails").show();
+			$("#vehicleDetailsButton").html('&#x25b2;');
+		}
+	}
+
+	var getTimeString = function(secs){
+		var sec_num = parseInt(secs, 10);
+	    var hours   = Math.floor(sec_num / 3600);
+	    var minutes = Math.floor(sec_num / 60) % 60;
+	    var seconds = sec_num % 60;
+
+	    var timeString = ''
+	    if(hours > 0)
+	    	timeString += hours + "h ";
+
+	    if(minutes > 0)
+	    	timeString += minutes + 'm ';
+
+	    if(seconds > 0)
+	    	timeString += seconds + 's';
+
+	    return timeString;
+	}
+
+
+	var autocompleteSuggestionFrom = function(text){
+		if(event.keyCode == 13) {
+			setAddressFromChoice(text, $("#suggestionDiv1")[0],$("#searchTextInput1")[0]);
+    	}
+    	else{
+			autocompleteSuggestion(text,"suggestionDiv1","searchTextInput1");
+		}
+	}
+
+	var autocompleteSuggestionTo = function(text){
+		if(event.keyCode == 13) {
+			setAddressFromChoice(text, $("#suggestionDiv2")[0],$("#searchTextInput2")[0]);
+    	}
+    	else{
+			autocompleteSuggestion(text,"suggestionDiv2","searchTextInput2");
+		}
+	}
+
+	//autocomplete/ geocode
+	var autocompleteSuggestion = function(text, suggestionDiv, searchTextDiv ){
+		$("#suggestionDiv").show();
+		var autocompleteUrl = "https://autocomplete.geocoder.api.here.com/6.2/suggest.json";
+		var data =  {
+				app_id:app_id,
+				app_code:app_code,
+				query:text,
+				language:'en'
+		};
+		
+		$.ajax({
+			type: "get",
+			url: autocompleteUrl,
+			data:data,
+			success: function(res){
+				var sugResponse = eval(res);
+                if (sugResponse.suggestions && sugResponse.suggestions.length > 0)
+                  {
+                  	var suggList = '<ul style="list-style:none;padding-left:5px;" id="ui-id-2" tabindex="0" >';
+                  	for( var i = 0; i < sugResponse.suggestions.length ; i++){
+                  		console.log(sugResponse.suggestions[i].label);
+                  		suggList += '<li class="ui-menu-item" id="ui-id-16" tabindex="-1"><a onclick="setAddressFromChoice($(this).text(),'+suggestionDiv+','+searchTextDiv+')">'+ sugResponse.suggestions[i].label.split(',').reverse().join().replace(',',', ')+ '</a></li>';
+                  	}
+                  		suggList += '</ul>';
+                  		$("#"+suggestionDiv).html(suggList);
+                  }
+                else
+                  {
+                     $("#"+suggestionDiv).html('');
+                   }
+               }
+			});
+  	};
+
+  	var setAddressFromChoice = function(text, suggestionDiv, searchTextDiv){
+  		suggestionDiv.innerHTML = '';
+		var theUrl = 'https://geocoder.api.here.com/6.2/geocode.json?app_id=' + app_id + '&app_code=' + app_code + '&searchtext='+ text.trim()+'&gen=9&language=en-US';
+
+		$.ajax({
+		    type: 'GET',
+		    url: theUrl,
+		    success: function(data) {
+		    	printJson(data);
+
+		    	if(data.Response.View.length > 0){
+			    	var array = data.Response.View[0].Result;
+			    	var resultsHtml = '';
+
+			    	var address = array[0].Location.Address;
+			    	searchTextDiv.value = address.Label;
+			    	var point = new H.geo.Point(parseFloat(array[0].Location.NavigationPosition[0].Latitude),parseFloat(array[0].Location.NavigationPosition[0].Longitude));
+					map.setCenter(point);
+
+
+					if(searchTextDiv.id === 'searchTextInput1'){
+						if(startMarker != null){
+							try{
+	                		waypointGroup.removeObject(startMarker);
+	                		}
+	                		catch(err){}
+		                }
+						$("#startCoordinates").val(point.lat + ',' + point.lng);
+						startMarker = createMarker(point);
+						waypointGroup.addObject(startMarker); 
+					}
+					else{
+						if(endMarker != null){
+							try{
+	                		waypointGroup.removeObject(endMarker);
+	                		}
+	                		catch(err){}
+		                }
+						$("#endCoordinates").val(point.lat + ',' + point.lng);
+						endMarker = createMarker(point);
+						waypointGroup.addObject(endMarker); 
+					}	                
+			    }
+ 		 }});
+	}
+
+	var reverseGeocode =  function(searchTextDiv, lat, lon){
+		var theUrl = 'https://reverse.geocoder.api.here.com/6.2/reversegeocode.json?app_id=' + app_id + '&app_code=' + app_code+ 
+		'&gen=9&jsonattributes=1&language=en-US&maxresults=1&mode=retrieveAddresses&prox='+lat+','+lon+'%2C100';
+
+		$.ajax({
+		    type: 'GET',
+		    url: theUrl,
+		    success: function(data) {
+		    	printJson(data);
+
+		    	if(data.response.view.length > 0){
+			    	searchTextDiv.value = data.response.view[0].result[0].location.address.label;	                
+			    }
+ 		 }});
+	}
+
+	$(document).click(function(event) { 
+	    if(!$(event.target).closest('#suggestionDiv1').length) {
+	        if($('#suggestionDiv1').html() != '') {
+	            $('#suggestionDiv1').html('');
+	        }
+	    }   
+
+	    if(!$(event.target).closest('#suggestionDiv2').length) {
+	        if($('#suggestionDiv2').html() != '') {
+	            $('#suggestionDiv2').html('');
+	        }
+	    }      
+	})
+
+	var resetRoute = function(){
+		routegroup.removeAll();
+		alternateRoute = null;
+
+		foundIdxPolylineForWaypoint = false;
+	    routePolyline = null;
+	    responseRouteWaypoints = [];
+	    routeInDragWaypoints = [];
+	    currentlyDraggingRoute = false;
+	    currentEditMarker = null;
+
+        $('#routeSelect').val('empty');
+
+        $('#vehicleSelect').val('{"lc":"2","mlc":"25", "length": "","width":"","height":"","weight":""}');
+        $( "#vehicleSelect option:selected" ).each(function() {
+		    var vehicleDetails = $.parseJSON($(this).val());
+	    	$('[name=lcCategorySelect]').val(vehicleDetails.lc+''); 
+			$('#mlcValueInput').val(vehicleDetails.mlc);
+			$('#limitedWeightInput').val(vehicleDetails.weight);
+			$('#heightInput').val(vehicleDetails.height);
+			$('#widthInput').val(vehicleDetails.width);
+			$('#lengthInput').val(vehicleDetails.length);
+		});
+		$("#vehicleDetails").hide();
+		$("#vehicleDetailsButton").html('&#x25bc;');
+
+		$("#showAlternateRouteCheckbox").prop('checked',false);
+		feedbackTxt.innerHTML='';
+		instructions.innerHTML = '';
+
+	};
+
+	var resetWaypointsAndRoute = function(){
+		waypointGroup.removeAll();
+		$("#customRouteCoordinates").hide();  
+        $("#customRouteGeocode").hide(); 
+
+        $("#startCoordinates").val('');  
+	    $("#endCoordinates").val('');  
+
+	    $("#searchTextInput1").val('');  
+	    $("#searchTextInput2").val('');  
+
+        resetRoute();
+	};
+
+	var resetDemo = function(){
+		waypointGroup.removeAll();
+		routegroup.removeAll();
+		alternateRoute = null;
+
+		foundIdxPolylineForWaypoint = false;
+	    routePolyline = null;
+	    responseRouteWaypoints = [];
+	    routeInDragWaypoints = [];
+	    currentlyDraggingRoute = false;
+	    currentEditMarker = null;
+
+		$("#customRouteCoordinates").hide();  
+        $("#customRouteGeocode").hide(); 
+        $("#romValueInput").val('');
+
+		$('#routeSelect').val('{"start":{"lat":52.26382363977787, "lng":21.055726413033057},"end":{"lat": 52.30437113315299, "lng":21.089891830924984}}');   
+
+	    $( "#routeSelect option:selected" ).each(function() {
+    		var predefinedRoute = $.parseJSON($(this).val());
+    		if(predefinedRoute.start != undefined){
+	    		startMarker = createMarker(predefinedRoute.start);
+	    		endMarker = createMarker(predefinedRoute.end);
+	    		waypointGroup.addObject(startMarker);
+	    		waypointGroup.addObject(endMarker);
+	    		$("#startCoordinates").val(predefinedRoute.start.lat+","+ predefinedRoute.start.lng);  
+	    		$("#endCoordinates").val(predefinedRoute.end.lat +","+predefinedRoute.end.lng);  
+	    		map.setViewBounds(waypointGroup.getBounds());
+	    	}
+	    });
+
+        $('#vehicleSelect').val('{"lc":"2","mlc":"25", "length": "","width":"","height":"","weight":""}');
+        $( "#vehicleSelect option:selected" ).each(function() {
+		    var vehicleDetails = $.parseJSON($(this).val());
+	    	$('[name=lcCategorySelect]').val(vehicleDetails.lc+''); 
+			$('#mlcValueInput').val(vehicleDetails.mlc);
+			$('#limitedWeightInput').val(vehicleDetails.weight);
+			$('#heightInput').val(vehicleDetails.height);
+			$('#widthInput').val(vehicleDetails.width);
+			$('#lengthInput').val(vehicleDetails.length);
+		});
+		$("#vehicleDetails").hide();
+		$("#vehicleDetailsButton").html('&#x25bc;');
+
+		$("#showAlternateRouteCheckbox").prop('checked',false);
+		feedbackTxt.innerHTML='';
+		instructions.innerHTML = '';
+	}
+
+	display_overlay();
+	// $("#mlcLoadedDiv").show();
+	// $("#mlcLoadingDiv").hide();
+
+  </script>

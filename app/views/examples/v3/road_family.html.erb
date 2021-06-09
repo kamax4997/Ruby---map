@@ -1,0 +1,1029 @@
+<style>
+	.button 
+	{
+		width: 100px;
+		height: 100px;
+	}
+	
+	.small_button
+	{
+		width: 30px;
+		height: 30px;
+		padding: 0;
+		border: none;
+		background: none;
+	}
+	
+	.onoffswitch 
+	{
+		position: relative; width: 120px;
+		-webkit-user-select:none; -moz-user-select:none; -ms-user-select: none;
+	}
+	
+	.onoffswitch-checkbox 
+	{
+		display: none;
+	}
+	
+	.onoffswitch-label 
+	{
+		display: block; overflow: hidden; cursor: pointer;
+		border: 2px solid #999999; border-radius: 20px;
+	}
+	
+	.onoffswitch-inner 
+	{
+		display: block; width: 200%; margin-left: -100%;
+		transition: margin 0.3s ease-in 0s;
+	}
+	
+	.onoffswitch-inner:before, .onoffswitch-inner:after 
+	{
+		display: block; float: left; width: 50%; height: 30px; padding: 0; line-height: 30px;
+		font-size: 14px; color: white; font-family: Trebuchet, Arial, sans-serif; font-weight: bold;
+		box-sizing: border-box;
+	}
+	
+	.onoffswitch-inner:before 
+	{
+		content: "loaded";
+		padding-left: 10px;
+		background-color: #48dad0; color: #FFFFFF;
+	}
+	
+	.onoffswitch-inner:after 
+	{
+		content: "unloaded";
+		padding-right: 10px;
+		background-color: #EEEEEE; color: #999999;
+		text-align: right;
+	}
+	
+	.onoffswitch-switch 
+	{
+		display: block; width: 25px; margin: 2.5px;
+		background: #FFFFFF;
+		position: absolute; top: 0; bottom: 0;
+		right: 86px;
+		border: 2px solid #999999; border-radius: 20px;
+		transition: all 0.3s ease-in 0s; 
+	}
+	
+	.onoffswitch-checkbox:checked + .onoffswitch-label .onoffswitch-inner 
+	{
+		margin-left: 0;
+	}
+	
+	.onoffswitch-checkbox:checked + .onoffswitch-label .onoffswitch-switch 
+	{
+		right: 0px; 
+	}
+	
+	.inputfile 
+	{
+		width: 0.1px;
+		height: 0.1px;
+		opacity: 0;
+		overflow: hidden;
+		position: absolute;
+		z-index: -1;
+	}
+
+	.inputfile + label 
+	{
+		font-size: 1.25em;
+		font-weight: 700;
+		color: black;
+		background-color: #f8f8f8;
+		display: inline-block;
+	}
+
+	.inputfile:focus + label, .inputfile + label:hover 
+	{
+		background-color: #ccc;
+	}	
+	
+	.inputfile + label 
+	{
+		cursor: pointer; /* "hand" cursor */
+	}
+</style>
+
+<% content_for :title, "Road Family Demo" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>Road Family Demo</p>
+	<div class="form-horizontal">
+		<div class="form-group">
+			<div class="col-sm-4">
+				<button class="button" id="plusbutton" onclick="handleClick('plusbutton', 'addTruckDiv');" title=Add Truck>
+					<?xml version="1.0" ?><!DOCTYPE svg  PUBLIC '-//W3C//DTD SVG 1.1//EN'  'http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd'><svg enable-background="new 0 0 128 128" version="1.1" viewBox="0 0 128 128" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M64,13.5c-28.7,0-52,23.3-52,52s23.3,52,52,52s52-23.3,52-52S92.7,13.5,64,13.5z M64,113.5  c-26.5,0-48-21.5-48-48s21.5-48,48-48s48,21.5,48,48S90.5,113.5,64,113.5z" fill="#555555"/><path d="M64,36.5c3.3,0,6,2.7,6,6V60h18c3.3,0,6,2.7,6,6s-2.7,6-6,6H70v18.5c0,3.3-2.7,6-6,6s-6-2.7-6-6V72H40  c-3.3,0-6-2.7-6-6s2.7-6,6-6h18V42.5C58,39.1,60.7,36.5,64,36.5 M64,34.5c-4.4,0-8,3.6-8,8V58H40c-4.4,0-8,3.6-8,8s3.6,8,8,8h16  v16.5c0,4.4,3.6,8,8,8s8-3.6,8-8V74h16c4.4,0,8-3.6,8-8s-3.6-8-8-8H72V42.5C72,38,68.4,34.5,64,34.5L64,34.5z" fill="#000000"/></svg>
+				</button>
+			</div>
+			<div class="col-sm-4">
+				<button class="button" id="settingsbutton" onclick="handleClick('settingsbutton', 'setupDiv');" title=Platooning Setup>
+					<?xml version="1.0" ?><!DOCTYPE svg  PUBLIC '-//W3C//DTD SVG 1.1//EN'  'http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd'><svg enable-background="new 0 0 128 128" version="1.1" viewBox="0 0 128 128" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g><g><g><path d="M53.456,76.365c-0.307,0-0.588-0.177-0.718-0.458l-1.89-4.077l-3.251-0.573l-3.17,3.184     c-0.234,0.236-0.594,0.299-0.895,0.159l-4.43-2.065c-0.303-0.141-0.483-0.456-0.454-0.788l0.401-4.475l-2.528-2.122l-4.338,1.173     c-0.323,0.088-0.664-0.037-0.854-0.31l-2.804-4.003c-0.19-0.273-0.19-0.637,0.001-0.909l2.586-3.675l-1.129-3.102l-4.343-1.153     c-0.322-0.085-0.556-0.364-0.585-0.696l-0.426-4.869c-0.029-0.332,0.153-0.646,0.455-0.787l4.077-1.89l0.573-3.251l-3.186-3.17     c-0.235-0.235-0.3-0.593-0.158-0.895l2.065-4.429c0.141-0.302,0.458-0.483,0.787-0.454l4.476,0.402l2.122-2.529l-1.172-4.337     c-0.087-0.322,0.037-0.664,0.31-0.854l4.003-2.803c0.273-0.191,0.636-0.191,0.909,0.001l3.675,2.585l3.103-1.129l1.153-4.343     c0.086-0.322,0.363-0.556,0.695-0.585l4.868-0.426c0.348-0.026,0.648,0.153,0.787,0.456l1.89,4.077l3.251,0.573l3.17-3.184     c0.234-0.236,0.595-0.299,0.895-0.159l4.43,2.065c0.303,0.141,0.483,0.456,0.454,0.788l-0.401,4.475l2.528,2.122l4.338-1.173     c0.321-0.089,0.663,0.037,0.854,0.31l2.804,4.003c0.19,0.273,0.19,0.637-0.001,0.909l-2.586,3.675l1.129,3.102l4.343,1.153     c0.322,0.085,0.556,0.364,0.585,0.696l0.426,4.869c0.029,0.332-0.153,0.646-0.455,0.787l-4.077,1.89l-0.573,3.251l3.186,3.17     c0.235,0.235,0.3,0.593,0.158,0.895l-2.065,4.429c-0.141,0.302-0.461,0.478-0.787,0.454l-4.476-0.402l-2.122,2.529l1.172,4.337     c0.087,0.322-0.037,0.664-0.31,0.854l-4.003,2.803c-0.273,0.191-0.636,0.191-0.909-0.001l-3.675-2.585l-3.103,1.129l-1.153,4.343     c-0.086,0.322-0.363,0.556-0.695,0.585l-4.868,0.426C53.502,76.364,53.479,76.365,53.456,76.365z M47.328,69.615     c0.046,0,0.092,0.004,0.138,0.012l4.064,0.716c0.255,0.045,0.472,0.212,0.58,0.447l1.83,3.948l3.762-0.329l1.117-4.206     c0.066-0.25,0.251-0.452,0.494-0.541l3.878-1.412c0.244-0.088,0.515-0.053,0.726,0.097l3.559,2.503l3.093-2.166l-1.135-4.2     c-0.067-0.25-0.009-0.517,0.157-0.715l2.653-3.161c0.166-0.198,0.418-0.305,0.677-0.279l4.334,0.389l1.596-3.422l-3.084-3.07     c-0.183-0.182-0.266-0.443-0.221-0.698l0.717-4.064c0.045-0.255,0.212-0.472,0.446-0.581l3.947-1.83l-0.329-3.762l-4.205-1.117     c-0.25-0.066-0.452-0.251-0.54-0.494l-1.411-3.878c-0.089-0.243-0.053-0.514,0.096-0.726l2.504-3.559l-2.166-3.094l-4.201,1.136     c-0.245,0.068-0.516,0.009-0.715-0.158l-3.161-2.653c-0.198-0.166-0.303-0.419-0.279-0.677l0.389-4.333l-3.423-1.596     l-3.069,3.083c-0.182,0.183-0.443,0.264-0.698,0.221l-4.064-0.716c-0.255-0.045-0.472-0.212-0.58-0.447l-1.83-3.948l-3.762,0.329     l-1.117,4.206c-0.066,0.25-0.251,0.452-0.494,0.541l-3.878,1.412c-0.244,0.088-0.515,0.052-0.726-0.097l-3.559-2.503     l-3.093,2.166l1.135,4.2c0.067,0.25,0.009,0.517-0.157,0.715l-2.653,3.161c-0.167,0.197-0.422,0.3-0.677,0.279l-4.334-0.389     l-1.596,3.422l3.084,3.07c0.183,0.182,0.266,0.443,0.221,0.698l-0.717,4.064c-0.045,0.255-0.212,0.472-0.446,0.581l-3.947,1.83     l0.329,3.762L30.79,52.9c0.25,0.066,0.452,0.251,0.54,0.494l1.411,3.878c0.089,0.243,0.053,0.514-0.096,0.726l-2.504,3.559     l2.166,3.094l4.201-1.136c0.247-0.066,0.516-0.008,0.715,0.158l3.161,2.653c0.198,0.166,0.303,0.419,0.279,0.677l-0.389,4.333     l3.423,1.596l3.069-3.083C46.917,69.698,47.119,69.615,47.328,69.615z" fill="#000000"/></g><g><path d="M53.456,60.493c-7.144,0-12.955-5.812-12.955-12.956s5.812-12.956,12.955-12.956     s12.955,5.812,12.955,12.956S60.6,60.493,53.456,60.493z M53.456,35.571c-6.599,0-11.967,5.368-11.967,11.966     s5.368,11.966,11.967,11.966s11.967-5.368,11.967-11.966S60.055,35.571,53.456,35.571z" fill="#000000"/></g></g><g><g><path d="M83.779,110.292c-0.301,0-0.583-0.173-0.716-0.454l-2.438-5.167l-3.356-0.589l-4.051,4.029     c-0.263,0.261-0.67,0.305-0.982,0.106l-4.804-3.054c-0.312-0.198-0.445-0.586-0.32-0.935l1.931-5.377l-1.958-2.791l-5.713-0.015     c-0.37-0.001-0.689-0.258-0.771-0.619l-1.237-5.557c-0.08-0.361,0.101-0.729,0.435-0.888l5.168-2.437l0.588-3.357l-4.028-4.05     c-0.262-0.262-0.306-0.67-0.107-0.982l3.055-4.804c0.198-0.312,0.587-0.446,0.936-0.32l5.376,1.93l2.791-1.958l0.016-5.712     c0.001-0.37,0.258-0.69,0.619-0.771l5.557-1.237c0.366-0.08,0.73,0.101,0.888,0.435l2.437,5.167l3.357,0.589l4.051-4.029     c0.263-0.262,0.671-0.305,0.982-0.106l4.804,3.054c0.312,0.198,0.445,0.586,0.32,0.935l-1.931,5.377l1.958,2.791l5.712,0.015     c0.37,0.001,0.69,0.258,0.771,0.619l1.237,5.557c0.08,0.361-0.101,0.729-0.435,0.887l-5.167,2.438l-0.589,3.357l4.028,4.05     c0.262,0.262,0.306,0.67,0.107,0.982l-3.055,4.804c-0.198,0.313-0.586,0.448-0.936,0.32l-5.376-1.93l-2.791,1.958l-0.015,5.712     c-0.001,0.37-0.258,0.69-0.619,0.771l-5.557,1.237C83.894,110.285,83.836,110.292,83.779,110.292z M77.002,102.441     c0.046,0,0.091,0.004,0.137,0.012l4.165,0.73c0.253,0.044,0.469,0.209,0.579,0.442l2.342,4.965l4.321-0.962l0.015-5.49     c0-0.257,0.126-0.498,0.337-0.646l3.462-2.429c0.211-0.147,0.48-0.183,0.722-0.097l5.167,1.855l2.376-3.736l-3.872-3.892     c-0.182-0.183-0.264-0.441-0.219-0.695l0.731-4.165c0.045-0.253,0.209-0.469,0.441-0.579l4.965-2.343l-0.962-4.321l-5.489-0.015     c-0.257,0-0.498-0.126-0.646-0.336l-2.429-3.462c-0.147-0.211-0.185-0.48-0.098-0.722l1.855-5.167l-3.736-2.375l-3.893,3.872     c-0.182,0.181-0.436,0.263-0.694,0.218l-4.166-0.73c-0.253-0.044-0.469-0.209-0.579-0.442l-2.341-4.965l-4.322,0.962l-0.015,5.49     c-0.001,0.257-0.126,0.498-0.337,0.646l-3.462,2.429c-0.211,0.147-0.479,0.184-0.722,0.097l-5.167-1.855l-2.376,3.736     l3.872,3.892c0.182,0.183,0.264,0.441,0.219,0.695l-0.73,4.165c-0.044,0.253-0.209,0.469-0.441,0.579l-4.966,2.342l0.962,4.321     l5.49,0.015c0.257,0,0.498,0.126,0.646,0.336l2.429,3.462c0.147,0.211,0.185,0.48,0.098,0.722l-1.855,5.167l3.736,2.375     l3.893-3.872C76.594,102.522,76.795,102.441,77.002,102.441z" fill="#000000"/></g><g><path d="M81.859,97.473c-4.055,0-7.714-2.561-9.104-6.372c-0.888-2.432-0.774-5.064,0.317-7.411     s3.032-4.128,5.464-5.016c1.073-0.392,2.191-0.59,3.323-0.59c4.054,0,7.713,2.561,9.104,6.372     c1.832,5.02-0.762,10.595-5.781,12.427C84.109,97.274,82.991,97.473,81.859,97.473z M81.859,78.776     c-1.051,0-2.089,0.185-3.085,0.548c-4.662,1.701-7.07,6.878-5.369,11.54c1.291,3.539,4.689,5.917,8.454,5.917     c1.051,0,2.089-0.185,3.085-0.548c2.259-0.824,4.061-2.479,5.074-4.658c1.015-2.18,1.119-4.624,0.295-6.882 C89.021,81.154,85.624,78.776,81.859,78.776z" fill="#000000"/></g></g></g></svg>
+				</button>
+			</div>
+			<div class="col-sm-4">
+				<button class="button" id="loadbutton" onclick="'loadbutton', handleClick('loadbutton', 'loadDiv');" title=Load Scenario>
+					<?xml version="1.0" encoding="iso-8859-1"?><svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"	 viewBox="0 0 486.3 486.3" style="enable-background:new 0 0 486.3 486.3;" xml:space="preserve"><g><path d="M395.5,135.8c-5.2-30.9-20.5-59.1-43.9-80.5c-26-23.8-59.8-36.9-95-36.9c-27.2,0-53.7,7.8-76.4,22.5			c-18.9,12.2-34.6,28.7-45.7,48.1c-4.8-0.9-9.8-1.4-14.8-1.4c-42.5,0-77.1,34.6-77.1,77.1c0,5.5,0.6,10.8,1.6,16			C16.7,200.7,0,232.9,0,267.2c0,27.7,10.3,54.6,29.1,75.9c19.3,21.8,44.8,34.7,72,36.2c0.3,0,0.5,0,0.8,0h86			c7.5,0,13.5-6,13.5-13.5s-6-13.5-13.5-13.5h-85.6C61.4,349.8,27,310.9,27,267.1c0-28.3,15.2-54.7,39.7-69			c5.7-3.3,8.1-10.2,5.9-16.4c-2-5.4-3-11.1-3-17.2c0-27.6,22.5-50.1,50.1-50.1c5.9,0,11.7,1,17.1,3c6.6,2.4,13.9-0.6,16.9-6.9			c18.7-39.7,59.1-65.3,103-65.3c59,0,107.7,44.2,113.3,102.8c0.6,6.1,5.2,11,11.2,12c44.5,7.6,78.1,48.7,78.1,95.6			c0,49.7-39.1,92.9-87.3,96.6h-73.7c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5h74.2c0.3,0,0.6,0,1,0c30.5-2.2,59-16.2,80.2-39.6			c21.1-23.2,32.6-53,32.6-84C486.2,199.5,447.9,149.6,395.5,135.8z"  fill="#555555"/>		<path d="M324.2,280c5.3-5.3,5.3-13.8,0-19.1l-71.5-71.5c-2.5-2.5-6-4-9.5-4s-7,1.4-9.5,4l-71.5,71.5c-5.3,5.3-5.3,13.8,0,19.1			c2.6,2.6,6.1,4,9.5,4s6.9-1.3,9.5-4l48.5-48.5v222.9c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5V231.5l48.5,48.5			C310.4,285.3,318.9,285.3,324.2,280z"  fill="#555555"/>	</g></svg>
+				</button>
+			</div>
+		</div>
+		
+		<div id="addTruckDiv" style="display:none">
+			<table border="0">
+				<tr>
+					<td>Add Truck</td>
+					<td>Earliest Departure Date</td>
+				</tr>
+				<tr>
+					<td><input type='text' id='truckid' size='25' value='Truck 7'/></td>
+					<td><input type='datetime' id='earliestDepartureDate' size='25'/></td>
+				</tr>
+				<tr>
+					<td>Origin</td>
+					<td>Latest Departure Date</td>
+				</tr>
+				<tr>
+					<td><input type='text' id='origin' size='25' value='Frankfurt'/></td>
+					<td><input type='datetime' id='latestDepartureDate' size='25'/></td>
+				</tr>
+				<tr>
+					<td>Destination</td>
+					<td>Earliest Arrival Date</td>
+				</tr>
+				<tr>
+					<td><input type='text' id='destination' size='25' value='Vienna'/></td>
+					<td><input type='datetime' id='earliestArrivalDate' size='25'/></td>
+				</tr>
+				<tr>
+					<td>Truck Type</td>
+					<td>Latest Arrival Date</td>
+				</tr>
+				<tr>
+					<td>
+						<select id="trucktype">
+							<option value="Isuzu">Isuzu</option>
+							<option value="Mercedes-Benz">Mercedes-Benz</option>
+							<option value="Volvo">Volvo</option>
+						</select>
+					</td>
+					<td><input type='datetime' id='latesttArrivalDate' size='25'/></td>
+				</tr>
+				<tr>
+					<td>
+						<div class="onoffswitch">
+							<input type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="isLoaded" checked>
+							<label class="onoffswitch-label" for="isLoaded">
+								<span class="onoffswitch-inner"></span>
+								<span class="onoffswitch-switch"></span>
+							</label>
+						</div>
+					</td>
+					<td>
+						<div>
+							<button class="small_button" id="ok" onclick="addTruck();" title=ok>
+								<?xml version="1.0" ?><!DOCTYPE svg  PUBLIC '-//W3C//DTD SVG 1.1//EN'  'http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd'><svg enable-background="new 0 0 512 512.068" height="20px" id="Layer_1" version="1.1" viewBox="0 0 512 512.068" width="20px" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="meanicons_x5F_23"><path d="M256.34-0.068C114.936-0.068,0.345,114.628,0.345,255.939c0,141.442,114.591,256.062,255.995,256.062   c141.424,0,256.005-114.619,256.005-256.062C512.346,114.628,397.764-0.068,256.34-0.068z M273.314,355.815l-73.994,74.068   l-74.089-74.068l-85.545-85.631l74.032-74.051l85.602,85.563L398.942,82.122l74.089,74.004L273.314,355.815z" fill="#00FF00"/></g></svg>
+							</button>
+							<button class="small_button" id="ok" onclick="handleClick('plusbutton', 'addTruckDiv');" title=cancel>
+								<?xml version="1.0" ?><svg height="20px" version="1.1" viewBox="0 0 20 20" width="20px" xmlns="http://www.w3.org/2000/svg" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns" xmlns:xlink="http://www.w3.org/1999/xlink"><title/><desc/><defs/><g fill="none" fill-rule="evenodd" id="Page-1" stroke="none" stroke-width="1"><g fill="#000000" id="Core" transform="translate(-380.000000, -44.000000)"><g id="cancel" transform="translate(380.000000, 44.000000)"><path d="M10,0 C4.5,0 0,4.5 0,10 C0,15.5 4.5,20 10,20 C15.5,20 20,15.5 20,10 C20,4.5 15.5,0 10,0 L10,0 Z M15,13.6 L13.6,15 L10,11.4 L6.4,15 L5,13.6 L8.6,10 L5,6.4 L6.4,5 L10,8.6 L13.6,5 L15,6.4 L11.4,10 L15,13.6 L15,13.6 Z" id="Shape" fill="#FF0000"/></g></g></g></svg>
+							</button>
+						</div>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<div id="setupDiv" style="display:none">
+			<table border="0">
+				<tr>
+					<td>Platooning Setup</td>
+				</tr>
+				<tr>
+					<td>Maximum No. of Trucks</td>
+					<td>Minimum Platooning Distance (KM)</td>
+				</tr>
+				<tr>
+					<td><input type='number' id='maxNoOfTrucks' size='25' value='5'/></td>
+					<td><input type='number' id='minimumDistance' size='25' value='300'/></td>
+				</tr>
+				<tr>
+					<td colspan="2">Maximum Speed</td>
+				</tr>
+				<tr>
+					<td><input type='number' id='maxSpeed' size='25' value='80'/></td>
+				</tr>
+				<tr>
+					<td colspan="2">Exclude Roads where Platooning is forbidden  <input type='checkbox' id='excludeRoads' size='25' value='5'/></td>
+				</tr>
+				<tr>
+					<td></td>
+					<td>
+						<div>
+							<button class="small_button" id="ok" onclick="updatePlatooningSettings();" title=ok>
+								<?xml version="1.0" ?><!DOCTYPE svg  PUBLIC '-//W3C//DTD SVG 1.1//EN'  'http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd'><svg enable-background="new 0 0 512 512.068" height="20px" id="Layer_1" version="1.1" viewBox="0 0 512 512.068" width="20px" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="meanicons_x5F_23"><path d="M256.34-0.068C114.936-0.068,0.345,114.628,0.345,255.939c0,141.442,114.591,256.062,255.995,256.062   c141.424,0,256.005-114.619,256.005-256.062C512.346,114.628,397.764-0.068,256.34-0.068z M273.314,355.815l-73.994,74.068   l-74.089-74.068l-85.545-85.631l74.032-74.051l85.602,85.563L398.942,82.122l74.089,74.004L273.314,355.815z" fill="#00FF00"/></g></svg>
+							</button>
+							<button class="small_button" id="ok" onclick="handleClick('settingsbutton', 'setupDiv');" title=ok>
+								<?xml version="1.0" ?><svg height="20px" version="1.1" viewBox="0 0 20 20" width="20px" xmlns="http://www.w3.org/2000/svg" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns" xmlns:xlink="http://www.w3.org/1999/xlink"><title/><desc/><defs/><g fill="none" fill-rule="evenodd" id="Page-1" stroke="none" stroke-width="1"><g fill="#000000" id="Core" transform="translate(-380.000000, -44.000000)"><g id="cancel" transform="translate(380.000000, 44.000000)"><path d="M10,0 C4.5,0 0,4.5 0,10 C0,15.5 4.5,20 10,20 C15.5,20 20,15.5 20,10 C20,4.5 15.5,0 10,0 L10,0 Z M15,13.6 L13.6,15 L10,11.4 L6.4,15 L5,13.6 L8.6,10 L5,6.4 L6.4,5 L10,8.6 L13.6,5 L15,6.4 L11.4,10 L15,13.6 L15,13.6 Z" id="Shape" fill="#FF0000"/></g></g></g></svg>
+							</button>
+						</div>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<div id="loadDiv" style="display:none">
+			<table border="0">
+				<tr>
+					<td>Load Scenario</td>
+				</tr>
+				<tr>
+					<td></td>
+					<td>Pick predefined Scenario</td>
+				</tr>
+				<tr>
+					<td>
+						<input type='file' id='file' size='25' class="inputfile"/>
+						<label for="file">Choose File</label>
+					</td>
+					<td>
+						<select id="predefinedScenario">
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<td></td>
+					<td>
+						<div>
+							<button class="small_button" id="ok" onclick="loadScenario();" title=ok>
+								<?xml version="1.0" ?><!DOCTYPE svg  PUBLIC '-//W3C//DTD SVG 1.1//EN'  'http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd'><svg enable-background="new 0 0 512 512.068" height="20px" id="Layer_1" version="1.1" viewBox="0 0 512 512.068" width="20px" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="meanicons_x5F_23"><path d="M256.34-0.068C114.936-0.068,0.345,114.628,0.345,255.939c0,141.442,114.591,256.062,255.995,256.062   c141.424,0,256.005-114.619,256.005-256.062C512.346,114.628,397.764-0.068,256.34-0.068z M273.314,355.815l-73.994,74.068   l-74.089-74.068l-85.545-85.631l74.032-74.051l85.602,85.563L398.942,82.122l74.089,74.004L273.314,355.815z" fill="#00FF00"/></g></svg>
+							</button>
+							<button class="small_button" id="ok" onclick="handleClick('loadbutton', 'loadDiv');" title=ok>
+								<?xml version="1.0" ?><svg height="20px" version="1.1" viewBox="0 0 20 20" width="20px" xmlns="http://www.w3.org/2000/svg" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns" xmlns:xlink="http://www.w3.org/1999/xlink"><title/><desc/><defs/><g fill="none" fill-rule="evenodd" id="Page-1" stroke="none" stroke-width="1"><g fill="#000000" id="Core" transform="translate(-380.000000, -44.000000)"><g id="cancel" transform="translate(380.000000, 44.000000)"><path d="M10,0 C4.5,0 0,4.5 0,10 C0,15.5 4.5,20 10,20 C15.5,20 20,15.5 20,10 C20,4.5 15.5,0 10,0 L10,0 Z M15,13.6 L13.6,15 L10,11.4 L6.4,15 L5,13.6 L8.6,10 L5,6.4 L6.4,5 L10,8.6 L13.6,5 L15,6.4 L11.4,10 L15,13.6 L15,13.6 Z" id="Shape" fill="#FF0000"/></g></g></g></svg>
+							</button>
+						</div>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<div id="updown" style="position: relative;left: 50%;-webkit-transform: translateX(-6%);-ms-transform: translateX(-6%);transform: translateX(-6%);">
+			<button class="small_button" onclick="handleopenclose();">
+				<div id="updownsvg">
+					<svg width="20" height="20" viewBox="0 0 2048 2048" xmlns="http://www.w3.org/2000/svg"><path d="M1523 992q0 13-10 23l-466 466q-10 10-23 10t-23-10l-466-466q-10-10-10-23t10-23l50-50q10-10 23-10t23 10l393 393 393-393q10-10 23-10t23 10l50 50q10 10 10 23zm0-384q0 13-10 23l-466 466q-10 10-23 10t-23-10l-466-466q-10-10-10-23t10-23l50-50q10-10 23-10t23 10l393 393 393-393q10-10 23-10t23 10l50 50q10 10 10 23z"/></svg>
+				</div>
+			</button>
+		</div>
+		<div id="trucklist" style="display:none">
+		</div>
+	</div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+
+	/*
+		(C) HERE 2017
+		Author dschuette
+	*/
+	
+	var PLATOON_REGISTER_URL = "http://platoon.eu-west-1.elasticbeanstalk.com/truck/register",
+		PLATOON_MATCH_URL = "http://platoon.eu-west-1.elasticbeanstalk.com/platoon/matchTrucks?",
+		PLATOON_SETUP_URL = "http://platoon.eu-west-1.elasticbeanstalk.com/platoontypes/setup1";
+	
+	Date.prototype.addHours= function(h){
+		this.setHours(this.getHours()+h);
+		return this;
+	}
+	
+	Date.prototype.addDays= function(d){
+		this.setHours(this.getHours()+ (24 * d));
+		return this;
+	}
+	
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	var mapContainer = document.getElementById('mapContainer'),
+		platform = new H.service.Platform({app_code: app_code, app_id: app_id, useHTTPS: secure}),
+		maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null /*, "GER" */),
+		map = new H.Map(mapContainer, maptypes.normal.map, 
+			{ 
+				center: new H.geo.Point(45.46796,9.18178), 
+				zoom: 7
+			}
+		),
+		truckGroup = new H.map.Group(),
+		closeSVG = "<svg width='20' height='20' viewBox='0 0 2048 2048' xmlns='http://www.w3.org/2000/svg'><path d='M1523 1440q0 13-10 23l-50 50q-10 10-23 10t-23-10l-393-393-393 393q-10 10-23 10t-23-10l-50-50q-10-10-10-23t10-23l466-466q10-10 23-10t23 10l466 466q10 10 10 23zm0-384q0 13-10 23l-50 50q-10 10-23 10t-23-10l-393-393-393 393q-10 10-23 10t-23-10l-50-50q-10-10-10-23t10-23l466-466q10-10 23-10t23 10l466 466q10 10 10 23z'/></svg>",
+		openSVG = "<svg width='20' height='20' viewBox='0 0 2048 2048' xmlns='http://www.w3.org/2000/svg'><path d='M1523 992q0 13-10 23l-466 466q-10 10-23 10t-23-10l-466-466q-10-10-10-23t10-23l50-50q10-10 23-10t23 10l393 393 393-393q10-10 23-10t23 10l50 50q10 10 10 23zm0-384q0 13-10 23l-466 466q-10 10-23 10t-23-10l-466-466q-10-10-10-23t10-23l50-50q10-10 23-10t23 10l393 393 393-393q10-10 23-10t23 10l50 50q10 10 10 23z'/></svg>";
+		
+		truckIconSVG = "<svg width='640' height='480' xmlns='http://www.w3.org/2000/svg' xmlns:svg='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink'><defs><symbol id='svg_1' width='1792' viewBox='0 0 1792 1792' height='1792' xmlns='http://www.w3.org/2000/svg'><path d='m640,1408q0,-52 -38,-90t-90,-38t-90,38t-38,90t38,90t90,38t90,-38t38,-90zm-384,-512l384,0l0,-256l-158,0q-13,0 -22,9l-195,195q-9,9 -9,22l0,30zm1280,512q0,-52 -38,-90t-90,-38t-90,38t-38,90t38,90t90,38t90,-38t38,-90zm256,-1088l0,1024q0,15 -4,26.5t-13.5,18.5t-16.5,11.5t-23.5,6t-22.5,2t-25.5,0t-22.5,-0.5q0,106 -75,181t-181,75t-181,-75t-75,-181l-384,0q0,106 -75,181t-181,75t-181,-75t-75,-181l-64,0q-3,0 -22.5,0.5t-25.5,0t-22.5,-2t-23.5,-6t-16.5,-11.5t-13.5,-18.5t-4,-26.5q0,-26 19,-45t45,-19l0,-320q0,-8 -0.5,-35t0,-38t2.5,-34.5t6.5,-37t14,-30.5t22.5,-30l198,-198q19,-19 50.5,-32t58.5,-13l160,0l0,-192q0,-26 19,-45t45,-19l1024,0q26,0 45,19t19,45z'/></symbol></defs><g><title>Layer 1</title><use x='0' y='0' transform='matrix(0.0892857164144516,0,0,0.0892857164144516,0,0) ' xlink:href='#svg_1' id='svg_2'/><g id='svg_3'/><text stroke='#000000' transform='matrix(1.2877697944641113,0,0,0.6034075950191813,-7.099820397794247,11.675882156797266) ' xml:space='preserve' text-anchor='middle' font-family='serif' font-size='18' id='svg_4' y='16' x='33' stroke-width='0' fill='#ffffff'>__NO__</text></g></svg>",
+		
+		iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="36px">' +
+			  '<path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 28 13 28 C 16.3 28 19' +
+			  ' 29.3 19 31 Z" fill="#000" fill-opacity=".2"/>' +
+			  '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 19.5 3.8 21.9 L 13 31 L 22.2' +
+			  ' 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="#fff"/>' +
+			  '<path d="M 13 2.2 C 6 2.2 2.3 7.2 2.1 12.8 C 2.1 16.1 3.1 18.4 5.2 20.5 L 13 28.2 L 20.8 20.5 C' +
+			  ' 22.9 18.4 23.8 16.2 23.8 12.8 C 23.6 7.07 20 2.2 13 2.2 Z" fill="rgb(72, 218, 208)"/>' +
+			  '<text font-size="12" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" x="10" y="19">__NO__</text>' +
+			  '</svg>',
+		originP = null,
+		destinationP = null,
+		geocoder = platform.getGeocodingService(),
+		trucksArray = new Array();
+
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());	// Do not draw under control panel
+	
+	// add behavior control
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+	
+	var lastButton = null;
+	
+	var ui = H.ui.UI.createDefault(map, maptypes);	// add UI
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	// set the times to now and now + 3hrs for departure, and tomorrow and tomorrow + 3hrs. 
+	document.getElementById('earliestDepartureDate').value = new Date().toString("yyyy-MM-ddThh:mm");
+	document.getElementById('latestDepartureDate').value = new Date().addHours(3).toString("yyyy-MM-ddThh:mm");
+	document.getElementById('earliestArrivalDate').value = new Date().addDays(1).toString("yyyy-MM-ddThh:mm");
+	document.getElementById('latesttArrivalDate').value = new Date().addDays(1).addHours(3).toString("yyyy-MM-ddThh:mm");
+
+	// ui interaction
+	function handleClick(button, div)
+	{
+		// reset the current selection
+		button = document.getElementById(button);
+		
+		document.getElementById('addTruckDiv').style.display = "none";
+		document.getElementById('setupDiv').style.display = "none";
+		document.getElementById('loadDiv').style.display = "none";
+		
+		document.getElementById('plusbutton').style.borderStyle = "outset";
+		document.getElementById('settingsbutton').style.borderStyle = "outset";
+		document.getElementById('loadbutton').style.borderStyle = "outset";
+
+		if(lastButton == button)
+		{
+			button.style.borderStyle = 'outset';
+			lastButton = null;
+		}
+		else
+		{
+			button.style.borderStyle = 'inset';
+			document.getElementById(div).style.display = "block";
+			lastButton = button;
+		}
+	}
+	
+	function handleopenclose()
+	{
+		var trucklist = document.getElementById("trucklist"),
+			updownsvg = document.getElementById("updownsvg");
+		if(trucklist.style.display == 'block')
+		{
+			trucklist.style.display = 'none';
+			updownsvg.innerHTML = openSVG;
+		}
+		else
+		{
+			trucklist.style.display = 'block';
+			updownsvg.innerHTML = closeSVG;
+		}
+	}
+	
+	function createTruckIcon(no)
+	{
+		var markerIcon = truckIconSVG;
+		markerIcon = markerIcon.replace(/__NO__/g, no);
+		
+		return new H.map.Icon(markerIcon, {
+			anchor: new H.math.Point(16, 16)
+		});
+
+	}
+	
+	document.getElementById('file').addEventListener('change', loadScenarioFromFile, false);
+	
+	function addTruck()
+	{
+		geocode(document.getElementById("origin").value);
+		geocode(destination = document.getElementById("destination").value);
+	}
+	
+	function geocode(searchText)
+	{
+		geocoder.geocode(
+			{
+				searchText: searchText
+			},
+			function(result) 
+			{
+				var pos = result.Response.View[0].Result[0].Location.DisplayPosition,
+					point = new H.geo.Point(pos.Latitude, pos.Longitude);
+				if(originP == null)
+					originP = point;
+				else
+					destinationP = point;
+				if(originP && destinationP)
+				{
+					var truckid = document.getElementById("truckid").value,
+						truckType = document.getElementById("trucktype").value,
+						earliestDepartureDate = document.getElementById("earliestDepartureDate").value,
+						latestDepartureDate = document.getElementById("latestDepartureDate").value,
+						earliestArrivalDate = document.getElementById("earliestArrivalDate").value,
+						latesttArrivalDate = document.getElementById("latesttArrivalDate").value,
+						isLoaded = document.getElementById("isLoaded").checked;
+					
+					registerTruck(truckid, truckType, isLoaded, originP, destinationP, earliestDepartureDate, latestDepartureDate, earliestArrivalDate, latesttArrivalDate);
+					truckGroup.addObject(new H.map.Marker(originP, {icon : createTruckIcon(truckid)}));
+
+					var trucklist = document.getElementById("trucklist"), 
+						html = "",
+						i = 0;					
+					for(; i < trucksArray.length; i++)
+					{
+						html += trucksArray[i];
+					}
+					trucksArray.push("<input type='checkbox' name='truckselection' value='"+ truckid +"' checked/><b>" + truckid + "</b> (" + document.getElementById("origin").value + " -> " + document.getElementById("destination").value + ")<br />");
+					html += "<input type='checkbox' name='truckselection' value='"+ truckid +"' checked/><b>" + truckid + "</b> (" + document.getElementById("origin").value + " -> " + document.getElementById("destination").value + ")<br />";					
+					html += "<button type='button' onclick='selectAllTrucks()' id='selection'>Unselect All</button></br>";
+					html += "<button type='button' onclick='platoonSelectedTrucks()'>Platoon selected Vehicles</button>";
+			
+					trucklist.innerHTML = html;
+					
+					map.addObject(truckGroup);
+					originP = null;
+					destinationP = null;
+				}
+			},
+			function(error) {
+				alert(error);
+			}
+		);
+	}
+	
+	function registerTruck(truckid, truckType, isLoaded, origin, destination, earliestDepartureDate, latestDepartureDate, earliestArrivalDate, latesttArrivalDate)
+	{
+		var data = JSON.stringify(
+		{
+			"truckId" : truckid,
+			"truckType" : truckType,
+			"isLoaded" : isLoaded,
+			"routingProperties" : 
+			{
+				"origin" : origin.lat + "," + origin.lng,
+				"destination" : destination.lat + "," + destination.lng,
+				"earliestDepartureDate" : earliestDepartureDate,
+				"latestDepartureDate" : latestDepartureDate,
+				"earliestArrivalDate" : earliestArrivalDate,
+				"latestArrivalDate" : latesttArrivalDate
+			}
+		});
+		
+		var xhr = new XMLHttpRequest();
+
+		xhr.addEventListener("readystatechange", function () 
+		{
+			if (this.readyState === 4) 
+			{
+				var response = eval("(" + this.responseText + ')');
+				if(response.route && response.route.leg && response.route.leg[0] && response.route.leg[0].link)
+				{
+					var linkarray = response.route.leg[0].link, 
+						i = 0;
+						
+					for(; i < linkarray.length; i++)
+					{
+						var shape = linkarray[i].shape,
+							j = 0, 
+							strip = new H.geo.Strip();
+							
+						for(; j < shape.length; j += 2)
+						{
+							strip.pushLatLngAlt(shape[j], shape[j+1], 0);
+						}
+						var polyline = new H.map.Polyline(strip,
+							{
+								style:
+								{
+									lineWidth: 2,
+									strokeColor: "rgb(0, 0, 0)",
+									fillColor: "rgb(72, 218, 208)",
+									width: 2,
+									length:3,
+									frequency: 4
+								}
+							}
+						);
+						truckGroup.addObject(polyline);
+					}
+					if(response.truckProperties && response.truckProperties.routingProperties && response.truckProperties.routingProperties.destination)
+					{
+						var coord = new H.geo.Point(response.truckProperties.routingProperties.destination.split(",")[0], response.truckProperties.routingProperties.destination.split(",")[1]),
+						destinationIcon = new H.map.Icon(iconSvg.replace(/__NO__/g, response.truckProperties.truckId)),
+						marker = new H.map.Marker(coord, {icon: destinationIcon});
+						truckGroup.addObject(marker);
+					}
+					map.setViewBounds(truckGroup.getBounds());
+				}
+			}
+		});
+
+		xhr.open("POST", PLATOON_REGISTER_URL);
+		xhr.setRequestHeader("content-type", "application/json");
+
+		xhr.send(data);
+	}
+
+	var trucks = [
+		{
+			truckid : 1,
+			truckname : "Truck 1",
+			truckType: "Isuzu",
+			isLoaded: false,
+			origin : "Bayreuth",
+			originCoordinate: new H.geo.Point(49.9563846, 11.6067755),
+			destination : "Ljubljana",
+			destinationCoordinate: new H.geo.Point(46.05063, 14.50283),
+			icon : createTruckIcon(1),
+			position : new H.geo.Point(49.94544,11.57128)
+		},
+		{
+			truckid : 2, 
+			truckname : "Truck 2",
+			truckType: "Isuzu",
+			isLoaded: true,
+			origin : "Augsburg",
+			originCoordinate: new H.geo.Point(48.4144954, 10.8736093),
+			destination : "Bremen",
+			destinationCoordinate: new H.geo.Point(53.0751, 8.80469),
+			icon : createTruckIcon(2),
+			position : new H.geo.Point(48.37035,10.89789)
+		},
+		{
+			truckid : 3, 
+			truckname : "Truck 3",
+			truckType: "Isuzu",
+			isLoaded: false,
+			origin : "Munich",
+			originCoordinate: new H.geo.Point(48.246444, 11.6421124),
+			destination : "Budapest",
+			destinationCoordinate: new H.geo.Point(47.49973, 19.05508),
+			icon : createTruckIcon(3),
+			position : new H.geo.Point(48.13642,11.57755)
+		},
+		{
+			truckid: 4, 
+			truckname : "Truck 4",
+			truckType: "Mercedes-Benz",
+			isLoaded: false,
+			origin : "Bourges",
+			originCoordinate: new H.geo.Point(47.0491583, 2.3413585),
+			destination : "Bucharest",
+			destinationCoordinate: new H.geo.Point(44.4343, 26.10298),
+			icon : createTruckIcon(4),
+			position : new H.geo.Point(47.086,2.39315)
+		},
+		{
+			truckid : 5,
+			truckname : "Truck 5",
+			truckType: "Mercedes-Benz",
+			isLoaded: true,
+			origin : "Bischofshofen",
+			originCoordinate: new H.geo.Point(47.41662,13.21958),
+			destination : "Rotterdam",
+			destinationCoordinate: new H.geo.Point(51.92283, 4.47848),
+			icon : createTruckIcon(5),
+			position : new H.geo.Point(47.41662,13.21958)
+		},
+		{
+			truckid: 6,
+			truckname : "Truck 6",
+			truckType: "Mercedes-Benz",
+			isLoaded: false,
+			origin : "Milano",
+			originCoordinate: new H.geo.Point(45.3973295, 9.135791),
+			destination : "Prague",
+			destinationCoordinate: new H.geo.Point(50.07913, 14.43303),
+			icon : createTruckIcon(6),
+			position : new H.geo.Point(45.46796,9.18178)
+		},
+		{
+			truckid: 7,
+			truckname : "Truck 7",
+			truckType: "Mercedes-Benz",
+			isLoaded: true,
+			origin : "Paris",
+			originCoordinate: new H.geo.Point(48.85721, 2.34144),
+			destination : "Munich",
+			destinationCoordinate: new H.geo.Point(48.13642, 11.57755),
+			icon : createTruckIcon(7),
+			position : new H.geo.Point(48.85721, 2.34144)
+		},
+		{
+			truckid: 8,
+			truckname : "Truck 8",
+			truckType: "Volvo",
+			isLoaded: false,
+			origin : "Berlin",
+			originCoordinate: new H.geo.Point(52.51605, 13.37691),
+			destination : "Munich",
+			destinationCoordinate: new H.geo.Point(41.90323, 12.49566),
+			icon : createTruckIcon(8),
+			position : new H.geo.Point(52.51605, 13.37691)
+		},
+		{
+			truckid: 9,
+			truckname : "Truck 9",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "Amsterdam",
+			originCoordinate: new H.geo.Point(52.37314, 4.89333),
+			destination : "Salzburg",
+			destinationCoordinate: new H.geo.Point(47.80066, 13.04337),
+			icon : createTruckIcon(9),
+			position : new H.geo.Point(52.37314, 4.89333)
+		},
+		{
+			truckid: 10,
+			truckname : "Truck 10",
+			truckType: "Volvo",
+			isLoaded: false,
+			origin : "Hamburg",
+			originCoordinate: new H.geo.Point(53.55375, 9.99183),
+			destination : "Stuttgart",
+			destinationCoordinate: new H.geo.Point(48.76777, 9.17199),
+			icon : createTruckIcon(10),
+			position : new H.geo.Point(53.55375, 9.99183)
+		}, 
+		{
+			truckid: "T1",
+			truckname : "T1",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "Hamburg",
+			originCoordinate: new H.geo.Point(53.549,10.0021),
+			destination : "München",
+			destinationCoordinate: new H.geo.Point(48.22684,11.63221),
+			icon : createTruckIcon("T1"),
+			position : new H.geo.Point(53.549,10.0021)
+		}, 
+		{
+			truckid: "T2",
+			truckname : "T2",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "Bielefeld",
+			originCoordinate: new H.geo.Point(51.94201,8.54088),
+			destination : "Nürnberg",
+			destinationCoordinate: new H.geo.Point(49.49973,11.13392),
+			icon : createTruckIcon("T2"),
+			position : new H.geo.Point(51.94201,8.54088)
+		},
+		{
+			truckid: "T3",
+			truckname : "T3",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "Schweinfurt",
+			originCoordinate: new H.geo.Point(50.001627,10.078376),
+			destination : "Nürnberg",
+			destinationCoordinate: new H.geo.Point(47.815507,12.365150),
+			icon : createTruckIcon("T3"),
+			position : new H.geo.Point(50.001627,10.078376)
+		},
+		{
+			truckid: "TA_1",
+			truckname : "A1",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "RAUBLING_A8",
+			originCoordinate: new H.geo.Point(47.814511,12.064681),
+			destination : "Aschau",
+			destinationCoordinate: new H.geo.Point(47.780383,12.324575),
+			icon : createTruckIcon("A1"),
+			position : new H.geo.Point(47.814511,12.064681)
+		},
+		{
+			truckid: "TB_1",
+			truckname : "B1",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "RAUBLING_B93",
+			originCoordinate: new H.geo.Point(47.801106,12.090507),
+			destination : "BERNAU_B8",
+			destinationCoordinate: new H.geo.Point(47.815584,12.365457),
+			icon : createTruckIcon("B1"),
+			position : new H.geo.Point(47.801106,12.090507)
+		},
+		{
+			truckid: "TPL_1",
+			truckname : "P1",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "ROSENHEIM_PLATOON_1",
+			originCoordinate: new H.geo.Point(47.846745,12.125545),
+			destination : "BERNAU_B8",
+			destinationCoordinate: new H.geo.Point(47.815584,12.365457),
+			icon : createTruckIcon("P1"),
+			position : new H.geo.Point(47.846745,12.125545)
+		},
+		{
+			truckid: "TPL_2",
+			truckname : "P2",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "ROSENHEIM_PLATOON_2",
+			originCoordinate: new H.geo.Point(47.847130,12.125851),
+			destination : "BERNAU_B8",
+			destinationCoordinate: new H.geo.Point(47.815584,12.365457),
+			icon : createTruckIcon("P2"),
+			position : new H.geo.Point(47.847130,12.125851)
+		},
+		{
+			truckid: "TPL_3",
+			truckname : "P3",
+			truckType: "Volvo",
+			isLoaded: true,
+			origin : "ROSENHEIM_PLATOON_3",
+			originCoordinate: new H.geo.Point(47.847516,12.126164),
+			destination : "Aschau",
+			destinationCoordinate: new H.geo.Point(47.780383,12.324575),
+			icon : createTruckIcon("P3"),
+			position : new H.geo.Point(47.847516,12.126164)
+		}
+	];
+	
+	function getTrucks(no)
+	{
+		var ret = new Array();
+		for(var i = 0; i < no; i++)
+		{
+			ret.push(trucks[i]);
+		}
+		return ret; 
+	}
+	
+	function getTrucksByIndex(idxs)
+	{
+		var ret = new Array();
+		for(var i = 0; i < idxs.length; i++)
+		{
+			if(trucks[idxs[i]])
+			{
+				ret.push(trucks[idxs[i]]);
+			}
+		}
+		return ret;
+	}
+	
+	var scenarios = 
+	{
+		scenario1: { name: "Scenario 1 (3 Trucks)", trucks: getTrucksByIndex([10, 11, 12])},
+		scenario2: { name: "Scenario 2 (5 Trucks)", trucks: getTrucksByIndex([13, 14, 15, 16, 17])},
+		scenario3: { name: "Scenario 3 (2 Trucks)", trucks: getTrucksByIndex([2, 3])},
+		scenario4: { name: "Scenario 4 (6 Trucks)", trucks: getTrucks(6)},
+		scenario5: { name: "Scenario 5 (10 Trucks)", trucks: getTrucks(10)}
+	}
+
+	function selectAllTrucks()
+	{
+		var toogle = document.getElementById("selection"),
+			truckCheckboxes = document.getElementsByName("truckselection");
+		
+		if(toogle.innerHTML == "Select All")
+		{
+			for(var i in truckCheckboxes)
+				truckCheckboxes[i].checked = 'true';
+			toogle.innerHTML = "Unselect All";
+		}
+		else
+		{
+			for(var i in truckCheckboxes)
+				truckCheckboxes[i].checked = '';
+			toogle.innerHTML = "Select All";
+		}
+	}
+	
+	function platoonSelectedTrucks()
+	{
+		var truckCheckboxes = document.getElementsByName("truckselection"),
+			list = "";
+			
+		for(var i = 0; i < truckCheckboxes.length; i++)
+		{
+			if(truckCheckboxes[i].checked)
+				list += "truckId=" + truckCheckboxes[i].value + "&";
+		}
+		list = list.substring(0, list.length -1);
+		var url = PLATOON_MATCH_URL + list,
+			data = null,
+			xhr = new XMLHttpRequest();
+		
+		xhr.addEventListener("readystatechange", function () 
+		{
+			if (this.readyState === 4) {
+				var response = eval("(" + this.responseText + ')'),
+					i = 0;
+					
+				for(; i < response.length; i++)
+				{
+					var curTruck = response[i],
+						joiningPoints, 
+						breakupPoints, 
+						distanceInPlatoon,
+						traveltime, 
+						inPlatoon = false,
+						j = 0;
+					if(curTruck && curTruck.truckId && curTruck.platooningRouteInfo && curTruck.normalRouteInfo && curTruck.normalRouteInfo.leg)
+					{
+						joiningPoints = curTruck.platooningRouteInfo.joiningPoints;
+						breakupPoints = curTruck.platooningRouteInfo.breakupPoints;
+						distanceInPlatoon = curTruck.platooningRouteInfo.distanceInPlatoon;
+						traveltime = curTruck.platooningRouteInfo.travelTime;
+						
+						for(; j < curTruck.normalRouteInfo.leg.length; j++)
+						{
+							var curLeg = curTruck.normalRouteInfo.leg[j],
+								k = 0;
+							if(curLeg.link)
+							{
+								for(; k < curLeg.link.length; k++)
+								{
+									var shape = curLeg.link[k].shape,
+									l = 0, 
+									strip = new H.geo.Strip();
+							
+									for(; l < shape.length; l += 2)
+									{
+										if(inPlatoon)
+										{
+											// check if the current coordinate is part of breakup points
+											var n = 0;
+											for(; n < breakupPoints.length; n++)
+											{
+												var curLat = breakupPoints[n].position.lat,
+													curLng = breakupPoints[n].position.lon;
+													
+												if(shape[l] == curLat && shape[l+1] == curLng)
+												{
+													inPlatoon = false;
+												}
+											}
+										}
+										else
+										{
+											// check if the current coordinate is part of joining points
+											var n = 0;
+											for(; n < joiningPoints.length; n++)
+											{
+												var curLat = joiningPoints[n].position.lat,
+													curLng = joiningPoints[n].position.lon;
+													
+												if(shape[l] == curLat && shape[l+1] == curLng)
+												{
+													inPlatoon = true;
+												}
+											}
+										}
+										strip.pushLatLngAlt(shape[l], shape[l+1], 0);
+									}
+									
+									var polyline = new H.map.Polyline(strip,
+											{
+												style:
+												{
+													lineWidth: 2,
+													strokeColor: inPlatoon ? "rgb(255, 0, 0)" : "rgb(0, 0, 0)",
+													fillColor: "rgb(72, 218, 208)",
+													width: 2,
+													length:3,
+													frequency: 4
+												}
+											}
+										);
+									truckGroup.addObject(polyline);
+								}
+							}
+						}
+					}
+				}
+			}
+		});
+
+		xhr.open("GET", url);
+		xhr.setRequestHeader("cache-control", "no-cache");
+		
+		xhr.send(data);
+	}
+	
+	function init()
+	{
+		var availableScenarios = document.getElementById("predefinedScenario");
+		
+		for(var i in scenarios)
+		{
+			var opt = document.createElement('option');
+			opt.value = i;
+			opt.innerHTML = scenarios[i].name;
+			availableScenarios.appendChild(opt);
+		}
+	}
+	
+	function updatePlatooningSettings()
+	{
+		var maxNoOfTrucks = document.getElementById("maxNoOfTrucks").value,
+			minimumDistance = document.getElementById("minimumDistance").value,
+			maxSpeed = document.getElementById("maxSpeed").value,
+			excludeRoads = document.getElementById("excludeRoads").value;
+			
+		var data = JSON.stringify({
+			"maxTrucks": maxNoOfTrucks,
+			"maxSpeed": maxSpeed,
+			"minDistance": minimumDistance,
+			"roadPlatooningRestrictionsEnabled": excludeRoads
+		});
+
+		var xhr = new XMLHttpRequest();
+
+		xhr.addEventListener("readystatechange", function () {
+			if (this.readyState === 4)
+			{
+				document.getElementById("maxNoOfTrucks").style.background = "aqua";
+				document.getElementById("minimumDistance").style.background = "aqua";
+				document.getElementById("maxSpeed").style.background = "aqua";
+				setTimeout(function(){
+					document.getElementById("maxNoOfTrucks").style.background = "white";
+					document.getElementById("minimumDistance").style.background = "white";
+					document.getElementById("maxSpeed").style.background = "white";
+				},1500);
+			}
+			else
+			{
+				document.getElementById("maxNoOfTrucks").style.background = "red";
+				document.getElementById("minimumDistance").style.background = "red";
+				document.getElementById("maxSpeed").style.background = "red";
+				setTimeout(function(){
+					document.getElementById("maxNoOfTrucks").style.background = "white";
+					document.getElementById("minimumDistance").style.background = "white";
+					document.getElementById("maxSpeed").style.background = "white";
+				},1500);
+			}
+		});
+
+		xhr.open("PUT", PLATOON_SETUP_URL);
+		xhr.setRequestHeader("content-type", "application/json");
+		xhr.setRequestHeader("cache-control", "no-cache");
+	}
+	
+	function loadScenarioFromFile(ev)
+	{
+		alert("not implemented");
+	}
+	
+	function randomIntFromInterval(min,max)
+	{
+		return Math.floor(Math.random()*(max-min+1)+min);
+	}
+	
+	function loadScenario()
+	{
+		// clear previous stuff
+		truckGroup.removeAll();
+		
+		var key = document.getElementById("predefinedScenario").value,
+			i = 0,
+			trucklist = document.getElementById("trucklist"),
+			html = "",
+			scenario = scenarios[key];
+		
+		for(var i = 0; i < scenario.trucks.length; i++)
+		{
+			var truck = scenario.trucks[i];
+
+			truckGroup.addObject(new H.map.Marker(truck.position, {icon : truck.icon}));
+			html += "<input type='checkbox' name='truckselection' value='"+ truck.truckid +"' checked/><b>" + truck.truckname + "</b> (" + truck.origin + " -> " + truck.destination + ")<br />";
+
+			trucksArray.push("<input type='checkbox' name='truckselection' value='"+ truck.truckid +"' checked/><b>" + truck.truckname + "</b> (" + truck.origin + " -> " + truck.destination + ")<br />");
+			
+			// add random times for the truck: 
+			truck.earliestDepartureDate  = new Date().toString("yyyy-MM-ddThh:mm");
+			truck.latestDepartureDate = new Date().addHours(randomIntFromInterval(0,23)).toString("yyyy-MM-ddThh:mm");
+			truck.earliestArrivalDate = new Date().addDays(randomIntFromInterval(0,5)).toString("yyyy-MM-ddThh:mm");
+			truck.latesttArrivalDate = new Date().addDays(randomIntFromInterval(0,5)).addHours(randomIntFromInterval(0,23)).toString("yyyy-MM-ddThh:mm");
+
+			registerTruck(truck.truckid, truck.truckType, truck.isLoaded, truck.originCoordinate, truck.destinationCoordinate, truck.earliestDepartureDate, truck.latestDepartureDate, truck.earliestArrivalDate, truck.latesttArrivalDate);
+		}
+		map.addObject(truckGroup);
+		
+		html += "<button type='button' onclick='selectAllTrucks()' id='selection'>Unselect All</button></br>";
+		html += "<button type='button' onclick='platoonSelectedTrucks()'>Platoon selected Vehicles</button>";
+		
+		trucklist.innerHTML = html;
+	}
+	init();
+</script>

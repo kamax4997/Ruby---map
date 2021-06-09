@@ -1,0 +1,81 @@
+<% content_for :title, "HERE Street Level Imagery (SLI) Coverage Map" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+	<tr>
+		<td>HLP Service releases which are used in this demo:</td>
+		<td>
+			<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+		</td>
+	</tr>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author boris.guenebaut@here.com
+	(C) HERE 2016
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+	// Override center and zoom.
+  center = {lat: 47.609722, lng: -122.333056};
+  zoom = 12;
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// Create and set flame map style.
+  map.setBaseLayer(getSLICoverageTileLayer());
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+  // Add API Release information.
+  releaseInfoTxt.innerHTML += "JS API: 3." + H.buildInfo().version;
+  loadMRSVersionTxt();
+
+	/**
+	 * Creates the SLI coverage tile layer.
+	 */
+	function getSLICoverageTileLayer() {
+	  var maptiler = platform.getMapTileService({'type': 'pano'});
+	  var layer = maptiler.createTileLayer(
+	    'rctile',
+	    'normal.day',
+	    256,
+	    'png8',
+	    {'style': 'flame'}
+	  );
+	  return layer;
+    }
+</script>

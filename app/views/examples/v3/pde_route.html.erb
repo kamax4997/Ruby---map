@@ -1,0 +1,1259 @@
+<% content_for :title, "Road types along a Route" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p id="mapReleaseTxt">Make a long press to add start point.
+	After route calculation, additional info is retrieved from PDE Web Service and displayed.</p>
+	<table border="0">
+		<tr >
+			<td  style="display:none">Start</td>
+			<td style="display:none">
+				<input class='form-control'  type='text' id='start' size='50' value=''>
+			</td>
+			
+		</tr>
+		<tr>
+			<td>
+				Minimum Distance 
+				</td>
+				<td>
+					<input class='form-control'  type='text' id='minDistance'style="width:auto !important" value='10'>
+				</td>
+		</tr>
+		<tr>
+			<td style="display:none">
+					<input type="text" name="onoffswitch" id="altitudeButton" style="hidden"></td>
+				<td ><input type="checkbox" name="onoffswitch" id="type" style="hidden"> Show Road types</td>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<input class="btn btn-default btn-sm" type="submit" id="routeButton" value="Calculate Route">
+				<input  style="display:none" class="btn btn-default btn-sm" type="submit" id="loadDetails" value="Load Road Details"></td>
+		</tr>
+		
+		
+	</table>
+	<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+	<div id="colors" style="margin: 5px 0">
+		<table border="0">
+			<tr>
+				<td><span class="colorbox" style="margin-left: 5px; background: rgba(240, 128, 255, 0.7)"></span>Fc 1</td>
+				<td><span class="colorbox" style="margin-left: 5px; background: rgba(255, 60, 70, 0.7)"></span>Fc 2</td>
+				<td><span class="colorbox" style="margin-left: 5px; background: rgba(130, 130, 68, 0.7)"></span>Fc 3</td>
+			</tr>
+		</table>
+		
+	</div>
+	
+	
+</div>
+
+<div id="mapContainer"></div>
+
+<div id="pageblock"></div>
+<div id="spinner"></div>
+
+<script>
+	/*
+	(C) HERE 2016
+	*/
+
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	var mapContainer = document.getElementById('mapContainer'),
+
+	platform = new H.service.Platform({
+		app_code: app_code,
+		app_id: app_id,
+		useHTTPS: true,
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	geocoder = platform.getGeocodingService(),
+	router = platform.getEnterpriseRoutingService(),
+	// group for markers 
+	groupMarkers = new H.map.Group(),
+	// group for road type polylines
+	groupFc = new H.map.Group(),
+	// group for pde tile boundaries
+	groupContainer = new H.map.Group(),
+	zoom = 15;
+	map = new H.Map(mapContainer, maptypes.normal.map,
+	{
+		center:  new H.geo.Point(50.9454,4.5692),
+		zoom: zoom
+	}
+	);
+	
+	var minHeight = Number.MAX_VALUE,
+	maxHeight = Number.MIN_VALUE,
+	iconMap = {};
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+	map.addObject(groupMarkers);
+	map.addObject(groupContainer);
+	
+
+	// add behavior control
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+	// add UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	
+	
+	// add long click in map event listener
+	map.addEventListener('longpress', handleLongClickInMap);	
+
+	
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var	routeButton   = document.getElementById("routeButton");
+	var	start         = document.getElementById("start");
+	var	mapReleaseTxt = document.getElementById("mapReleaseTxt");
+	var	altitudeButton   = document.getElementById("altitudeButton");
+
+	var pointA;
+	var pointB;
+	
+	var pdeManager;
+	var routeLinkHashMap; // key = linkID, value = link object
+	var bLongClickUseForStartPoint = true,startMarker =  null, destMarker = null;
+		
+	var links, waypoints=[], points=0;
+	
+	
+	var markerContainer = new H.map.Group(), // for the height points
+	pointContainer = new H.map.Group(); // for the tile rectangles
+	var DATA_POINTS = [],heatmapLayer;
+	
+	var linkFcMap=[];// key = linkID, value = link object (LINK_FC layer)
+	var wayPtsToChk=[]; // array to store way points from PDE layers
+	var finalWayPoints=[]; // array to store final way points to be considered for routing
+	var finalPtsAdded=0; // counter for final points
+	var attDetailsMap=[]; // key = linkID, value = link object (LINK_ATTRIBUTE layer)
+	
+	var startPoint;
+	var avoidLink=[]; // array for avoid Links
+	var avoidLinksAdded=0;// counter for avoid links added
+	
+	var currentFC=3; // Start with 3 > 2 > 1
+	var pointAdded=0;
+	
+	var pointChecked=2,distance=0;
+	var minDistance=parseInt(document.getElementById("minDistance").value);
+	var wayPtOptimze=[];
+	
+	/*layer names for PDE manager*/
+	var layerValues=[
+		{layerName : "LINK_FC1", level : 9},
+		{layerName : "LINK_FC2", level : 10},
+		{layerName : "LINK_FC3", level : 11}
+	];
+	
+	/*layer names for PDE manager*/
+	var layerAttrVal=[
+		{layerName : "LINK_ATTRIBUTE_FC1", level : 9},
+		{layerName : "LINK_ATTRIBUTE_FC2", level : 10},
+		{layerName : "LINK_ATTRIBUTE_FC3", level : 11}
+	];
+	 
+	var colors=["rgba(240, 128, 255, 0.7)","rgba(255, 60, 70, 0.7)","rgba(130, 130, 68, 0.7)","black","black"]; 
+	var linksAdded=[];
+	var fcDistances=[0,0,0,0,0];
+	var urlLenghLimit=8400; 
+	
+	/*Show road types*/
+	function showLayer() {
+		map.addObject(groupFc);
+	}
+	
+	/*Remove road types*/		
+	function removeLayer(){
+		map.removeObject(groupFc);
+	}
+			
+	/*event listner for check box*/
+	 var type = document.getElementById("type");
+	 type.onchange = function(evt) 
+	 {
+	 		 type.checked ? showLayer(): removeLayer();
+	 };
+	
+	// TODO : include heat map for height
+	/* Function for loading height data*/
+	loadDtmTiles = function()
+	{
+		markerContainer.removeAll();
+		pointContainer.removeAll();
+		var layers = new Object();
+		layers["DTM_HEIGHT"] = {callback: gotPdeResponse, isFCLayer: false, level: 11};
+
+		var pdeManagerHeight = new PDEManager(app_id, app_code, layers),
+		bounds = map.getViewBounds(),
+		layers = new Object();
+
+		pdeManagerHeight.setRelease("LATEST");
+		pdeManagerHeight.setBoundingBox(bounds);
+		pdeManagerHeight.setOnTileLoadingFinished(function()
+		{
+			
+			if(pdeManager.numTilesOpen==0){
+				//Spinner.hideSpinner();
+			}
+			
+			
+		});
+
+		pdeManagerHeight.start();
+		Spinner.showSpinner();
+
+	};
+	
+	// Call back for PDE DTM_HEIGHT layer
+	function gotPdeResponse(respJsonObj)
+	{
+		if (respJsonObj.error != undefined){
+			alert(respJsonObj.error);
+			return;
+		}
+		if (respJsonObj.message != undefined){
+			alert(respJsonObj.message);
+			return;
+		}
+		var heightValues = ""; // concatenate the response
+		for (var r = 0; r < respJsonObj.Rows.length; r++)
+		{
+			heightValues += respJsonObj.Rows[r].HEIGHT_VALUES;
+		}
+
+		// Parse the response
+		var i1 = heightValues.indexOf(","),
+		latMin = parseFloat(heightValues.substring(0, i1)),
+		i2 = heightValues.indexOf(",", i1 + 1),
+		lonMin = parseFloat(heightValues.substring(i1 + 1, i2)),
+		i3  = heightValues.indexOf(",", i2 + 1);
+
+		if (i3  < 0) i3  = Number.MAX_VALUE;
+
+		var i3n = heightValues.indexOf(";", i2 + 1);
+		if (i3n < 0) i3n = Number.MAX_VALUE;
+
+		var nextPositive = i3 < i3n;
+		i3 = Math.min(i3, i3n);
+
+		var numPointsHorizontal = parseInt(heightValues.substring(i2 + 1, i3)),
+		heightMatrix = new Array(),
+		previousValue = 0,
+		repeatPreviousValue = 0,
+		positive = nextPositive;
+
+		while (true)
+		{
+			var row = new Array(numPointsHorizontal),
+			x = 0;
+			for (; x < numPointsHorizontal; x++)
+			{
+				positive = nextPositive;
+				if (repeatPreviousValue > 0)
+				{
+					row[x] = previousValue;
+					repeatPreviousValue--;
+				}
+				else
+				{
+					var i4  = heightValues.indexOf(",", i3 + 1); if (i4   < 0) i4  = Number.MAX_VALUE;
+					var i4n = heightValues.indexOf(";", i3 + 1); if (i4n  < 0) i4n = Number.MAX_VALUE;
+
+					nextPositive = i4 < i4n;
+					i4 = Math.min(i4, i4n);
+
+					if (i4 == Number.MAX_VALUE) {
+						i4 = heightValues.length; // last value in string
+					}
+
+					var heightStr = heightValues.substring(i3 + 1, i4),
+					indexX = heightStr.indexOf("x");
+
+					if (indexX >= 0) {
+						repeatPreviousValue = parseInt(heightStr.substring(indexX + 1)) - 1;
+						heightStr = heightStr.substring(0, indexX);
+					}
+
+					row[x] = previousValue + parseInt(heightStr) * (positive ? 1 : -1);
+					previousValue = row[x];
+
+					i3 = i4;
+					if (row[x] < minHeight)
+					minHeight = row[x];
+					if (row[x] > maxHeight)
+					maxHeight = row[x];
+				}
+			}
+
+			heightMatrix.push(row);
+			if (i3 == heightValues.length)
+			break;
+		}
+
+		// Create the height points.
+		// JSAPI renders faster, if we reuse the same SVG icon objects, rather than creating multiple identical ones.
+		for (var y = 0; y < heightMatrix.length; y++)
+		{
+			var row = heightMatrix[y],
+			lat = latMin + y / 1200.0;
+
+			for (var x = 0; x < row.length; x++)
+			{
+				var lon = lonMin + x / 1200.0,
+				h = row[x],
+				icon = iconMap[h];
+				
+				if (icon == undefined) {
+					// the relativeHeight is not accurate, because the maxHeight, minHeight values change while loading the tiles
+					var relativeHeight = Math.round((h - minHeight) * 255 / (maxHeight - minHeight + 1)).toString(16);
+					if (relativeHeight.length == 1) 
+						relativeHeight = "0" + relativeHeight;
+					/*add to heat map*/
+					iconMap[h] = relativeHeight;
+					DATA_POINTS.push({
+						lat: lat,
+						lng: lon,
+						value: parseInt(relativeHeight)
+					});
+				}
+			}
+		}
+		
+	};
+
+	
+	// 1. User pressed button --> Geocode start address
+	altitudeButton.onclick = function ()
+	{
+		Spinner.showSpinner();
+
+		// clean up
+		groupMarkers.removeAll();
+		loadDtmTiles();
+	};
+	
+	
+	/**
+	 * Start selection via LongClick in map
+	**/
+	function handleLongClickInMap(currentEvent){
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX,
+							 currentEvent.currentPointer.viewportY);
+		lat= Math.round(lastClickedPos.lat * 10000.0) / 10000.0;
+		lon =  Math.round(lastClickedPos.lng * 10000.0) / 10000.0;
+		/*to be used later to approximate distance of waypints from start point*/
+		startPoint= new H.geo.Point(lat, lon);
+		var line1 = "" + lat + "," + lon;
+		var line2 = "Start Position";
+		start.value = line1;
+		
+		// TODO : check if waypoints is actually needed
+		/*add start point to waypoints array */
+		waypoints[points]="waypoint"+points+"="+line1;
+		points++;
+		
+		/*to be used for bearing */
+		pointA = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+		pointB = new H.geo.Point(lastClickedPos.lat+0.00001, lastClickedPos.lng)
+		
+		if(startMarker !=  null){
+				groupMarkers.removeObject(startMarker);
+		}
+		startMarker = new H.map.Marker(pointA,{
+					icon: createIconMarker(line2, line1)
+		});
+		groupMarkers.addObject(startMarker);
+	}	
+
+		// 1. User pressed button --> Geocode start address
+		routeButton.onclick = function ()
+		{
+			feedbackTxt.innerHTML = "Prcessing started ...";
+			minDistance=parseInt(document.getElementById("minDistance").value);
+			//getIsolines();
+			geocode(start.value, true);
+		};
+	
+		// 2. Start address geocoded  --> route
+		var geocode = function(searchTerm, start)
+		{
+		
+			geocoder.search(
+			{
+				searchText: searchTerm,
+				additionaldata: "Country2,true"
+			},
+			function(result) {
+				/*parse geocode  result*/
+				if(result.Response.View[0].Result[0].Location != null)
+				{
+					pos = result.Response.View[0].Result[0].Location.DisplayPosition;
+					address = result.Response.View[0].Result[0].Location.Address;
+				}
+				else
+				{
+					pos = result.Response.View[0].Result[0].Place.Locations[0].DisplayPosition;
+					address = result.Response.View[0].Result[0].Place.Locations[0].Address;
+				}
+	
+				startPoint = new H.geo.Point(pos.Latitude, pos.Longitude);
+				
+	
+				line1 = pos.Latitude + " " + pos.Longitude;
+				line2 = address.Label ? address.Label : "";
+	
+				if(startMarker !=  null){
+					groupMarkers.removeObject(startMarker);
+				}
+				
+				startMarker = new H.map.Marker(startPoint,
+				{
+					icon: createIconMarker(line1, line2)
+				});
+				groupMarkers.addObject(startMarker);
+				
+				/*Load PDE layes*/
+				getFcLinks();
+			},
+			function(error) {
+				alert(error);
+			}
+			);
+		}
+
+	
+	/** 
+	 * Function for loading PDE layers
+	 * Layers are loaded for FC 3,2,1 at a time.
+	 */
+	function getFcLinks(){
+		
+		map.setCenter(startPoint);
+		map.setZoom(13);
+		
+		// Empty wayPtsToChk array
+		wayPtsToChk=[];
+		
+		// Select PDE layers
+		var layers = new Object();
+		layers[layerValues[currentFC-1].layerName] = 
+		{callback: gotLinkTileResponse, isFCLayer : false, level : layerValues[currentFC-1].level};
+		
+		layers[layerAttrVal[currentFC-1].layerName]= 
+		{callback: gotAttributesTileResponse, isFCLayer : false, level : layerValues[currentFC-1].level};
+		
+		// Init PDE
+		pdeManager = new PDEManager(app_id, app_code, layers);
+		pdeManager.setBoundingBoxContainer(groupContainer);
+		pdeManager.setBoundingBox(map.getViewBounds());
+		pdeManager.setOnTileLoadingFinished(loadLinksFinished);
+		pdeManager.start();
+		
+		Spinner.showSpinner();
+	}
+	
+	
+	/**
+	 * For parsing LINK_ATTRIBUTE layer
+	 * @param {Object} respJsonObj
+	 */
+	function gotAttributesTileResponse (respJsonObj)
+	{
+		if (respJsonObj.error != undefined)	{
+			feedbackTxt.innerHTML = respJsonObj.error;
+			return;
+		}
+		for (r = 0; r < respJsonObj.Rows.length; r++) {
+			linkId = parseInt(respJsonObj.Rows[r].LINK_ID);
+			attDetailsMap[linkId]=respJsonObj.Rows[r];
+		}
+	};
+
+	/**
+	 * Function called when PDE manager  calls finish for  alyer
+	 * @param {Object} nrTilesRequested
+	 */
+	function loadLinksFinished(nrTilesRequested) {
+		//document.getElementById('colors').style.display = 'none';
+		if(pdeManager.numTilesOpen==0){
+				//Spinner.hideSpinner();
+				checkRouteDistances();	
+		}
+	}
+	
+	
+	/**
+	 * Function call back for LINK_FC layer
+	 * @param {Object} respJsonObj
+	 */
+	function gotLinkTileResponse (respJsonObj){
+		if (respJsonObj.error != undefined)
+		{
+			feedbackTxt.innerHTML = respJsonObj.error;
+			return;
+		}
+		
+		//feedbackTxt.innerHTML = "Received Attributes info for " + respJsonObj.Rows.length + " (splitted) links";
+		var lat,lon;
+		var thisPoint,waypoint;
+		
+		
+		// Parse PDE response
+		for (r = 0; r < respJsonObj.Rows.length; r++) {
+			linkId = respJsonObj.Rows[r].LINK_ID;
+			var linkObject=respJsonObj.Rows[r];
+			lat=respJsonObj.Rows[r].LAT.split(",");
+			lon=respJsonObj.Rows[r].LON.split(",");
+			
+			// calculate distance from start point to be sorted out later
+			thisPoint=new H.geo.Point(parseFloat(lat[0])/100000,parseFloat(lon[0])/100000);
+			var distance = Math.floor(startPoint.distance(thisPoint));
+			waypoint =  parseFloat(lat[0])/100000+","+parseFloat(lon[0])/100000;
+			linkObject.waypoint=waypoint;
+			
+			// populate links map
+			linkFcMap[linkId.replace("-","")] = linkObject;
+			wayPtsToChk[pointAdded++]={ 
+					waypoint : waypoint,
+					distance : distance,
+					linkDetails : linkObject};
+			
+		}
+	
+	}
+	
+	
+	function stripMinusSign(text){
+		return  text.replace("-","");
+	}
+	
+	function stripPlusSign(text){
+		return  text.replace("+","");
+	}
+	
+	/**
+	 * Main function which decides selecting 
+	 * waypoints
+	 */
+	function checkRouteDistances(){
+	
+		// sort waypoints to get closest waypoint
+		wayPtsToChk.sort(function (a,b){
+			var distance = parseInt(a.distance)-parseInt(b.distance);
+			return distance;
+		})
+		
+		
+		var z=1,k=0,distance=0;
+		var finalWayPoints=[];
+		
+		/*set clostest point to select */
+		var link=wayPtsToChk[0].linkDetails;
+		var previousLinkId=wayPtsToChk[0].linkDetails.LINK_ID;
+		
+		/*set next closest as next point*/
+		var nextLinkIdToChk=wayPtsToChk[1].linkDetails.LINK_ID;
+		var stPoint=startPoint;
+		var notEmpty=true;
+		Spinner.showSpinner();	
+		/*Loop untill minimum distance is reached*/	
+		do{
+			
+			/*get details for Next link to be added*/
+			var linkDetails=linkFcMap[stripMinusSign(nextLinkIdToChk)];
+			/*check if next link is already added*/
+			var linkAdded=linksAdded[stripMinusSign(nextLinkIdToChk)]=="added";
+		
+			/*get attibutes for previous link*/
+			var prevLink=attDetailsMap[stripMinusSign(previousLinkId)];
+			
+					
+			/*if previous link was on a round about, 
+			 * then avoid adding next link on same round about*/
+			var prLkRndAbout = false;
+			if(prevLink!=null){
+				//INTERSECTION_CATEGORY = 4 -> Roundabout
+				prLkRndAbout=prevLink.INTERSECTION_CATEGORY == "4" ? true : false;
+			}
+			
+			/* check if link to be added is not same as previous one
+			 * and also is not already added 
+			 */
+			if(linkDetails!=null && 
+				previousLinkId!=stripMinusSign(nextLinkIdToChk) 
+					&&  !linkAdded){
+				
+					distance=distance+(linkDetails.LINK_LENGTH/1000);
+				
+					/*add waypoint corresponding to link decided in last iternation of loop*/
+					finalWayPoints[k++] = linkDetails.waypoint;
+					previousLinkId = linkDetails.LINK_ID;
+					linksAdded[nextLinkIdToChk.replace("-", "")] = "added";
+					
+					/*if minimum sitance is reached exit the loop*/
+					if(distance>=minDistance ){
+						break;
+					}
+					
+					/* get the neighbour links to consider next
+					 * choose Non-ref neighbour by default if link is already 
+					 * travelling to ref node then take the Ref node neighbour
+					 */
+					var nextLinkId = linkDetails.NONREF_NODE_NEIGHBOR_LINKS;
+					if (nextLinkIdToChk.indexOf("-") > -1) {
+						nextLinkId = linkDetails.REF_NODE_NEIGHBOR_LINKS;
+						
+					}
+					/*neihbour links maybe more than 1*/
+					var nextLinkToCheck = [];
+					if (nextLinkId.indexOf(",") > 0) {
+						nextLinkToCheck = nextLinkId.split(",");
+					}
+					else {
+						nextLinkToCheck[0] = nextLinkId;
+					}
+					
+					/*check the neighbour link*/
+					for (var j = 0; j < nextLinkToCheck.length; j++) {
+						
+						/*check if neighbour link is to be traversed to Ref node*/
+						var toRefNode=false;
+						if(nextLinkToCheck[j].indexOf("-")>-1){
+							toRefNode=true;
+						}
+						
+						/*get details for neighbour link*/
+						linkDetails = linkFcMap[stripMinusSign(nextLinkToCheck[j])];
+						linkAttr = attDetailsMap[stripMinusSign(nextLinkToCheck[j])];
+						
+						
+						if (linkDetails != null && linkAttr!=null) {
+							
+							/* if neighbour link is only allowed to be travelled to RefNode
+							 * then avoid the link
+							 */ 
+							if (toRefNode && linkAttr.TRAVEL_DIRECTION == "F") {
+								continue;
+							}
+							/* avoid one way links to non ref node */
+							else if (!toRefNode && linkAttr.TRAVEL_DIRECTION == "T"  ) {
+									continue;
+							/*avoid two links on round about*/
+							} else if(prLkRndAbout &&  linkAttr.INTERSECTION_CATEGORY == "4" ){
+										continue;
+									}else {
+										/*take the link and will be added to waypoints 
+										 * in next iteration of loop
+										 */
+										nextLinkIdToChk = nextLinkToCheck[j];
+									break;
+							}
+						}
+					}
+					
+			}else{
+					/* make the last point selected as start point */
+					stPoint= linkFcMap[previousLinkId].waypoint;
+					stPoint=new H.geo.Point(parseFloat(stPoint.split(",")[0]),parseFloat(stPoint.split(",")[1]));
+					
+					/*sort the list with respect to the new start point */
+					var wayPointsNew=wayPtsToChk;
+					wayPointsNew.sort(function (a,b){
+						var distanceA = a.waypoint;
+						var distanceB=  b.waypoint;
+						distanceA = new H.geo.Point(parseFloat(distanceA.split(",")[0]),parseFloat(distanceA.split(",")[1]));
+						distanceB = new H.geo.Point(parseFloat(distanceB.split(",")[0]),parseFloat(distanceB.split(",")[1]));
+						distanceA = stPoint.distance(distanceA);
+						distanceB= stPoint.distance(distanceB);
+						var distance = parseInt(distanceA)-parseInt(distanceB);
+						return distance;
+					})
+					
+					z=1;
+					nextLinkIdToChk=wayPointsNew[0].linkDetails.LINK_ID;
+					linkAttr = attDetailsMap[stripMinusSign(nextLinkIdToChk)];
+					
+					// if break in continuous link make sure next link selected is not in opposite direction. 
+					var isToRefLink= false;
+					if(linkAttr !=null){
+						isToRefLink=linkAttr.TRAVEL_DIRECTION == "T" ? true : false;
+					}
+					
+					/*continue skipping links as long as they are already added
+					 * or they are from Non ref to ref. 
+					 */
+					while((linksAdded[stripMinusSign(nextLinkIdToChk)] == "added"  
+							|| isToRefLink)
+								&& z<wayPointsNew.length ) {
+						nextLinkIdToChk=wayPointsNew[z++].linkDetails.LINK_ID;
+						linkAttr = attDetailsMap[stripMinusSign(nextLinkIdToChk)];
+						if(linkAttr !=null){
+							isToRefLink=linkAttr.TRAVEL_DIRECTION == "T" ? true : false;
+						}
+					}
+			}
+		}while(distance<minDistance && notEmpty);
+		
+		
+		/*make a routing request once min distance in reached for the currentFc
+		 * wayPtOptimze is the array to store way points
+		 */
+		urlRoutingReq = "https://route.api.here.com/routing/7.2/calculateroute.json?jsonAttributes=1&";
+		for (var i = 0; i < finalWayPoints.length; i++) {
+					urlRoutingReq=urlRoutingReq+"waypoint"+(i)+"="+finalWayPoints[i]+"&";
+					wayPtOptimze[i]=finalWayPoints[i];
+					
+		}
+		urlRoutingReq=urlRoutingReq+ "language=en-US&representation=overview&routeattributes=sc,sm,sh,bb,lg,no,shape"+
+			"&legattributes=li&linkattributes=sh,nl,fc&instructionformat=html&mode=fastest;car;traffic:enabled;dirtRoad:-3&app_id="
+				+app_id+"&app_code="+app_code+"&jsoncallback=checkDistance";
+		feedbackTxt.innerHTML = urlRoutingReq;
+		script = document.createElement("script");
+		script.src = urlRoutingReq;
+		document.body.appendChild(script);
+		
+		
+	}
+	
+	/*call back after routing request done for current FC*/
+	function checkDistance(respJsonRouteObj){
+		if (respJsonRouteObj.error != undefined)
+		{
+			alert (respJsonRouteObj.error);
+			feedbackTxt.innerHTML = respJsonRouteObj.error;
+			return;
+		}
+		
+		if (respJsonRouteObj != null && respJsonRouteObj.response != null && respJsonRouteObj.response.route != null) {
+		
+			/*parse response and add linkIds from current FC which
+	 * should not be used for next fc
+	 */
+			var total = 0, distance = 0;
+			for (j = 0; j < respJsonRouteObj.response.route.length; j++) {
+				var distanceReturned = respJsonRouteObj.response.route[j].summary.distance;
+				distance = distance + distanceReturned / 1000;
+				var legs = respJsonRouteObj.response.route[j].leg;
+				for (k = 0; k < legs.length; k++) {
+					var links = legs[k].link;
+					for (l = 0; l < links.length; l++) {
+						var linkId = stripMinusSign(links[l].linkId);
+						linkId = stripPlusSign(linkId);
+						var linkFc = links[j].functionalClass;
+						var linkDetails = linkFcMap[linkId];
+						if (linkDetails != null) {
+							fcDistances[linkFc - 1] = fcDistances[linkFc - 1] + parseFloat(linkDetails.LINK_LENGTH) / 1000;
+						}
+						
+						if (linksAdded[stripMinusSign(linkId)] != "added") {
+							linksAdded[stripMinusSign(linkId)] = "added";
+						}
+					}
+				}
+				
+			}
+			
+			/* if distance from routing is less than calculated distance 
+	 * call checkRouteDistances again with already added waypoints removed
+	 */
+			if (distance < minDistance) {
+				var pointCheckIncremented = false;
+				while (!pointCheckIncremented && pointChecked < wayPtsToChk.length) {
+					var legs = respJsonRouteObj.response.route.leg;
+					var strip = new H.geo.Strip();
+					
+					var nextPoint = wayPtsToChk[pointChecked + 1];
+					var linkId = nextPoint.linkDetails.LINK_ID;
+					
+					if (linksAdded[linkId] != "added") {
+						wayPtsToChk.splice(pointChecked, 1);
+						pointCheckIncremented = true;
+						pointChecked++;
+					}
+					
+				}
+				
+				/* find only waypoints for the remining distance */
+				minDistance = minDistance - distance;
+				distance = 0;
+				checkRouteDistances();
+			}
+			else 
+				if (currentFC > 1) {
+				
+					/*store waypoints so far in final array finalWayPoints */
+					for (var i = 0; i < wayPtOptimze.length; i++) {
+						finalWayPoints[finalPtsAdded++] = wayPtOptimze[i];
+					}
+					
+					var lastPoint = wayPtOptimze[wayPtOptimze.length - 1];
+					waypoints[0] = "waypoint0=" + wayPtOptimze[wayPtOptimze.length - 1];
+					//startPoint=new H.geo.Point(parseFloat(lastPoint.split(",")[0]),parseFloat(lastPoint.split(",")[1]));
+					
+					/*reset the arrays */
+					wayPtsToChk = [];
+					pointChecked = 2;
+					
+					
+					/*decrement the FC*/
+					currentFC--;
+					
+					/*reset min distance it might have been changed in previous if loop
+		 * reduce the distance if some other FC was already included in previous route
+		 */
+					minDistance = parseInt(document.getElementById("minDistance").value);
+					minDistance = Math.abs(minDistance - fcDistances[currentFC - 1]);
+					
+					//console.log("caling pde layer with"+currentFC);
+					
+					/*Load PDE layers*/
+					getFcLinks();
+				}
+				else {
+				
+					//console.log("wayPtOptimze final"+wayPtOptimze.length);
+					/*check done for all Fc levels*/
+					for (var i = 0; i < wayPtOptimze.length; i++) {
+						finalWayPoints[finalPtsAdded++] = wayPtOptimze[i];
+					}
+					
+					
+					for (var i = 0; i < finalWayPoints.length; i++) {
+						calDistance = 0;
+						tmp = finalWayPoints[i];
+						markerPoint = new H.geo.Point(parseFloat(finalWayPoints[i].split(",")[0]), parseFloat(finalWayPoints[i].split(",")[1]));
+						calDistance = startPoint.distance(markerPoint);
+						finalWayPoints[i] = {
+							waypoint: tmp,
+							distance: calDistance
+						};
+					}
+					
+					var addedAlready = [], p = 0;
+					
+					/*make routing call to to plot the final route*/
+					urlRoutingReq = "https://route.api.here.com/routing/7.2/calculateroute.json?jsonAttributes=1&";
+					for (var i = 0; i < finalWayPoints.length; i++) {
+						var wayPointToAdd = finalWayPoints[i].waypoint;
+						/*make sure waypoints are duplicated*/
+						if (addedAlready[wayPointToAdd] != "added") {
+							urlRoutingReq = urlRoutingReq + "waypoint" + (p) + "=" + wayPointToAdd + "&";
+							addedAlready[wayPointToAdd] = "added";
+							markerPoint = new H.geo.Point(parseFloat(wayPointToAdd.split(",")[0]), parseFloat(wayPointToAdd.split(",")[1]));
+							
+							startMarker = new H.map.Marker(markerPoint, {
+								icon: createWayPointMarker(p)
+							});
+							groupMarkers.addObject(startMarker);
+							p++;
+						}
+					}
+					
+					
+					//TODO check if round trip can be added
+					var wayPointToAdd=finalWayPoints[0].waypoint;
+					urlRoutingReq=urlRoutingReq+"waypoint"+p+"="+finalWayPoints[0].waypoint+"&";
+					
+					
+						urlRoutingReq = urlRoutingReq + "language=en-US&representation=overview&routeattributes=sc,sm,sh,bb,lg,no,shape" +
+						"&legattributes=li&linkattributes=sh,nl,fc&instructionformat=html&mode=fastest;car;traffic:enabled;dirtRoad:-3&app_id=" +
+						app_id +
+						"&app_code=" +
+						app_code +
+						"&jsoncallback=plotFinalRoute";
+						
+						if(urlRoutingReq.length>urlLenghLimit){
+							Spinner.hideSpinner();
+							alert("Oops! Something went wrong, Please refresh the page and try again with another start point");
+						}
+						
+						feedbackTxt.innerHTML = urlRoutingReq;
+						script = document.createElement("script");
+						script.src = urlRoutingReq;
+						document.body.appendChild(script);
+					
+				}
+		}else{
+			Spinner.hideSpinner();
+			alert("Oops! Something went wrong, Please refresh the page and try again with another start point");
+		}
+	}
+	
+	
+	//TODO check if this function can be removed
+	function calculateRouteAvoidLink(avoidLinks){
+			var addedAlready=[],p=0;
+			urlRoutingReq = "https://route.api.here.com/routing/7.2/calculateroute.json?jsonAttributes=1&";
+			for (var i = 0; i < finalWayPoints.length; i++) {
+					
+					var wayPointToAdd=finalWayPoints[i].waypoint;
+					if(addedAlready[wayPointToAdd]!="added"){
+						urlRoutingReq=urlRoutingReq+"waypoint"+(p)+"="+wayPointToAdd+"&";
+						addedAlready[wayPointToAdd]="added";
+						markerPoint=new H.geo.Point(parseFloat(wayPointToAdd.split(",")[0]),parseFloat(wayPointToAdd.split(",")[1]));
+						var line="Point : "+(p);
+						startMarker = new H.map.Marker(markerPoint,
+							{
+								icon: createIconMarker("", line)
+							});
+						//group.addObject(startMarker);
+						p++;
+					}
+					
+			}
+			
+			var wayPointToAdd=finalWayPoints[0].waypoint;
+			urlRoutingReq=urlRoutingReq+"waypoint"+p+"="+finalWayPoints[0].waypoint+"&";
+			markerPoint=new H.geo.Point(parseFloat(wayPointToAdd.split(",")[0]),parseFloat(wayPointToAdd.split(",")[1]));
+			startMarker = new H.map.Marker(markerPoint,
+							{
+								icon: createIconMarker("", line)
+							});
+						//group.addObject(startMarker);
+						p++;
+			
+			urlRoutingReq=urlRoutingReq+"avoidLinks="
+			
+			
+			for (var i = 0; i < avoidLinks.length; i++) {
+				urlRoutingReq=urlRoutingReq+encodeURIComponent(avoidLinks[i])+",";
+			}
+			
+			urlRoutingReq=urlRoutingReq.substring(0, urlRoutingReq.length - 1);
+			
+			//TODO pltoRoute - > checkDistance
+			urlRoutingReq=urlRoutingReq+ "&language=en-US&representation=overview&routeattributes=sc,sm,sh,bb,lg,no,shape&legattributes=li&linkattributes=sh,nl,fc&instructionformat=html&mode=fastest;car;traffic:enabled;dirtRoad:-3&app_id="+app_id+"&app_code="+app_code+"&jsoncallback=plotFinalRoute";
+			
+			if(urlRoutingReq.length>urlLenghLimit){
+							Spinner.hideSpinner();
+							alert("Oops! Something went wrong, Please refresh the page and try again with another start point");
+			}
+			
+			feedbackTxt.innerHTML = urlRoutingReq;
+			script = document.createElement("script");
+			script.src = urlRoutingReq;
+			document.body.appendChild(script);
+	}
+	
+	
+	/*Function for plotting the final route*/
+	function plotFinalRoute(respJsonRouteObj){
+		fcDistances=[0,0,0,0,0];
+		//console.log(respJsonRouteObj);
+		Spinner.hideSpinner();
+		if (respJsonRouteObj.error != undefined)
+		{
+			alert (respJsonRouteObj.error);
+			feedbackTxt.innerHTML = respJsonRouteObj.error;
+			return;
+		}
+		
+		if (respJsonRouteObj != null && respJsonRouteObj.response != null && respJsonRouteObj.response.route != null) {
+		
+			feedbackTxt.innerHTML = respJsonRouteObj.response.route[0].summary.text;
+			
+			var strip = new H.geo.Strip();
+			var polylines = [], addedPolylines = 0;
+			for (j = 0; j < respJsonRouteObj.response.route.length; j++) {
+				shape = respJsonRouteObj.response.route[j].shape;
+				i;
+				l = shape.length;
+				
+				for (i = 0; i < l; i++) {
+					strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item){
+						return parseFloat(item);
+					}));
+				}
+			}
+			
+			var polyline = new H.map.Polyline(strip, {
+				style: {
+					lineWidth: 5,
+					strokeColor: 'rgba(0, 128, 255, 0.7)',
+					lineJoin: "round"
+				},
+				arrows: {
+					fillColor: 'white',
+					frequency: 10,
+					width: 2,
+					length: 5
+				}
+			});
+			
+			groupMarkers.addObject(polyline);
+			
+			
+			var linksLeft = true;
+			var legCount = 0;
+			var strip = new H.geo.Strip();
+			var prevFcLink = 3;
+			
+			
+			var fcNotChanged = false;
+			var contnDirtRoad = false;
+			
+			/*create polylines for different fcs 
+	 * The loop is to avoid drawing a lot of polylines and to ensure continues links of same FC
+	 * make just one polyline
+	 */
+			for (legCount = 0; legCount < respJsonRouteObj.response.route[0].leg.length; legCount++) {
+				leg = respJsonRouteObj.response.route[0].leg[legCount];
+				var links = leg.link;
+				for (j = 0; j < links.length; j++) {
+					var linkFc = links[j].functionalClass;
+					var linkId = links[j].linkId;
+					if (linkFc > 3) {
+						contnDirtRoad = true;
+						
+						if (!linkId.indexOf("-") > -1) {
+							linkId = "+" + linkId;
+						}
+						avoidLink[avoidLinksAdded++] = links[j].linkId;
+					}
+					var linkId = linkId.replace("-", "");
+					linkId = linkId.replace("+", "");
+					var linkDetails = linkFcMap[linkId];
+					if (linkDetails != null) {
+						fcDistances[linkFc - 1] = fcDistances[linkFc - 1] + parseFloat(linkDetails.LINK_LENGTH) / 1000;
+					}
+					
+					
+					shape = links[j].shape;
+					i;
+					l = shape.length;
+					if (prevFcLink == linkFc) {
+						fcNotChanged = true;
+						
+					}
+					else {
+					
+						if (prevFcLink == 1) {
+							console.log(colors[prevFcLink - 1]);
+						}
+						
+						
+						var fcPolyline = new H.map.Polyline(strip, {
+							style: {
+								lineWidth: 5,
+								strokeColor: colors[prevFcLink - 1],
+								lineJoin: "round"
+							},
+						
+						});
+						polylines[addedPolylines++] = fcPolyline;
+						
+						prevFcLink = links[j].functionalClass;
+						strip = new H.geo.Strip();
+						
+					}
+					
+					for (i = 0; i < l; i++) 
+						strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item){
+							return parseFloat(item);
+						}));
+				}
+				
+			}
+			
+			//also include the last strip
+			var fcPolyline = new H.map.Polyline(strip, {
+							style: {
+								lineWidth: 5,
+								strokeColor: colors[prevFcLink - 1],
+								lineJoin: "round"
+							},
+						
+						});
+			polylines[addedPolylines++] = fcPolyline;
+			
+			groupFc.addObjects(polylines);
+			feedbackTxt.innerHTML += "<br> FC 1: " + Math.floor(fcDistances[0]) + "Km | FC 2 : " +
+			Math.floor(fcDistances[1]) +
+			"Km | FC 3 : " +
+			Math.floor(fcDistances[2]) +
+			" Km";
+		}else{
+			alert("Oops! Something went wrong,Prefresh the page and try again with another start point");
+		}
+			
+	}
+	
+	
+	
+	
+	function loadLinksDetailsFinished(nrTilesRequested) {
+		Spinner.hideSpinner();
+		feedbackTxt.innerHTML ="Urban Distance :"+urbanDistance/1000+"km"+" - Motorway Distance :"+motorwayDistance/1000+"km"+
+		" - Rural Distance : "+ruralDistance/1000 +"km";
+	}
+
+	//--- Helper - Create Start / Destination marker
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_Line;
+
+		var length = line1.length > line2.length ?line1.length : line2.length;
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line2);
+		svgMarker = svgMarker.replace(/__width__/g, length  *5 );
+		svgMarker = svgMarker.replace(/__widthAll__/g,length *5 + 80);
+
+		return new H.map.Icon(svgMarker, {
+			anchor: new H.math.Point(24, 57)
+		});
+
+	};
+	
+	/**
+	 * Function to create waypoint markers
+	 * @param {Object} number
+	 */
+	function createWayPointMarker(number){
+		var number=number+"";
+		var length=number.length;
+		var increaseRadius = length % 2;
+		var svg_circle = '<svg  xmlns="http://www.w3.org/2000/svg" width="_dimension_" height="_dimension_">'+
+			'<circle cx="_radius_" cy="_radius_" r="_radius_" fill="green" />'+
+			'<text x="_shiftx_" y="15" font-family="sans-serif" font-size="10px" fill="white">_TEXT_</text>'+
+			'</svg>';
+			
+	svg_circle=svg_circle.replace("_TEXT_",number );
+	svg_circle=svg_circle.replace(/_radius_/g,(10+increaseRadius) );
+	svg_circle=svg_circle.replace(/_dimension_/g,(20+2*increaseRadius) );
+	svg_circle=svg_circle.replace(/_shiftx_/g,(5-increaseRadius) );
+	var shiftAnchor =10+increaseRadius;
+	var icon= new H.map.Icon(svg_circle.replace("_TEXT_",number ),
+				{
+					anchor: { x: shiftAnchor, y: shiftAnchor }
+				});
+			return icon;			
+	}
+	
+	/**
+	 * Function to create heat map
+	 * @param {Object} map
+	 * @param {Object} type
+	 * @param {Object} dataPoints
+	 */
+	function createHeatMap(map, type, dataPoints) {
+			var heatmapProvider = new H.data.heatmap.Provider();
+
+			heatmapProvider.addData(dataPoints);
+
+			var heatmapLayer = new H.map.layer.TileLayer(heatmapProvider, {
+				opacity: 0.8
+			});
+
+			map.addLayer(heatmapLayer);
+
+			return heatmapLayer;
+		}
+		
+	/*
+	 * Check if point lies on plyline
+	 * @param {Object} coords
+	 * @param {Object} polyline
+	 */	
+	function liesOnPolyline(coords,polyline){
+			//console.log(coords);
+			// get objects at the coordinates
+			var lat=parseFloat(coords.waypoint.split(",")[0]);
+			var lon=parseFloat(coords.waypoint.split(",")[1]);
+			var objects = map.getObjectsAt(lat, lon);
+			
+			// iterate through the array to check if polyline can be retrieved here
+			var withinPolyline = false;
+			for (var object in objects) {
+				 if(objects[object] === polyline){
+				   withinPolyline = true;
+				   break;
+				}
+			}
+			
+			return withinPolyline;
+	}
+		
+		
+		
+	/**
+	 * TODO implement Isoline
+	 * Function to get Time isoline
+	 */	
+	var getIsolines = function(){
+		var url = ["https://isoline.route.api.here.com/routing/7.2/calculateisoline.json?",
+		"mode=fastest;car;traffic:enabled",
+		"&start=geo!",
+		startPoint.lat,
+		",",
+		startPoint.lng,
+		"&rangetype=time",
+		"&range=",
+		(30*60),
+		"&resolution=",
+		50,
+		"&app_id=",
+		app_id,
+		"&app_code=",
+		app_code,
+		"&jsoncallback=isolineCallback",
+		"&requestId=",
+		"__ID__"
+		].join("");
+
+		
+
+				script = document.createElement("script");
+				script.src = url;
+				document.body.appendChild(script);
+			
+		
+	}
+
+	/**
+	 * Function to plot isloine
+	 * @param {Object} response
+	 */
+	var isolineCallback = function(response)
+	{
+		if(response && response.response && response.response.isoline)
+		{
+			var shape = response.response.isoline[0].component[0].shape,
+			strip = new H.geo.Strip();
+
+			for (var i = 0; i < shape.length; i++)
+			{
+				var split = shape[i].trim().split(",");
+				if(split.length === 2){
+					var lat = parseFloat(split[0]);
+					var lon = parseFloat(split[1]);
+					strip.pushLatLngAlt( lat, lon, 0);
+				}
+			}
+
+			shp = new H.map.Polygon(strip,
+			{
+				style: { lineWidth: 5, strokeColor: "rgba(34, 204, 34, 0.5)"}
+			}
+			);
+			
+			group.addObject(shp);
+		}
+		map.setViewBounds(group.getBounds());
+		getFcLinks();
+	}
+		
+		
+</script>

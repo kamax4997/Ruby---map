@@ -1,0 +1,353 @@
+<% content_for :title, "Auto Class Extractor Demo" %>
+<script src="https://cdn.jsdelivr.net/pako/1.0.3/pako.min.js"></script>
+
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<h5>Please provide a trace to match with Auto Class Extractor by either:</h5>
+    <ul>
+		<li>Drag & drop a trace file (GPX) into Input trace box below</li>
+		<li>or select an provided example:</li>
+		
+			<select id="examples" onchange="loadFromFile(this.selectedOptions[0].value + '.gpx');">
+				<option value="clear">-</option>
+				<option value="DS-JP_708_20180122_202904_gps">DS-JP_708_20180122_202904_gps</option>
+				<option value="LB-UH_103_20180130_125814_gps">LB-UH_103_20180130_125814_gps</option>
+				<option value="LB-UH_103_20180201_193044_gps">LB-UH_103_20180201_193044_gps</option>
+				<option value="LB-UH_104_20171029_183108_gps">LB-UH_104_20171029_183108_gps</option>
+				<option value="LB-UH_104_20171214_105346_gps">LB-UH_104_20171214_105346_gps</option>
+				<option value="LB-UH_104_20171215_094105_gps">LB-UH_104_20171215_094105_gps</option>
+				<option value="LB-XO_8788_20180115_165147_gps">LB-XO_8788_20180115_165147_gps</option>
+				<option value="LB-UH_104_20171214_105346_gps">LB-UH_104_20171214_105346_gps</option>
+				<option value="LB-XO_8788_20180119_173621_gps">LB-XO_8788_20180119_173621_gps</option>
+				<option value="DS-CN_13R7C_20180508_112244_gps">DS-CN_13R7C_20180508_112244_gps</option>
+				<option value="DS-JP_708_20180122_171824_gps">DS-JP_708_20180122_171824_gps</option>
+				<option value="DS-JP_708_20180421_121118_gps">DS-JP_708_20180421_121118_gps</option>
+				<option value="KA01MH_4822_20180606_165225_gps">KA01MH_4822_20180606_165225_gps</option>
+				<option value="LA-GFZ_0829_20180702_165936_gps">LA-GFZ_0829_20180702_165936_gps</option>
+				<option value="LB-UH_103_20180130_125714_gps">LB-UH_103_20180130_125714_gps</option>
+				<option value="LB-UH_103_20180201_192441_gps">LB-UH_103_20180201_192441_gps</option>
+				<option value="LB-UH_103_20180308_124028_gps">LB-UH_103_20180308_124028_gps</option>
+				<option value="LB-UH_103_20180414_135817_gps">LB-UH_103_20180414_135817_gps</option>
+				<option value="LB-UH_103_20180629_114441_gps">LB-UH_103_20180629_114441_gps</option>
+				<option value="LB-UH_103_20180702_113745_gps">LB-UH_103_20180702_113745_gps</option>
+				<option value="LB-UH_104_20180307_222528_gps">LB-UH_104_20180307_222528_gps</option>
+				<option value="LB-UH_104_20180626_182307_gps">LB-UH_104_20180626_182307_gps</option>
+				<option value="LB-XO_8788_20180213_153403_gps">LB-XO_8788_20180213_153403_gps</option>
+				<option value="MOBILE-MEA_1_20180404_145218_gps">MOBILE-MEA_1_20180404_145218_gps</option>
+				<option value="MOBILE-MEA_1_20180421_210735_gps">MOBILE-MEA_1_20180421_210735_gps</option>
+				<option value="MOBILE-MEA_1_20180511_015625_gps">MOBILE-MEA_1_20180511_015625_gps</option>
+				<option value="MOBILE-MEA_1_20180626_043936_gps">MOBILE-MEA_1_20180626_043936_gps</option>
+				<option value="VW-ALLSPORT_DTN5362_20180221_130119_gps">VW-ALLSPORT_DTN5362_20180221_130119_gps</option>
+				<option value="VW-ALLSPORT_DTN5362_20180222_085223_gps">VW-ALLSPORT_DTN5362_20180222_085223_gps</option>
+				<option value="DS-TEST_gps">DS-TEST_gps</option>
+				<option value="DS-TEST_gps_2">DS-TEST_gps_2</option>
+				<option value="DS-TEST_gps_3">DS-TEST_gps_3</option>
+			</select>
+	</ul>
+	<h5>Input trace</h5>
+		<textarea id="tracetextarea" class="form-control" rows="10"></textarea>
+	<input class="btn btn-default btn-sm" type="button" value="Reset" onclick="reset();"/>
+		<input id="submittracebutton" class="btn btn-default btn-sm" type="button" value="Submit"/>
+	<h5>Information</h5>
+		<ul>
+			<li style="color: black;">Input trace points</li>
+			<li style="color: green;">Matched trace points</li>
+		</ul>
+	<h5>Warnings</h5>
+		<textarea id="warningstextarea" autocomplete="off" class="form-control" rows="5">Please submit...</textarea>
+	<h5>Output</h5>
+		<textarea id="outputtextarea" autocomplete="off" class="form-control" rows="5">Please submit...</textarea>
+	<h5>Image</h5>
+		<div id="resultImage">Please submit...</div>
+</div>
+
+<div id="mapContainer"></div>
+<script type="text/javascript">
+
+	/* 
+	 * author dom schuette
+	 * (C) HERE 2018
+	*/
+	
+	// check for display settings
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	
+	// check if the script is loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// get the correct host
+	var host = (secure ? "https://" : "http://") + window.location.host;
+
+	// globals
+	var mapContainer = document.getElementById('mapContainer'),
+		platform = new H.service.Platform(
+		{	
+			app_code: app_code,	
+			app_id: app_id,	
+			useCIT: true, 
+			useHTTPS: secure 
+		}),
+		defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+		map = new H.Map(mapContainer, defaultLayers.normal.map, 
+			{ 
+				center: new H.geo.Point(52.11, 0.68), 
+				zoom: 5 
+			}),
+		zoomToResult = true,
+		uTurn = false;
+		
+	// Do not draw underneath control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// redraw the map, if size changed
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	var	objContainer = new H.map.Group();
+	
+	// always add the objContainer to the map
+	map.addObject(objContainer);
+	var blob; 
+
+	function base64ToBuffer(str){
+		str = window.atob(str); // creates a ASCII string
+		var buffer = new ArrayBuffer(str.length),
+			view = new Uint8Array(buffer);
+		for(var i = 0; i < str.length; i++){
+			view[i] = str.charCodeAt(i);
+		}
+		return buffer;
+	}
+	
+	var submitTrace = function ()
+	{
+		objContainer.removeAll();
+		document.getElementById("warningstextarea").value = '';
+
+		var url = host + "/AutoClassExtractorInterface/get?app_id=" + app_id + "&app_code=" + app_code + "&lng=eng";
+ 				
+		// create the icons for faster display if needed
+		var text = document.getElementById('tracetextarea').value,
+			lines = text.split(/\r|\r\n|\n/),
+			count = lines.length;
+		createIcons(count);		
+		
+		// get the post body 
+		var data = document.getElementById('tracetextarea').value;
+		
+		var xhr = getXHR();
+		xhr.open('POST', url, true);
+		
+		xhr.onload = function () {
+			gotResponse(JSON.parse(this.responseText));
+		}
+		xhr.send(data);
+	}
+	document.getElementById('submittracebutton').onclick = submitTrace;
+	
+	function getXHR()
+	{
+		var xhr;
+
+		if(typeof XMLHttpRequest !== 'undefined') 
+			xhr = new XMLHttpRequest();
+		else
+		{
+			var versions = ["MSXML2.XmlHttp.5.0", 
+							"MSXML2.XmlHttp.4.0",
+							"MSXML2.XmlHttp.3.0", 
+							"MSXML2.XmlHttp.2.0",
+							"Microsoft.XmlHttp"]
+
+			for(var i = 0, len = versions.length; i < len; i++)
+			{
+				try
+				{
+					xhr = new ActiveXObject(versions[i]);
+					break;
+				}
+				catch(e){}
+			}
+		}
+		return xhr;
+	}
+	
+	function reset()
+	{
+		document.getElementById('tracetextarea').value = '';
+		document.getElementById('outputtextarea').value = '';
+		document.getElementById("warningstextarea").value = '';
+		document.getElementById('resultImage').innerHTML = 'Please submit...';
+		objContainer.removeAll();
+	}
+
+	document.getElementById('tracetextarea').addEventListener(
+			'dragover', function handleDragOver(evt) {
+				evt.stopPropagation();
+				evt.preventDefault();
+				evt.dataTransfer.dropEffect = 'copy';
+			},
+		false
+	);
+
+	document.getElementById('tracetextarea').addEventListener(
+		'drop', function(evt) {
+			evt.stopPropagation();
+			evt.preventDefault();
+			var files = evt.dataTransfer.files;
+			var file = files[0];
+			var r = new FileReader();
+			r.onload = function(e) { 
+				document.getElementById('tracetextarea').value = r.result;
+				submitTrace();
+			}
+			r.readAsText(file);
+		},
+		false
+	);
+
+	var gotResponse = function (response)
+	{
+		if (response.error != undefined || response.faultCode != undefined || response.type) {
+			alert(response.message + "\nStatus: " + response.responseCode);
+			return;
+		}
+		
+		if(response != undefined && response.Pose != undefined && response.Landmark != undefined)
+		{
+			var pose = response.Pose,
+				landmark = response.Landmark;
+			if (pose !== undefined)
+			{
+				for (var i = 0; i < pose.length; i++)
+				{ 
+					var poseitem = pose[i];
+					objContainer.addObject(new H.map.Marker(new H.geo.Point(poseitem.LAT_ORIG, poseitem.LON_ORIG), {icon: icons["#000000" + i]}));
+					objContainer.addObject(new H.map.Marker(new H.geo.Point(poseitem.LAT, poseitem.LON), {icon: icons["#00FF00" + i]}));
+				}
+			}
+			
+			// draw the route
+			if (response.SHAPE != undefined)
+			{
+				var shape = response.SHAPE; 
+				for (var i = 0; i < shape.length; i++)
+				{
+					var strip = new H.geo.Strip();
+					var coords = shape[i].split(" ");
+					for (var c = 0; c < coords.length; c += 2)
+					{
+						strip.pushLatLngAlt(coords[c], coords[c+1], null);
+					}
+					objContainer.addObject(new H.map.Polyline(strip, {zIndex: 3, style: {lineWidth: 8, strokeColor: "rgba(18, 65, 145, 0.7)", lineJoin: "round"}}));
+				}
+			}
+			if (response.IMAGE_URL != undefined)
+			{
+				document.getElementById('resultImage').innerHTML = '<img src="' + response.IMAGE_URL + '" alt="resultImage" height="400" width="400">'
+			}
+			
+			document.getElementById('outputtextarea').value = JSON.stringify(response, undefined, 4);
+		}
+		if(objContainer.getChildCount() != 0)
+			map.setViewBounds(objContainer.getBounds());
+		
+		var warningsArea = document.getElementById("warningstextarea");
+		if(response.Warnings == undefined || response.Warnings.length === 0) {
+			warningsArea.value += 'No Warnings.';
+		} else {
+			for(var d = 0; d < response.Warnings.length; d++) {
+				if(0 !== d) warningsArea.value += '\n';
+				warningsArea.value += response.Warnings[d].text;
+			}
+		}
+	}
+
+	var loadFromFile = function (filename)
+	{
+		if(filename == 'clear.gpx')
+		{
+			reset();
+		}
+		else
+		{
+			var req = new XMLHttpRequest();
+			req.open('GET', '/sample_data/' + filename);
+			req.onreadystatechange = function() {
+				if (req.readyState != XMLHttpRequest.DONE) return;
+				document.getElementById('tracetextarea').value = req.responseText;
+				submitTrace();
+			}
+			req.send();
+		}
+	}
+	
+	var icons = {};
+	var createIcons = function(l)
+	{
+		for(var i = 0; i < l; i++)
+		{
+			if(icons["red" + i] === undefined)
+				icons["red" + i] = createIcon("red", i);
+			if(icons["blue" + i] === undefined)
+				icons["blue" + i] = createIcon("blue", i);
+			if(icons["#000000" + i] === undefined)
+				icons["#000000" + i] = createIcon("#000000", i);
+			if(icons["00FF00" + i] === undefined)
+				icons["#00FF00" + i] = createIcon("#00FF00", i);
+		}
+	}
+	
+	var createIcon = function (color, text)
+	{
+		var canvas = document.createElement('canvas'),
+			width = 28,
+			height = 16,
+			fontSize = 10;
+			
+		canvas.width = width;
+		canvas.height = height;
+
+		ctx = canvas.getContext('2d');
+			
+		ctx.strokeStyle = color;
+		ctx.beginPath();
+		ctx.moveTo(14, 16);
+		ctx.lineTo(14, 9);
+		ctx.stroke();
+		ctx.closePath();
+
+		ctx.font = 'bold ' + fontSize + 'px Arial';
+		ctx.fillStyle = color;
+		ctx.textAlign = 'center'; 
+		ctx.fillText(text,14,8);
+
+		var icon = new mapsjs.map.Icon(canvas,
+					({
+						'anchor': {
+							'x': 14,
+							'y': 16
+						}
+					}));
+		delete canvas; 
+		return icon;
+	};
+	
+	var file = getUrlParameter( 'file' );
+	if( file !== null)
+	{
+		var compressData = atob(file);
+		var string = pako.inflate(compressData, { to: 'string' });
+		document.getElementById('tracetextarea').value = string; 
+		submitTrace();
+	}
+</script>

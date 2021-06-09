@@ -1,0 +1,263 @@
+<% content_for :title, "Simple HERE Map Display" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+	<input type="checkbox" id="toogle" onchange='handleOverlay(this.checked);' checked>Overlay on / off </br>
+	<input type="checkbox" id="pde" onchange='handleOverlayPDEFC1(this.checked);'>PDE FC1 Overlay on / off </br>
+	<input type="checkbox" id="pde" onchange='handleOverlayPDEFC2(this.checked);'>PDE FC2 Overlay on / off </br>
+	<input type="checkbox" id="pde" onchange='handleOverlayPDEFC3(this.checked);'>PDE FC3 Overlay on / off </br>
+	<input type="checkbox" id="pde" onchange='handleOverlayPDEFC4(this.checked);'>PDE FC4 Overlay on / off </br>
+	<input type="checkbox" id="pde" onchange='handleOverlayPDEFC5(this.checked);'>PDE FC5 Overlay on / off </br>
+	
+	
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2016
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+	
+	var pdeBounds = new H.map.Group();
+	map.addObject(pdeBounds);
+	
+	var fc1 = false,
+		fc2 = false,
+		fc3 = false,
+		fc4 = false,
+		fc5 = false,
+		showPDEFCLayers = false;
+	
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	function TileToQuadKey ( x, y, zoom){ 
+		var quad = ""; 
+		for (var i = zoom; i > 0; i--){
+			var mask = 1 << (i - 1); 
+			var cell = 0; 
+			if ((x & mask) != 0) 
+				cell++; 
+			if ((y & mask) != 0) 
+				cell += 2; 
+			quad += cell; 
+		} 
+		return quad; 
+	}
+
+	function tileToLng(x,z)
+	{
+		return x * 360 / Math.pow(2,z) - 180;
+	}
+
+	function tileToLat(y,z)
+	{
+		return Math.atan(Math.sinh(Math.PI - y * 2 * Math.PI / Math.pow(2,z))) * (180 / Math.PI);
+	}	
+	
+
+//	Math.constructor.prototype.sinh = function (arg) {
+//		return (Math.exp(arg) - Math.exp(-arg)) / 2;
+//	}
+
+	var infoProvider = new H.map.provider.ImageTileProvider({
+		label: "Tile Info Overlay",
+		descr: "",
+		min: 0,
+		max: 20,
+		opacity: 0.6,
+		getURL: function( col, row, level ) {
+			var fill;
+			if ((col % 2 && !(row % 2)) || (!(col % 2) && row % 2)) {
+				fill = "255,255,255,0.2";
+			} else { 
+				fill = "0,0,0,0.2";
+			}
+	
+			var XY = " (" + col + "," + row +")";
+			var tiletms = " (" + col + "," + ((1 << level) - row - 1) + ")";
+			var tilequadtree = " " + TileToQuadKey( col, row, level);
+			
+			var iconSVG = '<svg width=\'256\' height=\'256\' xmlns=\'http://www.w3.org/2000/svg\'>' +
+							  '<rect width=\'256\' height=\'256\' style=\'fill:rgba(__FILL__);\'></rect>' +
+							  '<text x=\'20\' y=\'20\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'XY: __XY__\'>XY: __XY__</text>' +
+							  '<text x=\'20\' y=\'40\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'TMS: __TMS__\'>TMS: __TMS__</text>' +
+							  '<text x=\'20\' y=\'60\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'QK: __QUAD__\'>QK: __QUAD__</text>' +
+							  '<text x=\'20\' y=\'110\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'Zoom: __ZOOM__\'>Zoom: __ZOOM__</text>' +
+							  '<text x=\'20\' y=\'170\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(0,0,0);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'__ULEFT__\'>__ULEFT__</text>' +									  
+							  '<text x=\'20\' y=\'190\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(0,0,0);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'__LRIGTH__\'>__LRIGTH__</text>' +									  
+							  
+						  '</svg>',
+
+			svg = iconSVG
+				.replace(/__XY__/g, XY)
+				.replace(/__TMS__/g, tiletms)
+				.replace(/__QUAD__/g, tilequadtree)
+				.replace(/__ZOOM__/g, level)
+				.replace(/__FILL__/g, fill);
+
+			var lleft = tileToLat(row + 1 ,level) + ',' + tileToLng(col,level),
+				urigth = tileToLat(row,level) + ',' + tileToLng(col + 1 ,level);
+			svg = svg.replace(/__ULEFT__/g, lleft);
+			svg = svg.replace(/__LRIGTH__/g, urigth);
+			
+			//console.log(lleft + "," + urigth);
+			//var str = "https://dhl.wigeogis.com/dhl01/api/wmswrapper.php?LAYERS=dhl01:dhltemproutes&AVOIDCACHE=1516192818350&SRS=EPSG:900913&CRS=EPSG:900913&TRANSPARENT=true&FORMAT=image%2Fpng8&SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&STYLES=&BBOX=" + lleft + "," + urigth + "&WIDTH=256&HEIGHT=256";
+			//console.log(str);
+			//return str;
+			
+			return 'data:image/svg+xml;base64,' + btoa(svg);
+		}
+	});
+
+	var infoLayer = new H.map.layer.TileLayer(infoProvider);
+
+	map.addLayer(infoLayer);
+
+	var handleOverlay = function(checked)
+	{
+		if(checked)
+			map.addLayer(infoLayer);
+		else
+			map.removeLayer(infoLayer);
+	}
+	
+	var handleOverlayPDEFC1 = function(checked)
+	{
+		fc1 = checked;
+		displayPdeTileBorders();
+	}
+	
+	var handleOverlayPDEFC2 = function(checked)
+	{
+		fc2 = checked;
+		displayPdeTileBorders();
+	}
+	
+	var handleOverlayPDEFC3 = function(checked)
+	{
+		fc3 = checked;
+		displayPdeTileBorders();
+	}
+	
+	var handleOverlayPDEFC4 = function(checked)
+	{
+		fc4 = checked;
+		displayPdeTileBorders();
+	}
+	
+	var handleOverlayPDEFC5 = function(checked)
+	{
+		fc5 = checked;
+		displayPdeTileBorders();
+	}
+	
+	map.addEventListener("mapviewchangeend", displayPdeTileBorders);
+	
+	function displayPdeTileBorders(e)
+	{
+		if(fc1 || fc2 || fc3 || fc4 || fc5)
+		{
+			pdeBounds.removeAll();
+			var viewBounds = map.getViewBounds(),
+				fcColors = ["rgba(0, 0, 255, 0.2)", "rgba(34, 34, 255, 0.2)", "rgba(68, 68, 255, 0.2)", "rgba(102, 102, 255, 0.2)", "rgba(136, 136, 255, 0.2)"]
+			 
+			var minY = viewBounds.getBottom(),
+				maxY = viewBounds.getTop(),
+				minX = viewBounds.getLeft(),
+				maxX = viewBounds.getRight(),
+				tileX,
+				tileY,
+				tileSizeDegree,
+				fcLayers = [1,2,3,4,5],
+				i = 0,
+				level;
+
+            for (; i < fcLayers.length; i++) 
+			{
+				if(i == 0 && fc1 == false)
+					continue;
+				if(i == 1 && fc2 == false)
+					continue;
+				if(i == 2 && fc3 == false)
+					continue;
+				if(i == 3 && fc4 == false)
+					continue;
+				if(i == 4 && fc5 == false)
+					continue;
+				
+                level = fcLayers[i] + 8; 
+                tileSizeDegree = 180.0 / (1 << level);
+                for (tileY = Math.floor((minY + 90.0) / tileSizeDegree); tileY <= Math.floor((maxY + 90.0) / tileSizeDegree); tileY++) 
+				{
+                    for (tileX = Math.floor((minX + 180.0) / tileSizeDegree); tileX <= Math.floor((maxX + 180.0) / tileSizeDegree); tileX++) 
+					{
+						// display tile bounding box
+						var y = tileY * tileSizeDegree - 90.0,
+							x = tileX * tileSizeDegree - 180.0,
+							my = minY + tileSizeDegree - 0.00001,
+							mx = minX + tileSizeDegree - 0.00001;
+
+						bounds = new H.geo.Rect(my, x, y, mx);
+
+						rectangle = new H.map.Rect(bounds, {
+							style: {
+								lineWidth: 5,
+								strokeColor: fcColors[i],
+								fillColor: "rgba(0, 0, 0,0)",
+								lineJoin: "round"
+							}
+						});
+						pdeBounds.addObject(rectangle);
+                    }
+                }
+            }
+		}
+		else
+		{
+			pdeBounds.removeAll();
+		}
+	}
+	
+</script>

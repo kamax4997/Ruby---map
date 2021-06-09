@@ -1,0 +1,1170 @@
+<%= javascript_include_tag "jszip.min.js" %>
+
+<% content_for :title, "RME with Road Signs Demo" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<h5>Please provide a trace to match with RME by either:</h5>
+	<ul>
+	  <li>Drag & drop a trace file (CSV, GPX, KML or NMEA) into below box</li>
+	  <li>Draw a trace by directly clicking onto the map </li>
+	  <li>Provided examples:
+	    <input id="example1" class="btn btn-default btn-sm" type="button" value="Rome (GPX)" onclick="loadFromFile('sample_rome.gpx');"/>
+	    <input id="example2" class="btn btn-default btn-sm" type="button" value="Sheffield (CSV)" onclick="loadFromFile('sample_sheffield.csv');"/>
+	    <input id="example3" class="btn btn-default btn-sm" type="button" value="Frankfurt (KML)" onclick="loadFromFile('sample_frankfurt.kml');"/>
+	  </li>
+	</ul>
+	<h5>Input trace</h5>
+		<textarea id="tracetextarea" class="form-control" rows="10">LATITUDE,LONGITUDE
+50.06244,8.35238
+50.06344,8.35345
+50.06361,8.35451
+50.06338,8.35619
+</textarea>
+		<input class="btn btn-default btn-sm" type="button" value="Reset" onclick="reset();"/>
+		<input id="submittracebutton" class="btn btn-default btn-sm" type="button" value="Submit"/>
+		to <input type="text" id="rmeUrl" value="https://fleet.api.here.com/2/calculateroute.json?routeMatch=1&mode=fastest;car;traffic:disabled" autocomplete="off" size="40">
+		    <!--input type="text" id="rmeUrl" value="http://rme-ci.hls.solo-experiments.com/2/matchroute.json?routemode=car" autocomplete="off" size="40"-->
+	<h5>Customize view</h5>
+	<ul>
+		<li style="color: black;"><input id="inputCheckbox" type="checkbox" checked="checked" autocomplete="off" onclick="toggleShowInputTracePoints(this)"/> Input trace points</li>
+		<li style="color: green;"><input id="matchedCheckbox" type="checkbox" checked="checked" autocomplete="off" onclick="toggleShowRmeMatchedTraceAndPoints(this)"/> Display Matched Points and route</li>
+		<li style="color: black;"><input id="showResponse" type="checkbox" autocomplete="off" onclick="toggleShowResponse(this)"/> Show/Display Response</li>
+		<li style="color: black;"><input id="filterByConfidenceCheckbox" type="checkbox" autocomplete="off" onclick="filterLinksByConfidence()"/> Filter links by confidence</li>
+	</ul>
+	<p id="confidenceControl" style="display: none">
+		<label for="confidenceFilter">Filter links by confidence</label><br/>
+		(Green is higher confidence, red is lower confidence)<br/>
+		<input id="confidenceFilter" type="range" min="0.0" max="0.90" step="0.05" value="0.0" onchange="filterLinksByConfidence();"/><br/>
+	</p>
+	<h5>Warnings</h5>
+		<textarea id="warningstextarea" autocomplete="off" class="form-control" rows="5">Please submit...</textarea>
+	<h5 id="responseHeadline" style="display: none">RME Response</h5>
+		<textarea id="responsetextarea" class="form-control" rows="3" style="display: none" onkeyup="displayRmeResponse();"></textarea>
+	<h5 style="display:none">Polyline</h5>
+		<textarea id="polylinetextarea" autocomplete="off" class="form-control" rows="5" style="display:none">Please submit...</textarea>
+
+</div>
+
+<div id="pageblock"></div>
+<div id="spinner"></div>
+<div id="mapContainer"></div>
+<script type="text/javascript">
+
+	Spinner.showSpinner();
+	// author DomSchuette 
+	// (C) HERE  2018
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	var secure = (location.protocol === 'https:') ? true : false; // check if the site was loaded via secure connection
+
+	var mapContainer = document.getElementById('mapContainer');
+	var platform = new H.service.Platform({	app_code: app_code,	app_id: app_id,	useHTTPS: secure });
+	var	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+	var	map = new H.Map(mapContainer, maptypes.normal.map, { center: center, zoom: zoom });
+	var zoomToResult = true;
+	var uTurn = false;
+	
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width()); // Do not draw underneath control panel
+
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map)); // add behavior control
+	var ui = H.ui.UI.createDefault(map, maptypes); // add UI
+
+	platform.configure(H.map.render.panorama.RenderEngine); // setup the Streetlevel imagery
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var	objContainer = new H.map.Group();
+	var inputTracePointGroup = new H.map.Group();
+	var matchedTracePointGroup = new H.map.Group();
+
+	// confidence filter
+	var minConfidence = document.getElementById("confidenceFilter").value;
+  	var lastRespJsonObj = null;
+  	var DEFAULT_CONFIDENCE_LINK_STYLE = {lineWidth: 8, strokeColor: 'rgba(18, 65, 145, 0.7)', lineJoin: 'round'};
+  	var HOVER_LINK_STYLE = {lineWidth: 8, strokeColor: 'rgba(255, 65, 145, 1)', lineJoin: "round"};
+  	var DEFAULT_OFFSET_STYLE = {lineWidth: 1, strokeColor: 'green', lineJoin: 'round'};
+  	var DEFAULT_TRACE_STYLE = {lineWidth: 1, strokeColor: 'black', lineJoin: 'round'};
+  	var linkHighlighted = false;
+
+  	// icon/markers  		
+	var icons = {};
+
+	// Info Bubbles for LinkInfo display
+	var linkDataInfoBubble;
+
+	// TOPO SEG -> LINK_ID 
+	var layers = new Object();
+	var pdeManager = new PDEManager(app_id, app_code, layers);
+	var linkToTopo = {}
+	
+	// initial load the config
+	var BASEURL = 'https://cit.autodemos.here.com',
+		version,
+		dataUrlSpeed_NA, 
+		dataUrlSpeed, 
+		dataUrlSpeed_proto_NA,
+		dataUrlSpeed_proto,
+		dataUrlTopo_NA, 
+		dataUrlTopo, 
+		dataUrlTopo_proto_NA,
+		dataUrlTopo_proto,
+		lastVersionNA,
+		lastVersion,
+		lastVersionTopoNA,
+		lastVersionTopo,
+		NAMode,
+		linkIDtoTopo = {};
+		topoIDtoLinkID = {};
+	loadConfig();
+	
+	/**
+		Method that takes the input trace from trace text area and sends it to RME
+	*/
+	var submitTrace = function () {
+		objContainer.removeAll();
+		linkIDtoTopo = {};
+		topoIDtoLinkID = {};
+		
+		document.getElementById("warningstextarea").value = '';
+		// if there is an app_id specified in the URL then use it, otherwise use the default
+		var url = document.getElementById('rmeUrl').value;
+        var appIdRegEx= /[\?&]app_id=/i;
+        var appCodeRegEx= /[\?&]app_code=/i;
+        if( url.search( appIdRegEx ) === -1 && url.search( appCodeRegEx ) === -1 ) {
+			if( ! url.endsWith( "&" ) ) url= url.concat( "&" );
+            url= url.concat( "app_id=" + app_id_cors + "&app_code=" + app_code_cors );
+        }
+        if( ( url.search( appIdRegEx ) >= 0 && url.search( appCodeRegEx ) < 0 ) || ( url.search( appIdRegEx ) < 0 && url.search( appCodeRegEx ) >= 0 ) ) {
+            alert('If you provide credentials in the RME URL field, please provide both app_id AND app_code.');                
+            return;
+        }
+		// create the icons if needed, ok we make some more icons as needed for GPX inputs
+		var text = document.getElementById('tracetextarea').value;   
+		var lines = text.split(/\r|\r\n|\n/);
+		var count = lines.length;
+		createIcons(count);		
+		
+		if (url.indexOf("matchroute.json") >= 0) { // old, send GET request
+			var zip = new JSZip();
+			zip.file("temp.zip", document.getElementById('tracetextarea').value);
+			var content = zip.generate({type : "base64" , compression: "DEFLATE", compressionOptions : {level:6} });
+			url += "&file=" + encodeURIComponent(content);
+			getJSONP(url, gotRouteMatchResponse);
+		} else { // new: calculateroute.json, send POST request
+				content = document.getElementById('tracetextarea').value;
+			$.ajax({
+                url: url + "&attributes=LINK_ATTRIBUTE_FCn(ISO_COUNTRY_CODE),TOPO_SEG_LINK_FCn(*),TOPO_SEG_ID_FCn(*),SPEED_LIMITS_FCn(*)",
+                dataType: "json",
+                async: true,
+                type: 'post',
+				data:content,
+				contentType: 'application/octet-stream',
+                success: function(data) {
+                    gotRouteMatchResponse(data);
+                },
+                error: function(xhr, status, e) {
+                    alert((xhr.responseJSON.issues[0].message ? xhr.responseJSON.issues[0].message :  xhr.responseJSON.issues[0] ) || xhr.responseJSON);
+                }
+            });
+		}		
+	};
+	document.getElementById('submittracebutton').onclick = submitTrace;
+	var toggleCheckboxesError = function() {
+		window.alert('Please, submit a trace first');
+
+		document.getElementById('geocodedWithHeadingCheckbox').checked = false;
+		document.getElementById('geocodedWithoutHeadingCheckbox').checked = false;
+
+	};
+
+  	/**
+		Method to reset last results
+  	*/
+	function reset() {
+		var traceTextArea = document.getElementById('tracetextarea');
+		traceTextArea.value = '';
+		objContainer.removeAll();
+		inputTracePointGroup.removeAll();
+		matchedTracePointGroup.removeAll();
+		document.getElementById("warningstextarea").value = '';
+		document.getElementById("responsetextarea").value = '';
+		lastRespJsonObj = null;
+		linkHighlighted = false;
+		if(linkDataInfoBubble){linkDataInfoBubble.close();}
+		linkIDtoTopo = {};
+		topoIDtoLinkID = {};
+	}
+	
+	var mapEventListener = function(currentEvent){
+		if(!linkHighlighted) {
+			// only react on click in map if no link is highlighted (to show the link info popup)
+			var traceTextArea = document.getElementById('tracetextarea');
+			if (traceTextArea.value.lastIndexOf('SEQNR,\tLATITUDE,\tLONGITUDE', 0) != 0) traceTextArea.value = 'SEQNR,\tLATITUDE,\tLONGITUDE';
+			var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+			var numLines = traceTextArea.value.split(/\r*\n/).length;
+			document.getElementById('tracetextarea').value += "\n" + (numLines - 1) + ",\t" + (Math.round(lastClickedPos.lat * 100000.0) / 100000.0) + ",\t" + (Math.round(lastClickedPos.lng * 100000.0) / 100000.0);
+			zoomToResult = false;
+			submitTrace();
+		}
+	}
+
+	map.addEventListener('tap', mapEventListener);
+
+	document.getElementById('tracetextarea').addEventListener(
+			'dragover', function handleDragOver(evt) {
+				evt.stopPropagation();
+				evt.preventDefault();
+				evt.dataTransfer.dropEffect = 'copy';
+			},
+		false
+	);
+
+	document.getElementById('tracetextarea').addEventListener(
+		'drop', function(evt) {
+			evt.stopPropagation();
+			evt.preventDefault();
+			var files = evt.dataTransfer.files;
+			var file = files[0];
+			var r = new FileReader();
+			r.onload = function(e) { 
+				document.getElementById('tracetextarea').value = r.result;
+				submitTrace();
+			}
+			r.readAsText(file);
+		},
+		false
+	);
+
+	/**
+		Method that checks if confidence control should be enabled/disabled and triggers a re-display of the last RME response
+	*/
+	function filterLinksByConfidence() {
+		if(document.getElementById('filterByConfidenceCheckbox').checked) {
+			// show confidence control
+			document.getElementById("confidenceControl").style.display = '';			
+		} else {
+			// hide confidence control
+			document.getElementById('confidenceControl').style.display = 'none';
+		}
+		// remove already existing links from display
+		try {
+			objContainer.removeAll(); 
+		} catch (e) {}
+	    if(lastRespJsonObj != null) {
+	    	gotRouteMatchResponse(lastRespJsonObj, null);
+	    }
+	}
+
+	/**
+		Method that triggers the rendering of the given response
+	*/
+	function displayRmeResponse() {
+		// remove already existing links from display
+		try {
+			objContainer.removeAll(); 
+		} catch (e) {}
+		// clear input trace area as we do not know it
+		document.getElementById('tracetextarea').value = '';
+		// visualize response via normal RME response callback
+	    if(document.getElementById("responsetextarea").value != null) {
+	    	var jsonObj = null;
+	    	try {
+	    		jsonObj = JSON.parse(document.getElementById("responsetextarea").value);
+	    	} catch (e) {}
+		    if(jsonObj !== null) {
+		    	// create cached tracepoint icons
+		    	if(jsonObj.TracePoints !== null) {
+		    		createIcons(jsonObj.TracePoints.length);	
+		    	} else if(jsonObj.response.route !== null && jsonObj.response.route[0].waypoint !== null ) {
+					createIcons(jsonObj.response.route[0].waypoint.length);	
+		    	}
+		    	gotRouteMatchResponse(jsonObj, null);
+		    }
+	    }
+	}
+
+	/**
+		Callback that is used to parse the RME response and create map display objects
+	*/
+	var gotRouteMatchResponse = function (respJsonObj) {
+		try {
+			inputTracePointGroup.removeAll();
+			matchedTracePointGroup.removeAll();
+		} catch (e) {}
+
+		if (respJsonObj.error != undefined || respJsonObj.faultCode != undefined || respJsonObj.type) {
+			alert(respJsonObj.message + "\nStatus: " + respJsonObj.responseCode);
+			return;
+		}
+		// safe json 
+		lastRespJsonObj = respJsonObj;
+		document.getElementById("responsetextarea").value =  JSON.stringify(lastRespJsonObj, undefined, 5);
+		
+		// parse links and show on map
+		var routeLinks = respJsonObj.RouteLinks;
+		var originalTraceStrip = null;
+		if (routeLinks == undefined) { // new calculateroute response
+			// draw the route
+			routeLinks = respJsonObj.response.route[0].leg[0].link;
+			getTilesToLoad(routeLinks);
+			// draw the original and the matched trace points
+			tracePoints = respJsonObj.response.route[0].waypoint;
+			
+			for (var l = 0; l < tracePoints.length; l++) {
+				var p = tracePoints[l];
+				inputTracePointGroup.addObject(new H.map.Marker(new H.geo.Point(p.originalPosition.latitude, p.originalPosition.longitude), {icon: icons["#000000" + l]}));
+				matchedTracePointGroup.addObject(new H.map.Marker(new H.geo.Point(p.  mappedPosition.latitude, p.  mappedPosition.longitude), {icon: icons["#00FF00" + l]}));
+
+				// show the original and matched offset
+				if(document.getElementById('filterByConfidenceCheckbox').checked) {
+					var offsetStrip = new H.geo.Strip();
+					if(originalTraceStrip == null) {
+						originalTraceStrip = new H.geo.Strip();
+					}
+					offsetStrip.pushLatLngAlt(p.lat, p.lon, null);
+					offsetStrip.pushLatLngAlt(p.latMatched, p.lonMatched, null);
+					objContainer.addObject(new H.map.Polyline(offsetStrip, {zIndex: 4, style: DEFAULT_OFFSET_STYLE}));
+					originalTraceStrip.pushLatLngAlt(p.lat, p.lon, null);
+				}
+			}
+
+		} else { // old routematch response
+			// draw the route
+			getTilesToLoad(routeLinks);
+			// draw the original and the matched trace points
+			tracePoints = respJsonObj.TracePoints;
+			for (var l = 0; l < tracePoints.length; l++) {
+				var p = tracePoints[l];
+				inputTracePointGroup.addObject(new H.map.Marker(new H.geo.Point(p.lat       , p.lon       ), {icon: icons["#000000" + l]}));
+				matchedTracePointGroup.addObject(new H.map.Marker(new H.geo.Point(p.latMatched, p.lonMatched), {icon: icons["#00FF00" + l]}));
+
+				// show the original and matched offset
+				if(document.getElementById('filterByConfidenceCheckbox').checked) {
+					var offsetStrip = new H.geo.Strip();
+					if(originalTraceStrip == null) {
+						originalTraceStrip = new H.geo.Strip();
+					}
+					offsetStrip.pushLatLngAlt(p.lat, p.lon, null);
+					offsetStrip.pushLatLngAlt(p.latMatched, p.lonMatched, null);
+					objContainer.addObject(new H.map.Polyline(offsetStrip, {zIndex: 4, style: DEFAULT_OFFSET_STYLE}));
+					originalTraceStrip.pushLatLngAlt(p.lat, p.lon, null);
+				}
+			}
+		}
+		
+		if(originalTraceStrip !== null) {
+			objContainer.addObject(new H.map.Polyline(originalTraceStrip, {zIndex: 4, style: DEFAULT_TRACE_STYLE}));
+		}
+		
+	    toggleShowInputTracePoints(document.getElementById('inputCheckbox'));
+	    toggleShowRmeMatchedTraceAndPoints(document.getElementById('matchedCheckbox'));
+		
+		map.addObject(objContainer);
+		if (zoomToResult) map.setViewBounds(objContainer.getBounds());
+		zoomToResult = true;
+		// should display the warnings … warnings = respJsonObj.Warnings;  if (warnings.length > 0) …
+		mapVersion = respJsonObj.mapVersion; // RME's map version. Use it to cross reference with PDE.
+
+		var warningsArea = document.getElementById("warningstextarea");
+		if(respJsonObj.Warnings == undefined || respJsonObj.Warnings.length === 0) {
+			warningsArea.value += 'No Warnings.';
+		} else {
+			for(var d = 0; d < respJsonObj.Warnings.length; d++) {
+				if(0 !== d) warningsArea.value += '\n';
+				warningsArea.value += respJsonObj.Warnings[d].text;
+			}
+		}
+	};
+	
+	/**
+		Helper to parse a file from sample data. With that a RME request is automatically triggered
+	*/
+	var loadFromFile = function (filename) {
+		var req = new XMLHttpRequest();
+		req.open('GET', '/sample_data/' + filename);
+		req.onreadystatechange = function() {
+			if (req.readyState != XMLHttpRequest.DONE) return;
+			document.getElementById('tracetextarea').value = req.responseText;
+			submitTrace();
+		}
+		req.send();
+	}
+
+	/**
+		Helpers for customize view
+	*/
+	toggleShowInputTracePoints = function (checkbox) {
+		if (!checkbox.checked) {
+			if(inputTracePointGroup !== null)
+				objContainer.removeObject(inputTracePointGroup);
+			return;
+		} else {
+			objContainer.addObject(inputTracePointGroup);
+		}
+	};
+	toggleShowRmeMatchedTraceAndPoints = function (checkbox) {
+		if (!checkbox.checked) {				
+			objContainer.removeObject(matchedTracePointGroup);
+			return;
+		} else {
+			objContainer.addObject(matchedTracePointGroup);
+		}
+	};
+	toggleShowResponse = function (checkbox) {
+		if (checkbox.checked) {				
+			document.getElementById("responseHeadline").style.display = '';
+			document.getElementById("responsetextarea").style.display = '';
+			return;
+		} else {
+			document.getElementById("responseHeadline").style.display = 'none';
+			document.getElementById("responsetextarea").style.display = 'none';
+		}
+	};
+	
+	var getTilesToLoad = function (routeLinks)
+	{
+		var map = {};
+		for (var l = 0; l < routeLinks.length; l++) {
+			if(document.getElementById('filterByConfidenceCheckbox').checked) {
+				if (routeLinks[l].confidence < document.getElementById('confidenceFilter').value) {
+			        continue;
+			    }
+			}
+			
+			var iso = routeLinks[l].attributes.LINK_ATTRIBUTE_FCN[0]['ISO_COUNTRY_CODE'];
+			if(iso == "CAN" || iso == "PRI" || iso == "USA")
+				NAMode = true;
+			else
+				NAMode = false;
+			var callingCalculateRoute = true;
+			if(typeof(routeLinks[l].shape) == "string")
+				callingCalculateRoute = false;
+			
+			var coords1 =  callingCalculateRoute ? routeLinks[l].shape : routeLinks[l].shape.split(" "); //in calculateroute resource ths shape is already returned as array
+			var coords2 = new H.geo.Strip();
+			if (routeLinks[l].offset && routeLinks[l].offset < 1) {
+		    	if (routeLinks[l].linkId < 0){
+		    		distance = (1 - routeLinks[l].offset) * (callingCalculateRoute ? routeLinks[l].length : routeLinks[l].linkLength); //if  offset is set calculate new length of the link, caclulateroute.json resource returns back the link length in the length json field while matchroute.json returns it in linkLength
+				 } else {
+					distance = routeLinks[l].offset * (callingCalculateRoute ? routeLinks[l].length : routeLinks[l].linkLength); //if  offset is set calculate new length of the link
+				 }
+			    coords1 = getCoordsWithOffset(coords1, distance, l, routeLinks.length);
+			} 
+			for (var c = 0; c < coords1.length; c += 2){
+				coords2.pushLatLngAlt(coords1[c], coords1[c+1], null); //if it is not offset link, just add new point
+				map[getTileXY(coords1[c], coords1[c+1])] = true;
+			}
+		}
+		// load tiles
+		loadRoadSignTiles(map);
+	}
+
+	/**
+		Helper to create the line style based on the links confidence value
+	*/
+	function makeConfidenceAwareStyle(c) {
+		if(!document.getElementById('filterByConfidenceCheckbox').checked) {
+			// default blue RME links
+			return lineStyle =  {lineWidth: 8, strokeColor: "rgba(18, 65, 145, 0.7)", lineJoin: "round"};
+		}
+		if (c === undefined) {
+		  // support rme versions without confidence on result.
+		  return DEFAULT_CONFIDENCE_LINK_STYLE;
+		}
+		var color;
+		var MAX_CONF = 1.0;
+		if (c > MAX_CONF) {
+		  color = 'green';
+		} else if (c <= 0.01) {
+		  color = 'red';
+		} else {
+		  var greenPart = c;
+		  var redPart = MAX_CONF - c;
+
+		  var red = Math.floor(255 * redPart / MAX_CONF);
+		  var green = Math.floor(255 * greenPart / MAX_CONF);
+
+		  color = 'rgba(' + red + ', ' + green + ', 0, 0.7)';
+
+		}
+		return {lineWidth: 8, strokeColor: color, lineJoin: 'round'};
+	}
+	
+	var getCoordsWithOffset = function (coords1, distance, currentLink, numberOfLinks){
+	
+	 var temp = [];
+	 var prevCoord = [coords1[0], coords1[1]];
+		for (var c = 0; c < coords1.length; c += 2){
+			var linkLength = getKartesianDistanceInMeter(prevCoord[0], prevCoord[1], coords1[c], coords1[c+1]);  //calculate distance to the next point           // if this is a link with offset, do calculations for the offset
+			   if ((distance - linkLength) < 0) {        //if offset is not reached add new point
+			       	 // var midPoint = getMidPoint(prevCoord[0], prevCoord[1], coords1[c], coords1[c+1], linkLength - distance);  //if offset is reached calculate new point based on the distance from the first point, and angle of the link.
+			       	  var midPoint = getMidPoint(prevCoord[0], prevCoord[1], coords1[c], coords1[c+1], distance);  //if offset is reached calculate new point based on the distance from the first point, and angle of the link.
+			       	  var midPointIndex = c;
+	    		   	  break;
+	    	   } else {
+		           distance = distance - linkLength;
+
+	    	   }
+			prevCoord[0] = coords1[c];
+			prevCoord[1] = coords1[c + 1];
+	    }
+		 if(!midPoint) {
+		    var midPoint = getMidPoint(coords1[coords1.length - 4], coords1[coords1.length - 3], coords1[coords1.length - 2], coords1[coords1.length - 1], distance);  //if offset is reached calculate new point based on the distance from the first point, and angle of the link.
+		   	var midPointIndex = coords1.length - 2;
+		 }
+		 if (currentLink == 0 || uTurn){
+			 if (uTurn) uTurn = false;	
+			 temp.push(String(midPoint[0]));
+			 temp.push(String(midPoint[1]));
+			 for (var c = midPointIndex; c < coords1.length; c += 1){
+				 temp.push(coords1[c]);
+			 }
+		 } else {                                         
+			 if (currentLink != numberOfLinks-1) uTurn = true;         
+			 for (var c = 0; c < midPointIndex; c += 1){
+				 temp.push(coords1[c]);
+			 }
+			 temp.push(midPoint[0]);
+			 temp.push(midPoint[1]);
+		 }
+
+		 return temp;
+	}
+	
+
+	var getKartesianDistanceInMeter = function(lat1, lon1, lat2, lon2)
+	{
+		var earthRadius = 6371000;
+		// convert input parameters from decimal degrees into radians
+		var phi1 = (lat1) * Math.PI / 180;	  
+		var phi2 = (lat2) * Math.PI / 180;
+		var dphi = phi2 - phi1;
+		var dl = (lon2 - lon1) * (Math.PI / 180);
+
+		var a = Math.sin(dphi/2) * Math.sin(dphi/2) +
+		            Math.cos(phi1) * Math.cos(phi2) *
+		            Math.sin(dl/2) * Math.sin(dl/2);
+		var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+		return earthRadius * c;
+	}
+    
+      var getMidPoint = function(lat1, lon1, lat2, lon2, distance)
+    {
+    	 /* var lon = ratio*lon1 + (1.0 - ratio)*lon2;
+    	  var lat = ratio*lat1 + (1.0 - ratio)*lat2;*/
+    	  
+	      var heading = getHeading(lat2,lon2,lat1,lon1);
+    	  var shiftedLatLon = shiftLatLon(lat1, lon1, ((parseFloat(heading) + 180) % 360), distance);  // only 180 degrees to go into the opposite direction
+    	  
+	    return shiftedLatLon;
+    }
+    
+  	function getHeading(lat1,lng1,lat2,lng2)
+	{
+		var phi1 = lat1 * (Math.PI / 180),
+			phi2 = lat2 * (Math.PI / 180),
+			dl = (lng2 - lng1) * (Math.PI / 180),
+			y = Math.sin(dl) * Math.cos(phi2),
+			x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dl),
+			t = Math.atan2(y, x);
+
+		return Math.round(((t * 180 / Math.PI) + 360) % 360);
+	};
+	
+	/**
+	This method shifts the given lat and long along given bearing to the given distance
+	*/
+	function shiftLatLon(latDegrees, lonDegrees, bearing, distance)
+	{
+		var earthRadius = 6371000;
+		// convert input parameters from decimal degrees into radians
+		var latRad = (latDegrees) * Math.PI / 180;
+		var lonRad = (lonDegrees) * Math.PI / 180;
+
+		var bearingRad = bearing * Math.PI / 180;
+		var distRad = distance / earthRadius;
+
+		var latNewRad = Math.asin(Math.sin(latRad) * Math.cos(distRad) + Math.cos(latRad) * Math.sin(distRad)
+		* Math.cos(bearingRad));
+		var lonNewRad = lonRad
+		+ Math.atan2(Math.sin(bearingRad) * Math.sin(distRad) * Math.cos(latRad), Math.cos(distRad) - Math.sin(latRad)
+		* Math.sin(latNewRad));
+
+		// convert input parameters from radians into decimal degrees
+		var latNewDegrees = latNewRad * 180 / Math.PI;
+		var lonNewDegrees = lonNewRad * 180 / Math.PI;
+		var latLonRet = [];
+		latLonRet.push(latNewDegrees);
+		latLonRet.push(lonNewDegrees);
+		return latLonRet;
+	}
+
+	/**
+		Create matched/unmatched markers that can be used to draw the original/matched tracepoints. They are just created and stored
+	*/
+	var createIcons = function(count)
+	{
+		for(var i = 0; i < count; i++)
+		{
+			if(icons["red" + i] === undefined)
+				icons["red" + i] = createIcon("red", i);
+			if(icons["blue" + i] === undefined)
+				icons["blue" + i] = createIcon("blue", i);
+			if(icons["#000000" + i] === undefined)
+				icons["#000000" + i] = createIcon("#000000", i);
+			if(icons["00FF00" + i] === undefined)
+				icons["#00FF00" + i] = createIcon("#00FF00", i);
+		}
+		
+		var speeds = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 120, 130, 000]
+		for(var i = 0; i < speeds.length; i++)
+		{
+			var speed = speeds[i];
+			if(icons["speed" + speed] === undefined)
+				icons["speed"+speed] = createSpeedIcon(speed);
+		}
+	}
+	
+	// generate speed icons
+	var signTemplate = '<svg xmlns="http://www.w3.org/2000/svg" height="32" width="32"><circle cx="16" cy="16" r="12" stroke="red" stroke-width="5" fill="white" /><text x="16" y="16" fill="black" text-anchor="middle" alignment-baseline="central" font-weight="bold">__NO__</text></svg>';
+	
+	var createSpeedIcon = function(speed)
+	{
+		return new H.map.Icon(signTemplate.replace(/__NO__/g, speed), ({'anchor': {'x': 32 / 2,'y': 32 / 2}	}))
+	}
+	
+	/**
+		Creates icons with Text (used for tracepoint sequence number)
+	*/
+	var createIcon = function (color, text)
+	{
+		var canvas = document.createElement('canvas'),
+			width = 28,
+			height = 16,
+			fontSize = 10;
+			
+		canvas.width = width;
+		canvas.height = height;
+
+		ctx = canvas.getContext('2d');
+			
+		ctx.strokeStyle = color;
+		ctx.beginPath();
+		ctx.moveTo(14, 16);
+		ctx.lineTo(14, 9);
+		ctx.stroke();
+		ctx.closePath();
+
+		ctx.font = 'bold ' + fontSize + 'px Arial';
+		ctx.fillStyle = color;
+		ctx.textAlign = 'center'; 
+		ctx.fillText(text,14,8);
+
+		var icon = new mapsjs.map.Icon(canvas,
+					({
+						'anchor': {
+							'x': 14,
+							'y': 16
+						}
+					}));
+		delete canvas; 
+		return icon;
+	};
+
+	/**
+		Helper to highlight a link
+	*/
+	function createPointerEnterLinkHandler(polyline) {
+		return function (e) {
+			linkHighlighted = true;
+			polyline.setStyle(HOVER_LINK_STYLE);
+		};
+	}
+
+  	/**
+		Helper to disable highlight of a link
+	*/
+  	function createPointerLeaveLinkHandler(polyline) {
+		return function (e) {
+			linkHighlighted = false;
+			if(polyline.getData().attributes.TOPO_SEG_ID_FCN == undefined)
+				polyline.setStyle({lineWidth: 8, strokeColor: "rgba(255, 0, 0, 0.7)", lineJoin: "round"});
+			else
+				polyline.setStyle(makeConfidenceAwareStyle(polyline.getData().confidence));
+			
+		};
+	}
+
+	/**
+		Shows popup with link info
+	*/
+	function createTapLinkHandler(polyline) {
+		return function (e) {
+			var strip = polyline.getGeometry();
+			var lowIndex = Math.floor((strip.getPointCount() - 1) / 2);
+			var highIndex = Math.ceil(strip.getPointCount() / 2);
+			var center;
+			if (lowIndex === highIndex) {
+				center = strip.extractPoint(lowIndex);
+			} else {
+			var lowPoint = strip.extractPoint(lowIndex);
+			var highPoint = strip.extractPoint(highIndex);
+				center = new H.geo.Point((lowPoint.lat + highPoint.lat ) / 2, (lowPoint.lng + highPoint.lng) / 2);
+			}
+
+			var linkInfo = JSON.stringify(polyline.getData(), undefined, 5);
+			linkInfo = "<textarea readonly rows='10' cols='50' style='background-color:black;border:0;font-size:12px;max-width:350px;max-height:400px;'>" + linkInfo + "</textarea>";
+			if (!linkDataInfoBubble){
+				linkDataInfoBubble = new H.ui.InfoBubble(center,{content: linkInfo});
+				ui.addBubble(linkDataInfoBubble);	
+			}
+			else {
+				linkDataInfoBubble.setPosition(center);
+	  			linkDataInfoBubble.setContent(linkInfo);
+			}
+	  		linkDataInfoBubble.open();
+		};
+	}
+
+	/**
+		Get method with callback
+	*/
+	function getJSONP(url, callback) {
+		var cbnum = "s" + getJSONP.counter++;
+		var cbname = "getJSONP." + cbnum;
+		url += "&callback=" + cbname;
+		var script = document.createElement("script");
+		getJSONP[cbnum] = function(response) {
+			try {
+				callback(response);
+			}
+			finally {
+				delete getJSONP[cbnum];
+				script.parentNode.removeChild(script);
+			}
+		};
+		script.src = url;
+		script.onerror = function(data)	{
+			alert("Could not connect to RME.\nCheck connectivity and trace size.");
+		}
+		document.body.appendChild(script);
+	} getJSONP.counter = 0;
+	
+	
+	function loadConfig()
+	{
+		callService(BASEURL + "/road-signs-demo/api/datacatalog-lastversion", {dataCatalogName: "here-roadsigns-prod", layers : "speed-attributes"}, function(resp) { loadVersion(resp.version, false);});
+		callService(BASEURL + "/road-signs-demo/api/datacatalog-lastversion", {dataCatalogName: "here-roadsigns-na-prod", layers : "speed-attributes"}, function(resp) { loadNAVersion(resp.version, true);});
+		callService(BASEURL + "/road-signs-demo/api/layer-attributes", {dataCatalogName: "here-roadsigns-prod", layer: "speed-attributes"}, function(resp) { dataUrlSpeed = resp.dataUrl.replace("https://",""); });
+		callService(BASEURL + "/road-signs-demo/api/layer-attributes", {dataCatalogName: "here-roadsigns-na-prod", layer: "speed-attributes"}, function(resp) { dataUrlSpeedSpeed_NA = resp.dataUrl.replace("https://",""); });
+		callService(BASEURL + "/road-signs-demo/api/layer-attributes", {dataCatalogName: "here-roadsigns-prod", layer: "topology-geometry"}, function(resp) { dataUrlTopo = resp.dataUrl.replace("https://",""); });
+		callService(BASEURL + "/road-signs-demo/api/layer-attributes", {dataCatalogName: "here-roadsigns-na-prod", layer: "topology-geometry"}, function(resp) { dataUrlTopp_NA = resp.dataUrl.replace("https://",""); });
+		callService(BASEURL + "/road-signs-demo/api/layer-attributes", {dataCatalogName: "here-roadsigns-prod", layer: "schema"}, function(resp) { dataUrlSpeed_proto = resp.dataUrl.replace("https://",""); });
+		callService(BASEURL + "/road-signs-demo/api/layer-attributes", {dataCatalogName: "here-roadsigns-na-prod", layer: "schema"}, function(resp) { dataUrlSpeed_proto_NA = resp.dataUrl.replace("https://",""); });
+	}
+
+	function loadVersion(version)
+	{
+		callService(BASEURL + "/road-signs-demo/api/layer-lastversions", {dataCatalogName: "here-roadsigns-prod", layers: "speed-attributes", nLayerVersions: 9, version: version}, function(resp) { lastVersion = resp[0]; Spinner.hideSpinner();});
+		callService(BASEURL + "/road-signs-demo/api/layer-lastversions", {dataCatalogName: "here-roadsigns-prod", layers: "topology-geometry", nLayerVersions: 9, version: version}, function(resp) { lastVersionTopo = resp[0]; Spinner.hideSpinner();});
+	}
+	
+	function loadNAVersion(version)
+	{
+		callService(BASEURL + "/road-signs-demo/api/layer-lastversions", {dataCatalogName: "here-roadsigns-na-prod", layers: "speed-attributes", nLayerVersions: 9, version: version}, function(resp) { lastVersionNA = resp[0]; Spinner.hideSpinner(); });		
+		callService(BASEURL + "/road-signs-demo/api/layer-lastversions", {dataCatalogName: "here-roadsigns-na-prod", layers: "topology-geometry", nLayerVersions: 9, version: version}, function(resp) { lastVersionTopoNA = resp[0]; Spinner.hideSpinner();});
+	}
+	
+	function JSON_to_URLEncoded(element,key,list)
+	{
+		var list = list || [];
+		if(typeof(element)=='object')
+		{
+			for (var idx in element)
+				JSON_to_URLEncoded(element[idx],key?key+'['+idx+']':idx,list);
+		}
+		else
+		{
+			list.push(key+'='+encodeURIComponent(element));
+		}
+		return list.join('&');
+	}
+
+	function callService(url, body, success)
+	{
+		$.ajax({
+			url: url + "?app_id=" + app_id + "&app_code=" + app_code,
+			contentType: "application/x-www-form-urlencoded",
+			async: true,
+			type: 'post',
+			data: JSON_to_URLEncoded(body),
+			success: success,
+			error: function(xhr, status, e) {
+				alert("Error: " + e);
+			}
+		});
+	}
+	
+	function renderRouteLinkBased(links)
+	{
+		var path = [],
+			linkIds = [],
+			ctry = [];
+		
+		for(var i = 0; i < links.length; i++)
+		{
+			// render Link based
+			var callingCalculateRoute = true;
+			if(typeof(links[i].shape) == "string")
+				callingCalculateRoute = false;
+			var tmpPath = new Array();
+			
+			var coords1 = callingCalculateRoute ? links[i].shape : links[i].shape.split(" ");
+			var coords2 = new H.geo.Strip();
+			if (links[i].offset && links[i].offset < 1) {
+		    	if (links[i].linkId < 0){
+		    		distance = (1 - links[i].offset) * (callingCalculateRoute ? links[i].length : links[i].linkLength); //if  offset is set calculate new length of the link, caclulateroute.json resource returns back the link length in the length json field while matchroute.json returns it in linkLength
+				 } else {
+					distance = links[i].offset * (callingCalculateRoute ? links[i].length : links[i].linkLength); //if  offset is set calculate new length of the link
+				 }
+			    coords1 = getCoordsWithOffset(coords1, distance, i, links.length);
+			} 
+			
+			for (var c = 0; c < coords1.length; c += 2){
+				coords2.pushLatLngAlt(coords1[c], coords1[c+1], null); //if it is not offset link, just add new point
+				tmpPath.push({"lon": coords1[c+1], "lat": coords1[c], "z": 0});
+			}
+
+			var lineStyle = makeConfidenceAwareStyle(links[i].confidence);
+			
+			if(links[i].attributes.TOPO_SEG_ID_FCN == undefined)
+				lineStyle = {lineWidth: 8, strokeColor: "rgba(255, 0, 0, 0.7)", lineJoin: "round"};
+			
+			var linkPolyline = new H.map.Polyline(coords2, {zIndex: 3, style: lineStyle});
+			linkPolyline.setData(links	[i]);
+			linkPolyline.addEventListener('pointerenter', createPointerEnterLinkHandler(linkPolyline));
+      		linkPolyline.addEventListener('pointerleave', createPointerLeaveLinkHandler(linkPolyline));
+      		linkPolyline.addEventListener('tap', createTapLinkHandler(linkPolyline));
+			objContainer.addObject(linkPolyline);			
+
+			path.push(tmpPath);
+			linkIds.push(parseInt(links[i].linkId));
+			ctry.push(links[i].attributes.LINK_ATTRIBUTE_FCN[0]['ISO_COUNTRY_CODE']);
+		}
+		requestTopoIds(path, linkIds, ctry);
+	}
+
+	var requestTopoIds = function(path, linkIds, ctry)
+	{
+		for(var i = 0; i < path.length; i++)
+		{
+			var sh = path[i],
+				id = linkIds[i],
+				ct = ctry[i];
+			requestTopoId(sh, id, ct);
+		}
+	}
+	
+	var requestTopoId = function(sh, id, ct)
+	{
+		var req = new Object();
+		req.requests = new Array();
+		var request = new Object();
+		request.path = sh;
+		request.pvids = new Array();
+		request.pvids.push(id);
+		req.requests.push(request);
+		
+		 $.ajax({
+			type: "PUT",
+			url: "https://cms.cme.in.here.com/v1/topology/offset?threshold=1&buffer=1&clientId=ngsd",
+			data: JSON.stringify(req),
+			async: false,
+			context: ct,
+			success : function(resp)
+			{
+				if(resp.features != undefined && resp.features[0] != undefined && resp.features[0].properties.links != undefined && resp.features[0].properties.links[0] != undefined && resp.features[0].properties.links[0].topologyPvid != undefined)
+				{
+					linkIDtoTopo[resp.features[0].properties.links[0].pvid] = resp.features[0].properties.links[0].topologyPvid;
+					
+					var link = {};
+					link.linkId = resp.features[0].properties.links[0].pvid;
+					link.shape = new Array();
+					for(var i = 0; i < resp.features[0].geometry.coordinates[0].length; i++)
+					{
+						var cur = resp.features[0].geometry.coordinates[0][i];
+						link.shape.push(cur[1]);
+						link.shape.push(cur[0]);
+					}
+					link.direction = resp.features[0].properties.topologies[0].orientation;
+					
+					link.startOffset = resp.features[0].properties.topologies[0].startOffset;
+					link.endOffset = resp.features[0].properties.topologies[0].endOffset;
+					link.country = this;
+					
+					if(topoIDtoLinkID[resp.features[0].properties.links[0].topologyPvid] == undefined)
+					{
+						topoIDtoLinkID[resp.features[0].properties.links[0].topologyPvid] = {};
+						topoIDtoLinkID[resp.features[0].properties.links[0].topologyPvid].links = new Array();
+						topoIDtoLinkID[resp.features[0].properties.links[0].topologyPvid].direction = resp.features[0].properties.topologies[0].orientation;
+					}
+					else
+					{
+						var referenceOffset = topoIDtoLinkID[resp.features[0].properties.links[0].topologyPvid].links[0].endOffset;
+						if(referenceOffset > resp.features[0].properties.links[0].endOffset)
+							topoIDtoLinkID[resp.features[0].properties.links[0].topologyPvid].direction = "FORWARD";
+						else
+							topoIDtoLinkID[resp.features[0].properties.links[0].topologyPvid].direction = "BACKWARD";
+					}
+					topoIDtoLinkID[resp.features[0].properties.links[0].topologyPvid].links.push(link);
+				}
+				else
+					console.log(resp);
+			}
+		});		
+	}
+	
+	function renderResult()
+	{
+		var routeLinks = JSON.parse(document.getElementById("responsetextarea").value).response.route[0].leg[0].link,
+			warnings = "";
+		
+		// this will kick off the request of missing topo ids
+		renderRouteLinkBased(routeLinks);
+		
+		for(var i = 0; i < routeLinks.length; i++)
+		{
+			// use topology to made the offsets and render the applicable speed signs
+			var currentRouteLink = routeLinks[i],
+				linkId = currentRouteLink.linkId;
+				topoId = linkIDtoTopo[linkId] != undefined ? linkIDtoTopo[linkId] : 0;
+			
+			if(topoId == 0)
+				warnings += "\r\nCan't find Stable Topology for Link ID:" + currentRouteLink.linkId;
+					
+			var current = topoIDtoLinkID[topoId];
+			
+			if(current == undefined)
+			{
+				warnings += "\r\nCan't find Stable Topology for Link ID:" + currentRouteLink.linkId;
+				continue;
+			}
+			
+			var speeds = hdmapSpeedAttributes[topoId];
+			
+			if(speeds == undefined)
+			{
+				warnings += "\r\nCan't find HD Map Road Signs for Topology: " + topoId;
+				continue;
+			}
+			
+			var coords2 = new H.geo.Strip(),
+				linksInTopology = current.links,
+				speedOffsets = [];
+					
+			for(var s = 0; s < speeds.length; s++)
+			{
+				var curspeed = speeds[s];
+				if(curspeed.applies_to_direction == current.direction || curspeed.applies_to_direction == "BOTH")
+				{
+					var START_OFFSET = 0, 
+						END_OFFSET = 1;
+					
+					if (curspeed.applies_to_range.range_offset_from_start) {
+						START_OFFSET = curspeed.applies_to_range.range_offset_from_start;						
+					}
+
+					if (curspeed.applies_to_range.range_offset_from_end) {						
+						END_OFFSET = END_OFFSET - curspeed.applies_to_range.range_offset_from_end;						
+					}
+					if(curspeed.link_parametric_attribution[0] != null && curspeed.link_parametric_attribution[0].speed_limit != null && curspeed.link_parametric_attribution[0].speed_limit.value)
+						speedOffsets.push({START_OFFSET: START_OFFSET, END_OFFSET: END_OFFSET, speed: curspeed.link_parametric_attribution[0].speed_limit.value, direction: current.direction});
+				}
+			}
+				
+			var last_speed = -1;
+			for (var l = 0; l < linksInTopology.length; l++) 
+			{
+				var callingCalculateRoute = true,
+					link = linksInTopology[l];
+				if(typeof(link.shape) == "string")
+					callingCalculateRoute = false;
+				
+				var coords1 = callingCalculateRoute ? link.shape : link.shape.split(" ");	
+
+				if (link.offset && link.offset < 1)
+				{
+					if ((current.direction == "BACKWARD" && link.linkId > 0) || (current.direction == "FORWARD" && link.linkId < 0))
+					{
+						distance = (1 - routeLinks[l].offset) * (callingCalculateRoute ? routeLinks[l].length : routeLinks[l].linkLength); //if  offset is set calculate new length of the link, caclulateroute.json resource returns back the link length in the length json field while matchroute.json returns it in linkLength
+					} 
+					else 
+					{
+						distance = routeLinks[l].offset * (callingCalculateRoute ? routeLinks[l].length : routeLinks[l].linkLength); //if  offset is set calculate new length of the link
+					}
+					coords1 = getCoordsWithOffset(coords1, distance, l, routeLinks.length);
+				} 
+
+				for (var c = 0; c < coords1.length; c += 2)
+				{
+					coords2.pushLatLngAlt(coords1[c], coords1[c+1], null); //if it is not offset link, just add new point
+				}
+			}
+			
+			for (var l = 0; l < linksInTopology.length; l++) 
+			{
+				for(var n = 0; n < speedOffsets.length; n++)
+				{
+					var speed = speedOffsets[n].speed,
+						p;
+					
+					if(speedOffsets[n].direction == "BACKWARD")
+					{
+						
+						p = coords2.extractPoint((speedOffsets.length - 1)- n)
+					}
+					else
+					{
+						if(coords2.getPointCount() > n)
+							p = coords2.extractPoint(n);
+						else
+							p = coords2.extractPoint(coords2.getPointCount() -1);						
+					}
+				
+					console.log(speed);
+					if(last_speed == -1 || last_speed != speed)
+					{
+						var linkStartOffset = link.startOffset, 
+							linkEndOffset = link.endOffset, 
+							speedStartOffset = speedOffsets[n].START_OFFSET,
+							speedEndOffset = speedOffsets[n].END_OFFSET;
+// TODO FIXME
+						if((speedOffsets[n].direction == "FORWARD" && inRange(linkStartOffset, speedStartOffset, speedEndOffset)) || (speedOffsets[n].direction == "BACKWARD" && inRange(linkEndOffset, speedStartOffset, speedEndOffset)))
+						{
+							var speedUnit = "km/h";
+							var iso = link.country;
+							if(iso == "USA" || iso == "GBR" || iso == "PRI")
+							{
+								speedUnit = "mp/h";
+								speed = (speed * 0.6213711922).toFixed(0);
+							}
+							marker = new H.map.Marker(p, {icon: icons["speed" + speed]});
+							marker.$speed = speed;
+							marker.$unit = speedUnit;
+							
+							marker.addEventListener("pointerenter", function(e)
+								{
+									if(linkDataInfoBubble)
+									{
+										linkDataInfoBubble.close();
+									}
+									
+									if (!linkDataInfoBubble)
+									{
+										linkDataInfoBubble = new H.ui.InfoBubble(e.target.getPosition(),{content: "<div>Speed Limit: " + e.target.$speed + " " + e.target.$unit + "</div>"});
+										ui.addBubble(linkDataInfoBubble);	
+									}
+									else
+									{
+										linkDataInfoBubble.setPosition(e.target.getPosition());
+										linkDataInfoBubble.setContent("<div>Speed Limit: " + e.target.$speed + " " + e.target.$unit + "</div>");
+									}
+									linkDataInfoBubble.open();
+							});
+								
+							marker.addEventListener("pointerleave", function(e)
+							{
+								if(linkDataInfoBubble)
+									linkDataInfoBubble.close();
+							});
+							
+							objContainer.addObject(marker);	
+							last_speed = speed;
+						}
+					}
+				}
+			}
+		}
+		var curWarnings = document.getElementById("warningstextarea").value;
+		curWarnings += warnings;
+		document.getElementById("warningstextarea").value = curWarnings;
+	}
+
+	function inRange(x, min, max) {
+		return ((x-min)*(x-max) <= 0);
+	}
+	
+	function speedAttributsResult(resp)
+	{
+		requests--;
+		for(i in resp.decodedData.link_attribution)
+		{
+			var cur = resp.decodedData.link_attribution[i];
+			hdmapSpeedAttributes[cur.link_local_ref] = cur.parametric_attribution;
+		}
+		if(requests == 0)
+			renderResult();
+	}
+
+	var requests = 0;
+	function loadRoadSignTiles(map)
+	{
+		if(version != -1)
+		{
+			// load the speed limit tiles
+			hdmapSpeedAttributes = {};
+			
+			// {catalogName: "here-roadsigns-prod", layer: "topology-geometry", version: "225",…}
+			for (var tile in map)
+			{
+				requests++;
+				var url = BASEURL + "/road-signs-demo/api/partition-data";
+				
+				var data = { 
+								catalogName: "here-roadsigns-prod", 
+								dataUrl: NAMode ? dataUrlSpeedSpeed_NA : dataUrlSpeed, 
+								dataUrl_protoSchema: NAMode ? dataUrlSpeed_proto_NA : dataUrlSpeed_proto, 
+								layer: "speed-attributes", 
+								partition: tile.toString(), 
+								partitionBundle: "hdmap-speed-attributes-bundle", 
+								version: NAMode ? lastVersionNA.toString() : lastVersion.toString()
+							};
+				callService(url, data, speedAttributsResult);
+			}
+		}
+	}
+	
+	/* 
+	* helpers for tile generation
+	*/
+	function getTileXY(lat, lng)
+	{
+	    var level = 13,
+			tileSizeDegree = 180.0 / (1 << level),
+			tileX = (Math.floor((180 + Number(lng)) / tileSizeDegree)),
+			tileY = (Math.floor((90 + Number(lat)) / tileSizeDegree)),
+			qk = tileXYToQuadKey(tileX, tileY, 14),
+			pqk = "1" + qk,
+			pqk4 = parseInt(pqk, 4);
+			
+		return pqk4.toString(10);
+	}
+	
+	function tileXYToQuadKey(tileX, tileY, levelOfDetail) {
+        var quadKey = "";
+        for (i = levelOfDetail; i > 0; i--) {
+            digit = 0;
+            mask = 1 << (i - 1);
+            if ((tileX & mask) != 0) {
+                digit++;
+            }
+            if ((tileY & mask) != 0) {
+                digit++;
+                digit++;
+            }
+            quadKey += digit;
+        }
+        return quadKey;
+    };
+
+</script>

@@ -1,0 +1,2063 @@
+<%= javascript_include_tag "traffic-icons" %>
+<%= javascript_include_tag "jsts.min" %>
+
+<% content_for :title, "Traffic Signs" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	
+	 <h4><a data-toggle="collapse" data-target="#filter">Filter Signs</a></h4>
+	
+	<p id="mapReleaseTxt">After selecting the filters click on the Query Button, Once query has been completed the result can be exported to csv.</p>
+	<div class="form-horizontal" id="filter">
+		<div class="form-group">
+			<label class="control-label col-sm-4" >Region :</label>
+			<div class="col-sm-8">
+				
+				<select class="form-control" id="region" onchange="gotCountryData()">
+				</select>
+			</div>
+		</div>	
+		<div class="form-group">
+			<label class="control-label col-sm-4" >Country :</label>
+			<div class="col-sm-8">
+			
+			<select class="form-control" id="country" onchange="populateConditions()">
+				</select>
+			</div>
+		</div>		
+		<div class="form-group">
+			<label class="control-label col-sm-4" >Condition (Condition Type - Total Number):</label>
+			<div class="col-sm-8">
+			
+			<select class="form-control" id="conditionType"  onchange="populateTraffic()">
+				</select>
+			</div>
+		</div>	
+		<div class="form-group">
+			<label class="control-label col-sm-4" >Traffic Sign (Sign Type - Total Number):</label>
+			<div class="col-sm-8">
+			<select class="form-control" style="height:170px;" multiple id="trafficSign" >
+				</select>
+			</div>
+		</div>	
+		 <div class="form-group">
+            <div class="col-sm-4">
+				<input class="btn btn-default btn-sm" type="button" id="start" value="Query Sign Data" onclick="filterSigns(false)">
+			</div>
+			<div class="col-sm-4">
+				<input class="btn btn-default btn-sm" type="button" id="export" value="Query Result to CSV" onclick="createFile(false)">
+			</div>
+			<div class="col-sm-4">
+				<input class="btn btn-default btn-sm" type="button" id="export" value="Query Result to Json" onclick="createFile(true)">
+			</div>
+			<div class="col-sm-4">
+				<input class="btn btn-default btn-sm" type="button" id="export" value="Export Statistcs" onclick="createStatisticsFile()">
+			</div>
+			<div class="col-sm-4">
+				 <input class="btn btn-default btn-sm" type="button" id="export" value="Export Country Data (only csv)" onclick="filterSigns(true)"> 
+			</div>
+        </div>
+	</div>
+	<h4><a data-toggle="collapse" data-target="#routing">Routing</a></h4>
+	<p >Select traffic signs on the map to add to the Routing waypoint List or right click on the map to add a coordinate.
+	Waypoints could be imported using the following button.
+	</p>
+	<div class="form-horizontal" id="routing">
+		<div class="form-group">
+				<label class="control-label col-sm-8" >Import Trace File</label>
+				 <div class="col-sm-8">
+				 	<p><input type="file" autocomplete="off" onchange="readInputTraceFile(this.files[0]);" value="Import Trace File"></p>
+				</div> 
+				<label class="control-label col-sm-8" >Import Points File</label>
+				 <div class="col-sm-8">
+				 	<p><input type="file" autocomplete="off" onchange="readInputWaypointFile(this.files[0]);" value="Import Points File"></p>
+				</div> 				
+				<label class="control-label col-sm-9" >Reorder </label>
+				<div class="col-sm-12">
+					<ul id="sortable">
+					</ul>
+				</div>
+				<div class="col-sm-9">
+					<label><input id="recalcAuto" type="checkbox">Automatic Reroute?</input></label>
+				</div>
+				<div class="col-sm-9">
+					<label><input id="showAdas" type="checkbox" checked onclick="handleAdasSelection()">Display Adas Data</input></label>
+				</div>					
+				<div class="col-sm-9">
+					<div id="feedbackTxt"></div>
+				</div>
+				<div class="col-sm-4">
+					<input class="btn btn-default btn-sm" type="button" id="calcRoute" value="Calculate Route" onclick="calculateRoute()"/>
+				</div>
+				<div class="col-sm-4">
+					<input class="btn btn-default btn-sm" type="button" id="clear" value="Clear Route" onclick="reset()"/>
+				</div>
+				<label class="control-label col-sm-9" >Export File Name:</label>
+				<div class="col-sm-9">
+					<input class="form-control ui-autocomplete-input" type="text" id="routeFileName" value="RouteFile" />
+				</div>
+				<div class="col-sm-4">
+					<input class="btn btn-default btn-sm" type="button" id="export" value="Export Route csv" onclick="saveRouteShape(true)"/>
+				</div>
+				<div class="col-sm-4">
+					<input class="btn btn-default btn-sm" type="button" id="export" value="Export Route json" onclick="saveRouteShape(false)"/>
+				</div>
+		</div>
+	</div>
+</div>
+
+<div id="mapContainer"></div>
+
+<div id="pageblock"></div>
+<div id="spinner"></div>
+<div id="notification" style="display: none;">
+	<div class="container">
+		<div class="item"></div>
+	</div>	
+</div> 
+
+<style type="text/css">
+	.PO
+	{
+		position: absolute;
+		display: none;
+		background: white;
+		padding: 10px 10px 0px;
+		margin-left: -10px;
+		margin-top: 2em;
+		border-radius: 15px;
+		left: 50%; top: 50%;
+		border: solid #a1a1a1 1px;
+		padding: 10px;
+		font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+		text-align: justify;
+		font-size: 12px;
+		color: #1F2C35;
+		z-index: 1;
+	}
+	
+	#page_block
+	{
+		width: 100%;
+		height: 100%;
+		left: 0;
+		top: 0;
+		background: white;
+		opacity:0.6;
+		position: absolute;
+		display: none;
+	}
+	
+	#sortable
+	{ 
+		list-style-type: none; 
+		margin: 0; 
+		padding: 0; 
+		border: 2px solid  #48dad0;
+		border-radius: 5px;
+		margin : 5px;
+		margin-left: 0px;
+		padding : 5px;
+	}
+	
+	#sortable li
+	{
+		list-style-position:inside; 
+		border: 1px solid #00908a;
+		border-radius:5px; 
+		margin-bottom:2px; 
+		padding : 5px; 
+		padding-left: 20px; 
+		height: 25px; 
+		width : 445px;
+	}
+	
+	#sortable li span
+	{ 
+		position: relative; 
+	}
+	
+	.delete
+	{
+		 background-image : url('/assets/icons/cross.png');
+		 background-size: 20px 20px;
+   		 background-repeat: no-repeat;
+		 width : 20px;
+		 height : 20px;
+		 background-color: Transparent;
+		 cursor:pointer;
+		 overflow: hidden;
+		 outline:none;
+		 margin-left : 15px;
+		 margin-top	: -3px;
+		 float : right;
+	}
+	
+	.tab
+	{
+		float : left;
+	}
+	
+	#notification
+	{
+	    position:fixed;
+	    top:80px;
+	    width:100%;
+		height:100%;
+		left:0px;
+	    z-index:105;
+	    text-align:center;
+	    font-weight:normal;
+	    font-size:14px;
+	    font-weight:bold;
+	    color:white;
+	    background-color:#FF7800;
+	    padding:5px;
+	}
+	
+	#notification span.dismiss 
+	{
+	    border:2px solid #FFF;
+	    padding:0 5px;
+	    cursor:pointer;
+	    float:right;
+	    margin-right:10px;
+	}
+	
+	#notification a
+	{
+	    color:white;
+	    text-decoration:none;
+	    font-weight:bold
+	}
+	
+	.container
+	{
+		background: FF7800;
+		width: 100%;
+		display: flex;
+		height: 100vh;
+		justify-content: center;
+	}
+
+	.item
+	{
+		color: white;
+		font-weight: bold;
+		align-self: center;
+	}
+	
+	.H_ib
+	{
+		font-size: 1.4em;
+	}	
+</style>
+
+<script type="text/javascript" id="exampleJsSource">
+
+	/*
+		(C) HERE 2017
+		Jithin Krishnan
+		Dom Schuette
+	*/
+	
+	var tmpClusterDataPoints = [];
+	var tmpClusteredDataProvider = new H.clustering.Provider(tmpClusterDataPoints);
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	// host url for ajax rest calls
+	var host = (secure?"https://":"http://")+ window.location.host;
+	var countryCodeMap = [];
+	var maxClusterPoints=10000;
+	var minZoomLevel= 5;
+	var minZoomLevelLarge = 10;
+	var traffcSignDescMap=[];
+	// add PDE Manager for ADAS DataPoint
+	var pdeManager = new PDEManager(app_id, app_code, layers);
+	var routeLinkHashMap  = new Object(); // key = linkID (always positive), value = link object
+	var linkCurvatureGroup = new H.map.Group();
+	var points = new H.map.Group();
+	// adas coordinate to wgs conversion
+	var ADASNTU_TO_WGS84 = 10000000;
+	// color of curvature lineString
+	var curvatureColor = "rgba(255, 50, 190, 0.7)";
+	// test for global data points
+	var dataPoints = null;
+	var showAdas = true;
+	var debug = (document.location.href.indexOf("localhost:") != -1) ? true : false;
+	
+	/**
+	 * Function to reset route present on the map
+	 */
+	function reset()
+	{
+		$( "#sortable" ).empty();
+		count=-1;
+		group.removeAll();
+		routeLinkHashMap = new Object();
+		markers=[];
+		if(linkGroup)
+			linkGroup.removeAll();
+		if(linkCurvatureGroup)
+			linkCurvatureGroup.removeAll();
+		routeJson=null;
+		routeShapeData=[];
+		document.getElementById("feedbackTxt").innerHTML="";
+	}
+	
+	/*
+	 * Function to initlaize the drop downs
+	 */
+	function initSelects()
+	{
+		try
+		{
+			var waypoints = getUrlParameter("waypoints");
+			var waypointsSplit = waypoints.split(";"),
+				i = 0,
+				l = waypointsSplit.length;
+			for(; i < l; i++)
+			{
+				var currentWaypoint = waypointsSplit[i];
+				if(currentWaypoint.split(",").length == 2)
+				{
+					addInitialMarker(currentWaypoint, true);
+				}
+			}
+		}
+		catch(err) {}
+		
+		$.ajax({
+			url : host+'/rest/releases',
+			data : {"callback":"gotReleases"},
+			jsonpCallback : gotReleases
+		}).done( function( data )
+		{
+			Spinner.hideSpinner();
+		    if (data.indexOf("gotReleases") <0)
+			{
+				showNotification("Oops! Somehting went wrong");
+		    }
+		});
+		Spinner.showSpinner();
+	}
+	
+	/**
+	 * Function to get the "Region" drop down
+	 * @param {Object} data
+	 */
+	function gotReleases(data)
+	{
+		if (data && data.features)
+		{
+			var select = document.getElementById('region');
+			
+			// returned data has the format RDF_WEU_171E0
+		 	for (var i = 0; i < data.features.length; i++)
+			{
+		 		var properties = data.features[i].properties,
+					opt = document.createElement("option");
+		 		
+				opt.value = properties.schema.replace("RDF_", "");
+		 		opt.innerHTML = properties.region_desc + " - " + properties.quarter;
+		 		select.appendChild(opt);
+			}
+		 	gotCountryData();
+		}
+		else
+		{
+			showNotification("Oops! something went wrong.");
+			Spinner.hideSpinner();
+		}
+	}
+	
+	/**
+	 * Function to get the "Country" drop down
+	 */
+	function gotCountryData()
+	{
+		var region = document.getElementById('region'),
+			selectedValue=region.options[region.selectedIndex].value;
+		
+		$.ajax({
+			url : host+'/rest/countryData',
+			data : {"callback":"switchRegion" , "SCHEMA" :  selectedValue},
+			jsonpCallback : switchRegion
+		}).done( function( data )
+		{
+			Spinner.hideSpinner();
+			if (data.indexOf("switchRegion") < 0)
+			{
+				showNotification("Oops! Somehting went wrong");
+			}
+		});
+		Spinner.showSpinner();
+	}
+
+	/**
+	 * Function to update the dropdowns based on region selection
+	 * @param {Object} data
+	 */
+ 	 function switchRegion(data)
+	 {
+		if (data && data.features)
+		{
+			var select = document.getElementById('country');
+        	select.innerHTML = "";
+			
+			for (var i = 0; i < data.features.length; i++)
+			{
+				countryCodeMap[data.features[i].properties.alpha3]=data.features[i].properties.alpha2;
+                var opt = document.createElement("option");
+                
+				opt.value = data.features[i].properties.alpha3;
+                opt.innerHTML = data.features[i].properties.english;
+                select.appendChild(opt);
+			}
+		}
+		else
+		{
+		 	showNotification("Oops! something went wrong.");
+			Spinner.hideSpinner();
+		}
+		populateConditions();
+	}
+	 
+	 
+	 /**
+	  * Function to get "condition" dropdown
+	  */
+	function populateConditions()
+	{
+	 	var region = document.getElementById('region'),
+		selectedValue=region.options[region.selectedIndex].value,
+		country = document.getElementById('country'),
+		countryValue=country.options[country.selectedIndex].value;
+		
+		$.ajax({
+				
+				url : host+'/rest/conditions',
+				data : {
+					"SCHEMA" :  selectedValue,	
+					"ISO_COUNTRY_CODE" : countryValue,
+					"callback":"gotConditions"	
+				},
+				
+				jsonpCallback : gotConditions
+		}).done( function( data ) {
+		   Spinner.hideSpinner();
+		    if (data.indexOf("gotConditions") <0) {
+		     showNotification("Oops! Somehting went wrong");
+		    }
+		});
+		Spinner.showSpinner();
+	 }
+	 
+	 /**
+	  * Function to process
+	  * @param {Object} data
+	  */
+	function gotConditions(data)
+	{
+		Spinner.hideSpinner();
+		if (data && data.features)
+		{
+			var select = document.getElementById('conditionType');
+			select.innerHTML = "";
+			
+			for (var i = 0; i < data.features.length; i++) 
+			{
+				var d = data.features[i],
+					opt = document.createElement("option");
+				opt.value = d.properties.condition_type;
+				opt.innerHTML = d.properties.description + " = " + d.properties.num_signs;
+				select.appendChild(opt);
+			}
+			populateTraffic();
+		}
+		else
+		{
+			showNotification("Oops! something went wrong.");
+		}
+	}
+	 
+	/**
+	* Populate the traffic drop down 
+	*/
+	function populateTraffic()
+	{
+		var region = document.getElementById('region'),
+			selectedValue=region.options[region.selectedIndex].value,
+			country = document.getElementById('country'),
+			countryValue=country.options[country.selectedIndex].value,
+			condition = document.getElementById('conditionType'),
+			conditionValue=condition.options[condition.selectedIndex].value;
+		
+		if(conditionValue != 17)
+		{
+			var select = document.getElementById('trafficSign');
+			select.innerHTML = ""; 
+		}
+		else
+		{
+			$.ajax({
+				url : host+'/rest/trafficDescp',
+				data : {
+					"SCHEMA" :  selectedValue,	
+					"ISO_COUNTRY_CODE" : countryValue,
+					"callback":"gotTrafficSignDesc"		
+				},
+				jsonpCallback : gotTrafficSignDesc
+				
+			}).done( function( data ) {
+			   Spinner.hideSpinner();
+			    if (data.indexOf("gotTrafficSignDesc") <0) {
+			     showNotification("Oops! Somehting went wrong");
+			    }
+			});
+			Spinner.showSpinner();	   
+		}
+	}
+	 
+	 /**
+	  * Get traffic sign description and populate the drop down
+	  * @param {Object} data
+	  */ 
+	 function gotTrafficSignDesc(data)
+	 {
+	 	Spinner.hideSpinner();
+		if (data && data.features)
+		{
+			var select = document.getElementById('trafficSign');
+			select.innerHTML = "";
+			for (var i = 0; i < data.features.length; i++)
+			{
+				var d = data.features[i].properties;
+				var opt = document.createElement("option");
+				traffcSignDescMap[d.traffic_sign_type]=d.description;
+				opt.value = d.traffic_sign_type;
+				opt.innerHTML = d.description + "=" + d.num_signs;
+				select.appendChild(opt);
+			}
+		}
+		else
+		{
+			showNotification("Oops! something went wrong.");
+		}
+	}
+	 
+	/**
+	 * Function to query the signs
+	 * @param {Object} forCountry (true if for whole country)
+	 */
+	function filterSigns(forCountry)
+	{
+		var country = document.getElementById('country'),
+			countryValue=country.options[country.selectedIndex].value,
+			condition = document.getElementById('conditionType'),
+			conditionValue=condition.options[condition.selectedIndex].value,
+			region = document.getElementById('region'),
+			selectedValue=region.options[region.selectedIndex].value,
+			dataPassed =null;
+		
+		//For Country direct zip file provided by server
+		if (forCountry)
+		{
+			dataPassed = 
+			{
+				"SCHEMA": selectedValue,
+				"ISO_COUNTRY_CODE": countryCodeMap[countryValue],
+			}
+			var url = host+'/rest/trafficSigns?SCHEMA='+selectedValue+'&ISO_COUNTRY_CODE='+countryCodeMap[countryValue];
+			window.open(url);
+		}
+		else
+		{
+			// For other signs pass the filters 
+			if (conditionValue != 17)
+			{
+				dataPassed = {
+					"SCHEMA": selectedValue,
+					"ISO_COUNTRY_CODE": countryCodeMap[countryValue],
+					"CONDITION_TYPE": conditionValue,
+					"callback": "gotTrafficSigns"
+				}
+			}
+			else
+			{
+				var concatenated="";	
+				$('#trafficSign :selected').each(function(i, selected){
+					if(concatenated!="")
+						concatenated=concatenated+","+ $(selected).val();
+					else
+						concatenated= $(selected).val();
+				});
+				
+				if(concatenated==""){
+					showNotification("No Traffic sign selected");
+					return;
+				}
+				
+				dataPassed = {
+					"SCHEMA": selectedValue,
+					"ISO_COUNTRY_CODE": countryCodeMap[countryValue],
+					"TRAFFIC_SIGN_TYPE": concatenated,
+					"callback": "gotTrafficSigns"
+				}
+				
+			}
+			Spinner.showSpinner();
+			$.ajax(
+			{
+				url : host+'/rest/trafficSigns',
+				data : dataPassed,
+				jsonpCallback : gotTrafficSigns
+				
+			}).done( function( data ) {
+			   Spinner.hideSpinner();
+			    if (data.indexOf("gotTrafficSigns") <0) {
+			     showNotification("Oops! Somehting went wrong");
+			    }
+			});
+		}
+	}
+   
+	var clusteringLayer,
+		clusteredDataProvider,
+		features=null,
+		myVar=false,
+		firstTimeUpdate=false;
+   
+	function getArrow(angle)
+	{
+		var canvas = document.createElement('canvas'),
+			ctx = canvas.getContext('2d');
+				
+		canvas.height = 32;
+		canvas.width = 32;
+		ctx.fillStyle = '#000000';
+		
+		ctx.save();
+		ctx.translate(16, 16);
+		ctx.rotate( (Math.PI / 180) * angle);
+		ctx.translate(-16,-16);
+
+		// line
+		ctx.beginPath();	
+		ctx.moveTo(16, 0);
+		ctx.lineTo(16, 32);
+		ctx.stroke();
+
+		// triangle
+		ctx.fillStyle = 'blue';
+		ctx.beginPath();
+		ctx.moveTo(16, 0);
+		ctx.lineTo(10,14);
+		ctx.lineTo(22, 14);
+		ctx.lineTo(16,0);
+		ctx.fill();
+		return canvas;
+	}		
+	
+	var iconswithheading = new Object();
+	
+	/*
+	* Helper function to reuse traffic icons with heading
+	*/
+	function getTrafficIcon(trafficSignIdentifier, heading)
+	{
+		if(iconswithheading[trafficSignIdentifier + heading] !== undefined)
+			return iconswithheading[trafficSignIdentifier + heading];
+		else
+		{
+			var canvas = document.createElement('canvas'),
+				ctx = canvas.getContext('2d');
+				
+			canvas.height = 32;
+			canvas.width = 64;
+			ctx.fillStyle = '#000000';
+				
+			ctx.drawImage(trafficImages[trafficSignIdentifier + "_eu"], 0, 0);
+			
+			var arrow = getArrow(heading);
+			// console.log(heading);
+			ctx.drawImage(arrow, 32, 0);
+			
+			var icon = new mapsjs.map.Icon(canvas,
+					({
+						'anchor': {
+							'x': 64 / 2,
+							'y': 32 / 2
+						}
+					}));
+					
+			iconswithheading[trafficSignIdentifier + heading] = icon;
+			return iconswithheading[trafficSignIdentifier + heading];
+		}
+	}
+	
+	/**
+    * Adds a point for routing
+    * @param {Object} coordinates
+    */
+	function addPoint(coordinates, signType)
+	{
+		count++;
+		addWaypoint(coordinates, count + 1, signType);
+		addMarker(coordinates,count + 1, signType);
+		currentBubble.close();
+	}
+   
+   /**
+    * Call back function to for traffic sign data
+    * @param {Object} data
+    */
+   function gotTrafficSigns(data)
+   {
+		Spinner.hideSpinner();
+		if (data && data.features )
+		{
+			features = data.features;
+			var bounds = null;
+				
+			dataPoints = features.map(function(item)
+			{
+				var coordinates = [item.properties.lat / 100000, item.properties.lon / 100000];
+				if (bounds == null) 
+					bounds = new H.geo.Rect(coordinates[0], coordinates[1], coordinates[0], coordinates[1]);
+				else 
+					bounds = bounds.mergeRect(new H.geo.Rect(coordinates[0], coordinates[1], coordinates[0], coordinates[1]));
+				return new H.clustering.DataPoint(coordinates[0], coordinates[1], 1, item);
+			});
+				
+			if (clusteredDataProvider)
+			{
+				clusteredDataProvider.setDataPoints(dataPoints);
+			}
+			else 
+			{
+					// Create a clustering provider with custom options for clusterizing the input
+				var minZoom = minZoomLevel;
+				if(features.length > maxClusterPoints)
+				{
+					minZoom = minZoomLevelLarge;
+				}
+							
+				clusteredDataProvider = new H.clustering.Provider(dataPoints, {
+					min: minZoom,
+					max: 20,
+					clusteringOptions: 
+					{
+						// Maximum radius of the neighbourhood
+						eps: 32,
+						// minimum weight of points required to form a cluster
+						minWeight: 2
+					}
+				});
+							
+				var customTheme = 
+				{
+					getClusterPresentation: function(markerCluster)
+					{
+						var tmpMarker = tmpClusteredDataProvider.getTheme().getClusterPresentation(markerCluster);
+						var maxZoom = markerCluster.getMaxZoom();
+						var marker;
+						
+						marker = new H.map.Marker(tmpMarker.getPosition(), 
+						{
+							min: markerCluster.getMinZoom(),
+							max: markerCluster.getMaxZoom(),
+							icon: tmpMarker.getIcon()
+						});
+									
+						marker.setData(markerCluster);
+									
+						marker.addEventListener("pointerdown", function(e)
+						{
+							var dataPoints=e.target.getData();
+										
+							// for traffic signal there might be signs on the same lat,lon for
+							// different directions.
+							var duplicates=[],
+								html="",
+								count=0;
+								
+							dataPoints.forEachDataPoint(
+								function(p)
+								{
+									var properties = p.getData().properties;
+									var id = properties.lat + "," + properties.lon;
+									if(duplicates[id])
+									{
+										html = html + getBubbleContent(properties);
+										count++;
+									}
+									else
+									{
+										duplicates[id]="added";
+										html = html + getBubbleContent(properties);
+										count++;
+									}
+								});
+										
+								if(count > 0)
+								{
+									if (currentBubble) 
+										ui.removeBubble(currentBubble);
+									
+									var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+									currentBubble = new H.ui.InfoBubble(pos,
+									{
+										content: html
+									});
+									ui.addBubble(currentBubble);
+								}
+						});									
+						return marker;
+					},
+					
+					getNoisePresentation: function(noisePoint)
+					{
+						var value = noisePoint.getData().properties;
+						var signType = value.traffic_sign_type==null?"0":value.traffic_sign_type + "";
+					
+						while (signType!="0" && signType.length < 3) 
+							signType = "0" + signType;
+									
+						var point = noisePoint.getPosition(), signMarker, 
+							trafficSignIdentifier = value.condition_type + "_" + signType;
+									
+						if (trafficIcons[trafficSignIdentifier + "_eu"]) 
+						{
+							signMarker = new H.map.Marker(point, 
+							{
+								min: noisePoint.getMinZoom(),
+								icon: getTrafficIcon(trafficSignIdentifier, Math.round(value.heading))
+							});
+						}
+						else
+						{
+							signMarker = new H.map.Marker(point, 
+							{
+								min: noisePoint.getMinZoom(),
+								icon: getTrafficIcon("11_000", Math.round(value.heading))
+							});
+						}
+						
+						signMarker.$CONDITION_ID = value.condition_id;
+						signMarker.$signType = signType;
+						signMarker.$trafficSignIdentifier = trafficSignIdentifier;
+						
+						// Routing API call needs : lat,lon;;;heading
+						signMarker.$routingCoordinate = point.lat + "," + point.lng + ";;;" + value.heading;
+						signMarker.addEventListener("pointerdown", function(e)
+						{
+							if(e.currentPointer.buttons == 2) // only react on right mouse click to have the same behavior as on the map
+							{ 
+							
+								if (currentBubble) 
+									ui.removeBubble(currentBubble);
+								var html = '<div>' +
+									'<p style="font-family:Arial,sans-serif; font-size:12px;">Condition ID: ' +
+									e.target.$CONDITION_ID +
+									'<br> Sign Type: ' +
+									trafficSigns[e.target.$trafficSignIdentifier] +
+									'<br> Coordinate:' +
+									e.target.$routingCoordinate.replace(";;;",",") +
+									'<br> <div class="H_context_menu_item clickable" '+
+									' style="font-family:Arial,sans-serif; font-size:12px;"' +
+									'onclick="javascript:addPoint(\''+e.target.$routingCoordinate+'\',\''+trafficSigns[e.target.$trafficSignIdentifier]+'\')">Add as waypoint' +
+									'</div></p>' +
+									'</div>';
+											
+								var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+								currentBubble = new H.ui.InfoBubble(pos,
+									{
+										content: html
+									}
+								);
+								ui.addBubble(currentBubble);
+							}
+						});
+						return signMarker;
+					}
+				};
+				
+				clusteredDataProvider.setTheme(customTheme);
+					
+				// Create a layer that will consume objects from our clustering provider
+				clusteringLayer = new H.map.layer.ObjectLayer(clusteredDataProvider);
+							
+				// for showing the loading icon till the cluster display is completed
+				clusteringLayer.addEventListener("update",function (e)
+				{
+					if(myVar && !firstTimeUpdate)
+					{
+						clearTimeout(myVar);
+					}
+					if(!firstTimeUpdate)
+					{
+						Spinner.showSpinner();
+						myVar = setTimeout(function()
+						{ 
+							if(!firstTimeUpdate)
+							{
+								Spinner.hideSpinner();
+								firstTimeUpdate=true;
+							}
+						}, 1000);
+					}
+				});
+							
+				// To make objects from clustering provider visible, we need to add our layer to the map
+				map.addLayer(clusteringLayer);
+			}
+		}
+		else
+		{
+			showNotification("Oops! something went wrong.");
+		}
+	}
+	
+	function getBubbleContent(properties)
+	{
+		var signType = properties.traffic_sign_type==null?"0":properties.traffic_sign_type + "";
+		while (signType!="0" && signType.length < 3) 
+			signType = "0" + signType;
+	
+		var trafficSignIdentifier = properties.condition_type + "_" + signType;
+		var routingCoordinate = properties.lat/100000+","+properties.lon/100000 + ";;;" + properties.heading;			
+		var html = '<div>' +
+			'<p style="font-family:Arial,sans-serif; font-size:12px;">Condition ID: ' +
+			properties.condition_id +
+			'<br> Sign Type: ' +
+			trafficSigns[trafficSignIdentifier] +
+			'<br> Coordinate:' +
+			routingCoordinate.replace(";;;",",") +
+			'<br> <div class="H_context_menu_item clickable" '+
+			'style="font-family:Arial,sans-serif; font-size:12px;"' +
+			'onclick="javascript:addPoint(\''+routingCoordinate+'\',\''+trafficSigns[trafficSignIdentifier]+'\')">Add as waypoint' +
+			'</div></p>' +
+			'</div>';
+		return html;
+	}
+   
+	/**
+	* Function to create statistics export
+	*/
+	function createStatisticsFile()
+	{
+	   	var condition = document.getElementById('conditionType');
+		var countryValue=country.options[country.selectedIndex].value;
+		
+		
+		var condition = document.getElementById('conditionType');
+		var line =[];
+		var containsTrafficSigns = false;
+		for (var i = 0; i < condition.length; i++)
+		{
+			line[i]=	condition.options[i].text.replace("=",";");
+			if(line[i].indexOf("TRAFFIC SIGN ="))
+			{
+				containsTrafficSigns = true;
+			}
+		}
+		var concatLines = line.join("\n");
+		
+		var trafficSign = document.getElementById('trafficSign');
+		var headingLine  = "TRAFFIC_SIGN_TYPE;NUM_SIGNS";
+			
+		var signTypes =[];
+		for (var i = 0; i < trafficSign.length; i++)
+		{
+			signTypes[i]=	trafficSign.options[i].text.replace("=",";");
+		}
+		
+		if(containsTrafficSigns && trafficSign.length < 1)
+		{
+			showNotification("Please select Condition Type as 'Traffic Sign' before exporting statistics");
+		}
+		
+		var concatLinesSign = signTypes.join("\n");
+		var csvLines = headingLine+"\n"+concatLines+"\n"+concatLinesSign;
+				
+		saveFile(countryCodeMap[countryValue]+"_statistics.csv", 'text/csv;charset=utf-8', csvLines);
+	}
+   
+	/**
+    * function to create file
+    * @param {Object} isJson
+    */
+	function createFile(isJson)
+	{
+   		var country = document.getElementById('country');
+		var countryValue=country.options[country.selectedIndex].value;
+			
+		var condition = document.getElementById('conditionType');
+		var conditionValue=condition.options[condition.selectedIndex].value;
+		var trafficSignVal = condition.options[condition.selectedIndex].text.split("=")[0];
+	
+		if (conditionValue == 17)
+		{
+			var concatenated = "";
+			$('#trafficSign :selected').each(function(i, selected)
+			{
+				if (concatenated != "") 
+					concatenated = concatenated + "_" + $(selected).text().split("=")[0];
+				else 
+					concatenated = $(selected).text().split("=")[0];
+			});
+			trafficSignVal = concatenated;
+		}
+			
+		var filename=countryCodeMap[countryValue];
+		filename = filename+"_"+trafficSignVal;
+	
+		if(features == null)
+		{
+			showNotification("Please run the query before export.");
+			return;
+		}
+			
+		if(!isJson)
+		{
+			var headingLine  = ""
+			var linetoBeadded ;
+			
+			linetoBeadded = features.map(function (item) 
+			{
+				var columns = Object.keys(item.properties);
+				var line="";
+				if(headingLine=="")
+				{
+					columns.map(function (col)
+					{
+						headingLine=headingLine+col+";";
+				   	});
+				}
+				
+				columns.map(function (col)
+				{
+					line=line+item.properties[col]+";";
+				});
+				return line;
+			});
+				
+			var concatLines = linetoBeadded.join("\n");
+			var csvLines = headingLine+"\n"+concatLines;
+			
+			saveFile(filename+".csv", 'text/csv;charset=utf-8', csvLines);
+		}
+		else
+		{
+			saveFile(filename+".json", 'text/csv;charset=utf-8', JSON.stringify(features));	
+		}
+	}
+   
+   var saveFile = function (name, type, data)
+   {
+		if (data != null && navigator.msSaveBlob)
+			return navigator.msSaveBlob(new Blob([data], { type: type }), name);
+	
+		var a = $("<a style='display: none;'/>");
+		var url = window.URL.createObjectURL(new Blob([data], {type: type}));
+		
+		a.attr("href", url);
+		a.attr("download", name);
+		$("body").append(a);
+		a[0].click();
+		window.URL.revokeObjectURL(url);
+		a.remove();
+	}	
+	
+	/* map display part */ 
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	var mapContainer = document.getElementById("mapContainer"),
+		dmarkerColor = "rgba(255, 224, 22, 1)",
+		layers = null,
+		pdeManager = new PDEManager(app_id, app_code, layers),
+		currentBubble;
+
+	// Initialize our map
+	var platform = new H.service.Platform({	app_code: app_code,	app_id: app_id,	useHTTPS: secure }),
+	    maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+		map = new H.Map(mapContainer, maptypes.normal.map, { center: new H.geo.Point(42.50514,1.52605), zoom: 14	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+	
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	/*Routing part*/
+	var routingPoints = new Array();
+	var count=-1;
+	var sortable = $("#sortable");
+	var routeShapeData=[];
+	var routeJson;
+	
+	function onError(error) {
+	  showNotification('Ooops!');
+	}
+	
+	var linkGroup = new H.map.Group();
+	
+	function addRouteShapeToMap(route)
+	{
+		routeJson = route;
+		routeShapeData = [];
+		var routeLength = 0,
+			pathGeo = [],
+			routeShape = route.shape;
+	 
+		if(linkGroup)
+		{
+			linkGroup.removeAll();
+		}
+	
+		routeShape.forEach(function(point)
+		{
+			var parts = point.split(',')
+		
+			routeShapeData[routeLength++] = {"point":point};
+			pathGeo.push([parseFloat(parts[0]), parseFloat(parts[1])]);
+		});
+
+		var objsInFence = new Array();
+		
+		if(dataPoints)
+		{
+			// extract all Data Points around the Route Geofence... 
+			var distance =  0.00003,
+				geoInput = {
+					type: "LineString",
+					coordinates: pathGeo
+				};
+					
+			var geoReader = new jsts.io.GeoJSONReader(),
+				jstsPolygon = geoReader.read(geoInput).buffer(distance),
+				geoWriter = new jsts.io.WKTWriter(),
+				wktPolygon = geoWriter.write(jstsPolygon),
+				shapes = wktPolygon.replace("POLYGON", "").trim().split("),(");
+
+			var	reader = new jsts.io.WKTReader();
+				
+			var t0 = performance.now();
+								
+			dataPoints.forEach(function(p) 
+			{
+				var lat = p.lat, 
+					lng = p.lng;
+				var jstsPoint = reader.read('POINT (' + lat + ' ' + lng + ')');
+					
+				if(jstsPoint.within(jstsPolygon))
+				{
+					objsInFence.push(p);
+				}
+			});
+			var t1 = performance.now();
+			console.log("Call to doSomething took " + (t1 - t0) + " milliseconds.")
+				
+		}		
+		
+		// create link objects
+		for(var xy = 0; xy < route.leg.length; xy++)
+		{
+			var cur_leg = route.leg[xy];
+			for(var m = 0; m < route.leg[xy].link.length; m++)
+			{
+				var strip = new H.geo.Strip(),
+					shape = route.leg[xy].link[m].shape,
+					i,
+					l = shape.length;
+
+				for(i = 0; i < l; i++)
+				{
+					strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+				}
+
+				var link = new H.map.Polyline(strip,
+					{
+						style:
+						{
+							lineWidth: 10,
+							strokeColor: "rgba(0, 128, 255, 0.7)",
+							lineJoin: "round"
+						}
+					});
+					link.setArrows({color:"white",width:0.5,length:0.5,frequency: 2});
+					link.$linkId = route.leg[xy].link[m].linkId;
+					link.$linkLength = route.leg[xy].link[m].length;
+					link.$linkShape = shape;
+					link.$linkPositionOnRoute = m;
+					routeLinkHashMap[route.leg[xy].link[m].linkId.substring(1)] = link;
+
+					// add event listener to link
+					link.addEventListener("pointerdown", function(e)
+					{
+						if(showAdas)
+						{
+							if(currentBubble)
+								ui.removeBubble(currentBubble);
+							var html =  '<div><table>'+
+								'<tr><td>LinkID</td><td>' + e.target.$linkId + '</td></tr>' +
+								'<tr><td>CURVATURE</td><td>' + e.target.$CURVATURE + '</td></tr>' +
+								'<tr><td>HEADING</td><td>' + e.target.$HEADING + '</td></tr>' +
+								'<tr><td>HPX</td><td>' + e.target.$HPX + '</td></tr>' +
+								'<tr><td>HPY</td><td>' + e.target.$HPY + '</td></tr>' +
+								'<tr><td>LINK_DRIVEN_FROM_REV</td><td>' + e.target.$LINK_DRIVEN_FROM_REV + '</td></tr>' +
+							'</table></div>';
+
+							var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+
+							currentBubble = new H.ui.InfoBubble(pos, { content: html });
+							ui.addBubble(currentBubble);
+							currentBubble.getContentElement().addEventListener('click', function(e) { currentBubble.close(); });
+						}
+					}
+				);
+				linkGroup.addObject(link);
+			}
+			map.addObject(linkGroup);
+			// And zoom to its bounding rectangle
+			map.setViewBounds(linkGroup.getBounds(), true);
+		}
+
+		var foundsigns = {},
+			alreadyHandled = {};
+		
+		// now iterate over the route shape and check the heading and merge the points
+		for(var i = 0; i < routeShape.length - 1; i++)
+		{
+			if(objsInFence && objsInFence.length != 0)
+			{				
+			
+				var currentPoint = routeShape[i], 
+					nextPoint = routeShape[i+1],
+					lat1 = parseFloat(currentPoint.split(",")[0]),
+					lng1 = parseFloat(currentPoint.split(",")[1]),
+					lat2 = parseFloat(nextPoint.split(",")[0]),
+					lng2 = parseFloat(nextPoint.split(",")[1]);
+					
+				for(var y = 0; y < objsInFence.length; y++)
+				{
+					var objInFence = objsInFence[y];
+					if(alreadyHandled[objInFence.data.properties.link_id + "," + objInFence.data.properties.heading] && alreadyHandled[objInFence.data.properties.link_id + "," + objInFence.data.properties.heading] == true)
+						continue;
+					
+					var	objLat = objInFence.lat,
+						objLng = objInFence.lng,
+						routeLat = parseFloat(lat2.toFixed(5)),
+						routeLng = parseFloat(lng2.toFixed(5));
+						
+					// 0.00277 ~ 31 meters
+					if((Math.abs(objLat - routeLat) < 0.00277) && (Math.abs(objLng - routeLng) < 0.00277))
+					{
+						var heading_calc = getHeading(lat1,lng1,lat2,lng2),
+							heading_orig = objInFence.data.properties.heading;
+						
+						// up to 20 degree difference, depends on the route shape points
+						if( Math.abs(heading_calc - heading_orig) < 20)
+						{
+							if(foundsigns[objInFence.data.properties.traffic_sign_desc] == undefined)
+								foundsigns[objInFence.data.properties.traffic_sign_desc] = 1;
+							else
+								foundsigns[objInFence.data.properties.traffic_sign_desc]++;
+							// handle signs only once
+							alreadyHandled[objInFence.data.properties.link_id + "," + objInFence.data.properties.heading] = true;
+						}
+					}
+				}
+			}
+		}
+		return foundsigns;
+	}
+
+	/*
+	 *  Helper for Heading, just getHeading(Lat1, Lng1, Lat2, Lng2)
+	 */
+	function getHeading(lat1,lng1,lat2,lng2)
+	{
+		var phi1 = lat1 * (Math.PI / 180),
+			phi2 = lat2 * (Math.PI / 180),
+			dl = (lng2 - lng1) * (Math.PI / 180),
+			y = Math.sin(dl) * Math.cos(phi2),
+			x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dl),
+			t = Math.atan2(y, x);
+
+		return Math.round(((t * 180 / Math.PI) + 360) % 360);
+	};
+
+	// callback that is set to PDE manager and that gets called with the adas tile information
+	// that get requested (after route calculation)
+	function gotAdasTile(resp)
+	{
+		if (resp.error != undefined)
+		{
+			return;
+		}
+		if (resp.responseCode != undefined)
+		{
+			showNotification (resp.message);
+			return;
+		}
+		
+		for (var r = 0; r < resp.Rows.length; r++)
+		{
+			var linkId = resp.Rows[r].LINK_ID;
+
+			if(pdeManager.getLinkPartOfRoute(linkId))
+			{
+				var curvature = resp.Rows[r].CURVATURES;
+				var headings = resp.Rows[r].HEADINGS;
+				var hpx = resp.Rows[r].HPX;
+				var hpy = resp.Rows[r].HPY;
+				var refLinkCurvHeads = resp.Rows[r].REFNODE_LINKCURVHEADS;
+				var nrefLinkCurvHeads = resp.Rows[r].NREFNODE_LINKCURVHEADS;
+
+				var curvatureSplit = curvature.split(',');
+				var headingsSplit = headings.split(',');
+				var hpxSplit = hpx.split(',');
+				var hpySplit = hpy.split(',');
+				var refLinkCurvHeadsSplit = refLinkCurvHeads.split(',');
+				var nrefLinkCurvHeadsSplit = nrefLinkCurvHeads.split(',');
+
+				if(curvatureSplit.length == 1 && curvatureSplit[0] == '')
+				{
+					curvatureSplit = [];
+				}
+				if(headingsSplit.length == 1 && headingsSplit[0] == '')
+				{
+					headingsSplit = [];
+				}
+
+				// result arrays for curvature and heading
+				var resultCurvature = [];
+				var resultHeading = [];
+				var resultHpx = [];
+				var resultHpy = [];
+
+				//0. find out if link is driven from or to reference node
+				var bLinkIsDrivenFromReferenceNode = pdeManager.getLinkIsDrivenFromReferenceNodeOnRoute(linkId);
+
+				//1. handle reference node
+				var previousLinkId = pdeManager.getPreviousIdLinkOnRoute(linkId, false);
+
+				var bNodePointAdded = false;
+				if(previousLinkId != null)
+				{
+					for(var k = 0; k < refLinkCurvHeadsSplit.length; k++)
+					{
+						var splitData = refLinkCurvHeadsSplit[k].split(':');
+						if(splitData[0] != "" && splitData[0] == (previousLinkId - linkId))
+						{
+							resultCurvature.push(parseInt(splitData[1]));
+							resultHeading.push(parseInt(splitData[2] / 1000));
+							bNodePointAdded = true;
+							break;
+						}
+					}
+				}
+
+				if(!bNodePointAdded)
+				{
+					resultCurvature.push(0);
+					resultHeading.push(0);
+				}
+
+				// 2. handle shape curvatures, heading, coordinates
+				var lastCoordValueCurvature = 0;
+				for(var k = 0; k < curvatureSplit.length; k++)
+				{
+					lastCoordValueCurvature += parseInt(curvatureSplit[k]);
+					resultCurvature.push(lastCoordValueCurvature);
+				}
+
+				var lastCoordValueHeading = 0;
+				for(var k = 0; k < headingsSplit.length; k++)
+				{
+					lastCoordValueHeading += parseInt(headingsSplit[k]);
+					resultHeading.push(parseInt(lastCoordValueHeading / 1000));
+				}
+
+				var lastCoordValueHpx = 0;
+				for(var k = 0; k < hpxSplit.length; k++)
+				{
+					lastCoordValueHpx += parseInt(hpxSplit[k]);
+					resultHpx.push(lastCoordValueHpx);
+				}
+
+				var lastCoordValueHpy = 0;
+				for(var k = 0; k < hpySplit.length; k++)
+				{
+					lastCoordValueHpy += parseInt(hpySplit[k]);
+					resultHpy.push(lastCoordValueHpy);
+				}
+
+				// 3. handle nonreference node
+				var nextLinkId = pdeManager.getNextLinkIdOnRoute(linkId, false);
+
+				bNodePointAdded = false;
+				if(nextLinkId != null)
+				{
+					for(var k = 0; k < nrefLinkCurvHeadsSplit.length; k++)
+					{
+						var splitData = nrefLinkCurvHeadsSplit[k].split(':');
+						if(splitData[0] != "" && splitData[0] == (nextLinkId - linkId))
+						{
+							resultCurvature.push(parseInt(splitData[1]));
+							resultHeading.push(parseInt(splitData[2]) / 1000);
+							bNodePointAdded = true;
+							break;
+						}
+					}
+				}
+
+				if(!bNodePointAdded)
+				{
+					resultCurvature.push(0);
+					resultHeading.push(0);
+				}
+
+				// at this point we have all curvature and heading data to the link - so we save it
+				routeLinkHashMap[linkId].$HPX = resultHpx;
+				routeLinkHashMap[linkId].$HPY = resultHpy;
+				routeLinkHashMap[linkId].$CURVATURE = resultCurvature;
+				routeLinkHashMap[linkId].$HEADING = resultHeading;
+				routeLinkHashMap[linkId].$LINK_DRIVEN_FROM_REV = bLinkIsDrivenFromReferenceNode;
+			}
+		}
+	}
+
+	// callback for PDE manager finished receiving adas tile information, then the curvature and max speedlimit display
+	// gets generated
+	function pdeManagerAdasFinished(evt)
+	{
+		var currentHTML = document.getElementById('feedbackTxt').innerHTML;
+		map.addObject(group);
+		map.setViewBounds(group.getBounds());
+		generateCurvatureAlongRoute();
+	}	
+	
+	function saveRouteShape(isCSV)
+	{
+		var filename=document.getElementById("routeFileName").value;
+		if(routeShapeData.length > 0)
+		{
+			if(isCSV)
+			{
+				var linetoBeadded ;
+				var number=0;
+				var routingPoints = $("#sortable").sortable("toArray");
+				linetoBeadded = routeShapeData.map(function (item)
+				{
+					var waypoint = "",
+						signType = "";
+					if(number<routingPoints.length)
+					{
+						waypoint = routingPoints[number++];
+						if(waypoint.indexOf(";;;")>-1)
+						{
+							// get the sign type first, before replacing heading semicolons
+							signType = markers[waypoint.substring(0, waypoint.indexOf(";"))].$SIGN_TYPE;
+							waypoint = waypoint.replace(";;;",",");
+						}
+					}
+						 
+					var line = item.point + ";" + waypoint + ";" + signType;
+					return line;
+				});
+				
+				var headingLine  = "SHAPE_POINTS;WAYPOINTS(lat,lon,heading);SIGN_TYPE";
+				var concatLines = linetoBeadded.join("\r\n");
+				var csvLines = headingLine+"\n"+concatLines;
+				saveFile(filename+".csv", 'text/csv;charset=utf-8', csvLines);
+			}
+			else
+			{
+				saveFile(filename+".json", 'text/csv;charset=utf-8', JSON.stringify(routeJson));
+			}
+		}
+		else
+		{
+			showNotification("Route not calculated.");
+		}
+	}
+	
+	var notReverseGeocoded=true;
+	 // Get an instance of the geocoding service:
+    var geocoder = platform.getGeocodingService();
+	var address = "";
+	var group = new H.map.Group();
+	map.addObject(group);
+	
+	 // add context menu listner  
+    map.addEventListener('contextmenu', function(e){
+        // reverse geocode at the point of click if not already
+        if (notReverseGeocoded) {
+            clickCoords = map.screenToGeo(e.viewportX, e.viewportY);
+            var reverseGeocodingParameters = {
+                prox: clickCoords.lat + "," + clickCoords.lng + ",200",
+                mode: 'retrieveAddresses',
+                maxresults: 1,
+                language: 'en'
+            };
+            geocoder.reverseGeocode(reverseGeocodingParameters, function(result){
+                try {
+                    address = result.Response.View[0].Result[0].Location.Address.Label;
+                    notReverseGeocoded = false;
+                    // disptach to the context menu event again to add results to the 
+                    // context menu
+                    map.dispatchEvent(e);
+                } 
+                catch (e) {}
+				}, function(e){}
+			);
+        }
+        else {
+            // add address to context menu
+            e.items.push(new H.util.ContextItem({
+                label: address,
+            }));
+            
+            // add routing options 
+            e.items.push(new H.util.ContextItem({
+                label: 'Add as Waypoint',
+                callback: function()
+				{
+					addWaypoint(clickCoords.lat+","+clickCoords.lng,(++count)+1);
+					addMarker(clickCoords.lat+","+clickCoords.lng,count+1);
+                }
+            }));
+           	notReverseGeocoded = true;
+        }
+    });
+	
+	var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="36px">' +
+			  '<path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 28 13 28 C 16.3 28 19' +
+			  ' 29.3 19 31 Z" fill="#000" fill-opacity=".2"/>' +
+			  '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 19.5 3.8 21.9 L 13 31 L 22.2' +
+			  ' 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="#fff"/>' +
+			  '<path d="M 13 2.2 C 6 2.2 2.3 7.2 2.1 12.8 C 2.1 16.1 3.1 18.4 5.2 20.5 L 13 28.2 L 20.8 20.5 C' +
+			  ' 22.9 18.4 23.8 16.2 23.8 12.8 C 23.6 7.07 20 2.2 13 2.2 Z" fill="__FILLCOLOR__"/>' +
+			  '<text font-size="12" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" x="10" y="19">__NO__</text>' +
+			  '</svg>';
+	
+	var markers = {};
+	function addMarker(coordinates, count, signType)
+	{
+		if(coordinates.indexOf(";;;")>-1)
+		{
+			coordinates=coordinates.replace(";;;",",");
+		}
+	    
+		var point = coordinates.split(",");
+		var marker = new H.map.Marker(
+			{
+				lat: point[0],
+				lng: point[1],
+			},
+			{
+				icon : new H.map.Icon(svg.replace(/__NO__/g,count).replace(/__FILLCOLOR__/g, "#00FF00"))
+			});
+		marker.$SIGN_TYPE = signType;
+        group.addObject(marker);
+		markers[point[0]+","+point[1]] = marker;
+        return marker;
+    }
+	
+	var redIconWithoutNumber = new H.map.Icon(svg.replace(/__NO__/g, "").replace(/__FILLCOLOR__/g, "#FF0000"));
+	var greenIconWithoutNumber = new H.map.Icon(svg.replace(/__NO__/g, "").replace(/__FILLCOLOR__/g, "#00FF00"));
+	
+	var currentMarker = null;
+	
+	function addInitialMarker(coordinate, redIcon, idx, name)
+	{
+		var greenIcon = greenIconWithoutNumber;
+		if(!redIcon && idx !== undefined && name !== undefined)
+		{
+			greenIcon = new H.map.Icon(svg.replace(/__NO__/g, idx).replace(/__FILLCOLOR__/g, "#6a81a8"));
+		}
+				
+		var point = coordinate.split(",");
+		var marker = new H.map.Marker(
+			{
+				lat: point[0],
+				lng: point[1],
+			},
+			{
+				icon : redIcon ? redIconWithoutNumber : greenIcon
+			});
+		marker.$name = name.replace(/(?:\r\n|\r|\n)/g, '');; 
+		marker.$idx = idx;
+		marker.addEventListener("pointerdown", function(e) 
+			{ 
+				if(e.currentPointer.buttons == 2) // only react on right mouse click to have the same behavior as on the map
+				{ 
+					var html = '<div>' +
+						(e.target.$name !== undefined ? ('<p style="font-family:Arial,sans-serif; font-size:12px;">Name: ' + e.target.$name + '</p>') : '') + 
+						'<p style="font-family:Arial,sans-serif; font-size:12px;">Coordinate:' +
+						e.target.getPosition().lat + "," + e.target.getPosition().lng + 
+						'<br> <div class="H_context_menu_item clickable" '+
+						'style="font-family:Arial,sans-serif; font-size:12px;"' +
+						'onclick="javascript:addPoint(\'' + e.target.getPosition().lat + "," + e.target.getPosition().lng + '\',\'' + e.target.$name + '\')">Add as waypoint' + '</div></p>' +
+						'</div>';
+
+					e.target.setZIndex(-1);
+					
+					if (currentBubble) 
+						ui.removeBubble(currentBubble);
+					currentMarker = e.target;
+					var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+					currentBubble = new H.ui.InfoBubble(pos,
+					{
+						content: html
+					});
+					ui.addBubble(currentBubble);
+				}
+			});
+		points.addObject(marker);
+	}
+	
+	function addPointAndRemoveOldMarker(lat, lng)
+	{
+		if(currentMarker)
+		{
+			addWaypoint(lat + "," + lng,(++count)+1);
+			addMarker(lat+","+lng,count+1);
+			group.removeObject(currentMarker);
+			currentMarker = null;
+			if (currentBubble) 
+				ui.removeBubble(currentBubble);
+		}
+	}
+	
+	function addWaypoint(coordinate, Id, signType)
+	{
+		sortable.append('<li id="'+coordinate+'"><div class="tab" >' + Id + ' ' + (signType ? signType : '') +'</div><div class="delete"></div></li>');
+		$( "#sortable" ).sortable().on('click', '.delete', function()
+		{
+			var coordinate=$(this).closest('li').attr("id"),
+				id = "";
+				
+			if(coordinate.indexOf(";") !== -1)
+			{
+				id = coordinate.substring(0, coordinate.indexOf(";"));
+			}
+			else
+			{
+				id = coordinate;
+			}
+									  
+			if(markers[id])
+			{
+				group.removeObject(markers[id]);
+				delete markers[id];
+										  
+				$(this).closest('li').remove();
+				resortRecalcRoute();
+			}
+			$(this).closest('li').remove();
+		});;
+		$( "#sortable" ).disableSelection();
+	}
+
+	function resortRecalcRoute(){
+		sortable.children().each(function(idx){
+			var markId = $(this).attr('id');
+			if(markId.indexOf(";") !== -1)
+				markId = markId.substring(0, markId.indexOf(";"));
+		  
+			// if we have more commas LAT,LON,HEADING for exampleJsSource
+			var s = markId.split(",");
+			if(s.length > 2)
+			{
+				markId = s[0] + "," + s[1];
+			}
+		  
+			markers[markId].setIcon(new H.map.Icon(svg.replace(/__NO__/g, idx+1).replace(/__FILLCOLOR__/g, "#00FF00")));
+			var t = (idx + 1) + " " + (markers[markId].$SIGN_TYPE != undefined ? markers[markId].$SIGN_TYPE : ""); 
+			$($(this).children()[0]).text(t);
+			count = idx;
+		});
+		
+		// perform recalc only if wanted by user
+		if(document.getElementById('recalcAuto').checked)
+		{
+			calculateRoute();
+		}
+	}
+	
+	sortable.on("sortstop", function(event, ui)
+	{
+		resortRecalcRoute();
+	});
+	
+	$(document).ready(function()
+	{
+		// check if authorized
+		if(window.location.host == "localhost:3000")
+			initSelects();
+		else
+			checkAuth();
+		// init called from hereAccount.js
+	})
+	
+	$(".delete").click(function()
+	{
+		$(this).closest('li').remove();
+	});
+	
+	function showNotification(message)
+	{
+		var html = '<div class="container"><div class="item">';
+			html += message;
+			html += '<br>Click to close!';
+			html += '</div></div>';
+
+		$("#notification").fadeIn("slow").html(html);
+		$("#notification").click(function()
+		{
+			$("#notification").fadeOut("slow");
+		});
+	}
+	
+	function readInputTraceFile(file)
+	{
+		var reader = new FileReader();
+		reader.fileName = file.name;
+		reader.readAsBinaryString(file);
+
+		reader.onload = function () 
+		{
+			var traceFileContent;
+			if (reader.fileName.indexOf(".csv", reader.fileName.length - 4) < -1) 
+			{
+				showNotification("Only csv format accepted");
+			}
+			else
+			{
+				traceFileContent = reader.result;
+				var splittedLines = traceFileContent.split("\n");
+				if(splittedLines.length<1 ||  splittedLines[0].indexOf(";") < 0 || splittedLines[0].split(";")[1].indexOf('WAYPOINTS') < 0)
+				{
+					showNotification("CSV file not in required format.");
+					return;
+				}
+				splittedLines.map(function (item){
+					var line = item.split(";");
+					if(line[1] !== '' && line[1].indexOf('WAYPOINTS') == -1)
+					{
+						count++;
+						var p = line[1], 
+							signType = line.length == 3 ? line[2] : "";
+						addMarker(p, count + 1, signType);
+						addWaypoint(p, count + 1, signType);
+					}
+				});
+				map.setViewBounds(group.getBounds());
+				calculateRoute();
+			}
+	    };
+	}
+
+	function readInputWaypointFile(file)
+	{
+		var reader = new FileReader();
+		reader.fileName = file.name;
+		reader.readAsBinaryString(file);
+
+		reader.onload = function () 
+		{
+			points.removeAll();
+			map.addObject(points);
+			
+			var waypointFileContent;
+			if (reader.fileName.indexOf(".csv", reader.fileName.length - 4) < -1) 
+			{
+				showNotification("Only csv format accepted");
+			}
+			else
+			{
+				waypointFileContent = reader.result;
+				var splittedLines = waypointFileContent.split("\n");
+				if(splittedLines.length < 1 ||  splittedLines[0].indexOf(",") < 0 || splittedLines[0].indexOf('IDX') == -1 || splittedLines[0].indexOf('LATITUDE') == -1 || splittedLines[0].indexOf('LONGITUDE') == -1)
+				{
+					showNotification("CSV file not in required format.");
+					return;
+				}
+				splittedLines.map(function (item){
+					var line = item.split(",");
+					if((line[0] !== '' && line[0].indexOf('LATITUDE') == -1) && (line[1] !== '' && line[1].indexOf('LONGITUDE') == -1) && (line[0] !== '' && line[0].indexOf('IDX') == -1) && (line[0] !== '' && line[0].indexOf('NAME') == -1))
+					{
+						addInitialMarker(line[1] + "," + line[2], false, line[0], line[3]);
+					}
+				});
+				map.setViewBounds(points.getBounds());
+			}
+	    };
+	}
+	
+	function getXHR()
+	{
+		var xhr;
+
+		if(typeof XMLHttpRequest !== 'undefined') 
+		{
+			xhr = new XMLHttpRequest();
+		}
+		else 
+		{
+			var versions = ["MSXML2.XmlHttp.5.0", 
+							"MSXML2.XmlHttp.4.0",
+							"MSXML2.XmlHttp.3.0", 
+							"MSXML2.XmlHttp.2.0",
+							"Microsoft.XmlHttp"]
+			for(var i = 0, len = versions.length; i < len; i++) 
+			{
+				try 
+				{
+					xhr = new ActiveXObject(versions[i]);
+					break;
+				}
+				catch(e)
+				{
+				}
+			}
+		}
+		return xhr;
+	}
+	
+	function calculateRoute()
+	{
+		// Don't allow call to routing before we have at least two points in the Sortable. 
+		if($("#sortable").children().length < 2)
+			return;
+		
+ 		var routingPoints = $("#sortable").sortable("toArray");
+	
+		if (routingPoints.length > 1)
+		{
+			var data = "",
+				i = 0,
+				l = routingPoints.length,
+				offset = 0;
+				
+			for(;i < l; i++)
+			{
+				// special handling for Signs, add additional waypoint -heading to ensure the sign is on the route
+				if(routingPoints[i].indexOf(";;;") != -1) 
+				{
+					var sstr = routingPoints[i].substring(0, routingPoints[i].indexOf(";") -1 ),
+						heading = routingPoints[i].substring(routingPoints[i].indexOf(";;;") + 3, routingPoints[i].length),
+						radius = 40,
+						tradius = 5, 
+						split = sstr.split(","),
+						lat = split[0],
+						lng = split[1],
+						shiftedLatLon = shiftLatLon(lat, lng, ((parseFloat(heading) + 180) % 360), radius);  // only 180 degrees to go into the opposite direction
+						
+						if(debug) 
+						{
+							var marker = new H.map.Marker(new H.geo.Point(shiftedLatLon[0], shiftedLatLon[1]));
+							group.addObject(marker);
+						}
+						
+						data += "waypoint" + (i + offset) + "=" + shiftedLatLon[0] + "," + shiftedLatLon[1] + ";" + tradius + "&"; // add tradius transit to calculated intermediate position
+						offset++;
+						data += "waypoint" + (i + offset) + "=" + lat + "," + lng + ";" + tradius + ";;" + heading + "&";	
+				}
+				else
+				{
+					data += "waypoint" + (i + offset) + "=" + routingPoints[i] + "&";
+				}
+			}
+			
+			var url = [ 
+			   (secure?"https://":"http://")+"route.api.here.com/routing/7.2/calculateroute.json",
+			   "?mode=fastest;car",
+			   "&representation=display",
+			   "&routeattributes=waypoints,summary,shape,legs",
+			   "&legattributes=li",
+			   "&linkattributes=length,fc,sh",
+			   "&maneuverattributes=direction,action",
+			   "&app_code=",
+			   app_code,
+			   "&app_id=",
+			   app_id
+			   ].join("");
+	
+			var xhr = getXHR();
+			xhr.open('POST', url, true);
+			xhr.onload = function () {
+				var json = this.responseText,
+					obj = JSON.parse(json);
+					
+					var allLinks = new Array();
+					var foundsigns = addRouteShapeToMap(obj.response.route[0]);
+					for(var i = 0; i < obj.response.route[0].leg.length; i++) 
+					{
+						allLinks = allLinks.concat(obj.response.route[0].leg[i].link);
+					}
+					// ADAS Part from PDEManager
+					layers = new Object();
+					layers["ADAS_ATTRIB_FC"] = {callback: gotAdasTile};
+
+					pdeManager.setLayers(layers);
+					pdeManager.setLinks(allLinks);
+					pdeManager.setOnTileLoadingFinished(pdeManagerAdasFinished);
+					pdeManager.start();
+
+					// generate HTML output
+					var summary = '<b>'+obj.response.route[0].summary.text+'</b></br>';
+					
+					var area = '<textarea rows="2" cols="50">';
+					for (var i = 0, keys = Object.keys(foundsigns), ii = keys.length; i < ii; i++) {
+						area += (keys[i] + '=' + foundsigns[keys[i]] + "\r\n");
+					}
+					area += "</textarea>";
+					
+					document.getElementById("feedbackTxt").innerHTML = summary + area;
+			};
+			xhr.send(data);
+	
+		}else{
+			showNotification("Add at least 2 waypoints to calculate route.");
+		}
+	}	
+	
+	/**
+	* handle the adas selection for map display, we will request this anyway
+	*/
+	function handleAdasSelection()
+	{
+		showAdas = document.getElementById("showAdas").checked;
+		if(showAdas)
+		{
+			map.addObject(linkCurvatureGroup);
+		}
+		else
+		{
+			// need to catch not on map
+			try
+			{
+				map.removeObject(linkCurvatureGroup);
+			}
+			catch(e)
+			{
+			}
+		}
+	}
+	
+	
+	/**
+	This method generates the curvature along the route display
+	*/
+	function generateCurvatureAlongRoute()
+	{
+		var linksAlongRoute = pdeManager.getLinks();
+
+		// create curvature lines
+		for(var i = 0; i < linksAlongRoute.length; i++)
+		{
+			var currLinkId = linksAlongRoute[i].linkId;
+			// remove + or - sign
+			var linkIdWithoutSign = currLinkId.lastIndexOf("+", 0) === 0 ?  currLinkId.substring(1) : currLinkId;
+			linkIdWithoutSign = linkIdWithoutSign.lastIndexOf("-", 0) === 0 ?  linkIdWithoutSign.substring(1) : linkIdWithoutSign;
+			var linkObject = routeLinkHashMap[linkIdWithoutSign];
+			// check if ADAS data is available for the link
+			if(linkObject.$HPX != null)
+			{
+				for(var k = 0; k < linkObject.$HPX.length; k++)
+				{
+					var x = linkObject.$HPX[k];
+					var y = linkObject.$HPY[k];
+					var curvature = linkObject.$CURVATURE[k];
+					var heading = linkObject.$HEADING[k];
+					renderCurvature(x, y, curvature, heading);
+				}
+			}
+		}
+		map.addObject(linkCurvatureGroup);
+	}
+	
+	/**
+	This method takes ADAS coordinates (x, y) and their curvature and heading information and renders
+	the curvature on the map display via polylines
+	*/
+	function renderCurvature(x, y, curvature, heading)
+	{
+		// Missing values are represented as NULL or as 1000000000.
+		if(curvature == 1000000000)
+			return;
+
+		// calculate shifted lat/lon for curvature polyline
+		var radius = curvature == 0 ? 0 : (1000000.0 / curvature);
+		radius = radius == 0 ? 0 : -((1 / radius) * 2000);
+		var bearingSuppl = -90;
+		if (radius < 0)
+		{
+			radius *= -1;
+			bearingSuppl *= -1;
+		}
+
+		var lat = y / ADASNTU_TO_WGS84;
+		var lon = x / ADASNTU_TO_WGS84;
+		var shiftedLatLon = shiftLatLon(lat, lon, (heading + bearingSuppl + 360) % 360, radius);
+
+		// create polyline
+		var strip = new H.geo.Strip();
+		strip.pushLatLngAlt(lat, lon, 0);
+		strip.pushLatLngAlt(shiftedLatLon[0], shiftedLatLon[1], 0);
+
+		var curvatureLine = new H.map.Polyline(strip,
+			{
+				style:
+				{
+					lineWidth: 2,
+					strokeColor: curvatureColor
+				}
+			});
+		linkCurvatureGroup.addObject(curvatureLine);
+	}
+	
+	/**
+	This method shifts the given lat and long along given bearing to the given distance
+	*/
+	function shiftLatLon(latDegrees, lonDegrees, bearing, distance)
+	{
+		var earthRadius = 6371000;
+		// convert input parameters from decimal degrees into radians
+		var latRad = (latDegrees) * Math.PI / 180;
+		var lonRad = (lonDegrees) * Math.PI / 180;
+
+		var bearingRad = bearing * Math.PI / 180;
+		var distRad = distance / earthRadius;
+
+		var latNewRad = Math.asin(Math.sin(latRad) * Math.cos(distRad) + Math.cos(latRad) * Math.sin(distRad)
+		* Math.cos(bearingRad));
+		var lonNewRad = lonRad
+		+ Math.atan2(Math.sin(bearingRad) * Math.sin(distRad) * Math.cos(latRad), Math.cos(distRad) - Math.sin(latRad)
+		* Math.sin(latNewRad));
+
+		// convert input parameters from radians into decimal degrees
+		var latNewDegrees = latNewRad * 180 / Math.PI;
+		var lonNewDegrees = lonNewRad * 180 / Math.PI;
+		var latLonRet = [];
+		latLonRet.push(latNewDegrees);
+		latLonRet.push(lonNewDegrees);
+		return latLonRet;
+	}	
+</script>

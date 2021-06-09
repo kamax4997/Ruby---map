@@ -1,0 +1,27 @@
+<% content_for :title, "Platform Data Extension" %>
+
+<div class="subheader">Layers in <%= params[:region] %> [<%= params[:release] %>] </div>
+
+<table class="pde_table" cellpadding="4" cellspacing="0" border="1" width="90%">
+	<thead>
+		<tr>
+			<th width="15%">Layer</th>
+			<th width="70%">Attributes</th>
+			<th width="15%">PDE Package</th>
+		</tr>
+	</thead>
+	<tbody id="maps_table_body">
+		<% parameters = "?" + "region=" + params[:region] + "&release=" + params[:release]+ "&url_root=" + params[:url_root] %>
+
+		<% @json.each do |layer| %>
+			<% if !layer['type'].match('static') %>
+				<tr>
+					<td><%= link_to layer['name'], "/pde/layer" + parameters + "&layer=" + layer['name'] %></td>
+					<td><%= layer['attributes'].join(", ") %></td>
+					<td><%= layer['featureMapping']%></td>
+				</tr>
+			<% end %>
+		<% end %>
+
+	</tbody>
+</table>

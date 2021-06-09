@@ -1,0 +1,324 @@
+<%= javascript_include_tag "convexHull" %>
+<%= javascript_include_tag "moment" %>
+<%= javascript_include_tag "moment-range" %>
+<%= javascript_include_tag "date-time-parser" %>
+<% content_for :title, "Transit Isoline" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p style="width: 350px;">In this example, we demonstrate how to
+		use Transit Isoline end point of Transit API to retrieve an isoline around an 
+		input origin that can be reached within a particular travel time.</p>
+	<div class="form-group">
+		<label class="control-label col-sm-3" for="input-start">Address</label>
+		<div class="col-sm-9">
+		<input id="input-start" class="form-control input-wide" value="Chicago" type="text"/>&nbsp;
+		</div>
+	</div>
+	<div class="form-group">
+		<label class="control-label col-sm-3" for="input-start">Duration (in minutes)</label>
+		<div class="col-sm-9">
+		 <input id="input-duration" class="form-control" value="10" type="text"/>&nbsp;
+		</div> 
+	</div>
+	<div class="form-group">
+			<label class="control-label col-sm-3" for="date">Departure</label>
+			<div class="col-sm-9">
+				<input type="date" id="date" value="">
+				<input type="time" id="time"value="">
+			</div>
+	</div>
+	<input id="routing" class="btn btn-default btn-sm" type="button" value="Search"/><br />
+	<div>HLP Service releases which are used in this demo:</div>
+	<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;"></div>
+</div>
+
+<div id="mapContainer"></div>
+<script>
+	/*
+	(C) HERE 2017
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		useHTTPS: secure,
+		app_id: app_id,
+		app_code: app_code
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	group = new H.map.Group();
+
+
+	var calcroute=document.getElementById("routing");
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), maptypes.normal.map, {
+		center:  new H.geo.Point(41.88854,-87.62849),
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	//add JS API Release information
+	releaseInfoTxt.innerHTML+="JS API: 3."+ H.buildInfo().version;
+
+	//add MRS Release information
+	loadMRSVersionTxt();
+
+	//helper
+	var releaseGeocoderShown = false;
+	var releaseRoutingShown = false;
+	
+	var infoBubble;
+	var pathSegmntMap=[],stationMap=[];
+
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// add long click in map event listener
+	map.addEventListener('longpress', handleLongClickInMap);
+	
+	// departure values
+	var now = moment();
+	var date = document.getElementById("date"),
+	time = document.getElementById("time");
+	date.value = now.format("YYYY-MM-DD");
+	time.value = now.format("HH:mm");
+	
+	/**
+	 * Open Info bubble with station details
+	 * @param {Object} evt
+	 */
+	var openBubble = function(evt) {
+		
+		var pos = map.screenToGeo(evt.currentPointer.viewportX, evt.currentPointer.viewportY);
+		ui.removeBubble(infoBubble);
+		var duration=evt.target.$duration;
+		var stationId=evt.target.$stnId.split("#");
+		if(stationId.length<0){
+			stationId=[evt.target.$stnId];
+		}
+		var stnName=evt.target.$stnName;
+		var content="<span class='smallFont'>Station : <a class='here_green' "+
+		"target='_blank' href='transit_line_info?stationId="+stationId[0]+"'>"+stnName+"</a>"+
+		"<br>Duration :"+parseDuration(duration)+ "<br>Station Id :"+stationId[0]+"</span>";
+		
+		infoBubble = new H.ui.InfoBubble(pos, { content: content });
+		bubble = ui.addBubble(infoBubble);
+		
+		
+   }
+   
+   // add listner to open Info bubble
+   group.addEventListener("tap", openBubble);
+
+	/**
+	 * Parse duration values
+	 * @param {Object} duration
+	 */
+	var parseDuration = function(duration){
+		duration=duration.replace(/PT/g,"").replace(/H/g," Hour(s)").replace(/M/g," Minute(s)").replace(/S/g," Second(s)")
+		return duration;
+	}
+	
+	/**
+	 * Get details for the lines passing through Station
+	 * @param {Object} stationId
+	 */
+	var getLineDetails = function(stationId){
+		var url = ["https://transit.api.here.com/lines/v1/by_stopid.json?",
+		"&app_id=",
+		app_id,
+		"&app_code=",
+		app_code,
+		"&stop_id=",
+		encodeURIComponent(stationId),
+		"&callback_func=linkInfoCallBack"
+		
+		].join("");
+
+		var newUrl = url;
+        script = document.createElement("script");
+		script.src = newUrl;
+		document.body.appendChild(script);
+	}
+	
+	
+	/**
+	Start/Destination selectin via LongClick in map
+	**/
+	function handleLongClickInMap(currentEvent)
+	{
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+
+		group.removeAll();
+		sh = lastClickedPos.lat + "," + lastClickedPos.lng;
+		document.getElementById("input-start").value = sh;
+		geocode(sh);
+	}
+	
+	/**
+	 * Geocoder address
+	 * @param {Object} term
+	 */
+	var geocode = function(term)
+	{
+		//add Geocoder Release information if not already done
+		if (releaseGeocoderShown== false){
+			loadGeocoderVersionTxt();
+			releaseGeocoderShown = true;
+		}
+		geoUrl = ["https://geocoder.api.here.com/6.2/search.json?",
+		"searchtext=",
+		term,
+		"&maxresults=1",
+		"&app_id=",
+		app_id,
+		"&app_code=",
+		app_code,
+		"&jsoncallback=",
+		"geocallback"
+		].join("");
+
+		script = document.createElement("script");
+		script.src = geoUrl;
+		document.body.appendChild(script);
+	}
+	
+	/**
+	 * Call back for parsing Geocoder response
+	 * @param {Object} response
+	 */
+	var geocallback = function(response)
+	{
+		group.removeAll();
+
+		if(response && response.Response && response.Response.View[0] && response.Response.View[0].Result[0] && response.Response.View[0].Result[0].Place && response.Response.View[0].Result[0].Place.Locations[0])
+		{
+			lat = response.Response.View[0].Result[0].Place.Locations[0].DisplayPosition.Latitude;
+			lng = response.Response.View[0].Result[0].Place.Locations[0].DisplayPosition.Longitude;
+
+			getIsolines(lat, lng);
+		}
+		else if(response && response.Response && response.Response.View[0] && response.Response.View[0].Result[0] && response.Response.View[0].Result[0].Location && response.Response.View[0].Result[0].Location.DisplayPosition)
+		{
+
+			lat = response.Response.View[0].Result[0].Location.DisplayPosition.Latitude;
+			lng = response.Response.View[0].Result[0].Location.DisplayPosition.Longitude;
+
+			getIsolines(lat, lng);
+		}
+	}
+
+    /**
+     * Get Isoline details
+     * @param {Object} lat
+     * @param {Object} lng
+     */
+	var getIsolines = function(lat, lng)
+	{
+	
+		var depature = date.value + "T" + time.value + ":00";
+		var url = ["https://transit.api.here.com/isochrone/v1/search.json?",
+		"x=",
+		lng, 
+		"&y=",
+		lat,
+		"&max_dur=",
+		document.getElementById("input-duration").value,
+		"&time="+encodeURIComponent(depature),
+		"&app_id=",
+		app_id,
+		"&app_code=",
+		app_code,
+		"&callback_func=isolineCallback"
+		
+		].join("");
+
+		var newUrl = url;
+        script = document.createElement("script");
+		script.src = newUrl;
+		document.body.appendChild(script);
+		
+	}
+	
+	/**
+	 * Call back for processing isoline response
+	 * @param {Object} response
+	 */
+	var isolineCallback = function(response)
+	{
+		
+		if(response && response.Res && response.Res.Isochrone && response.Res.Isochrone.IsoDest)
+		{
+			stations = response.Res.Isochrone.IsoDest;
+			var points = [];
+			for (var j = 0; j < stations.length; j++) {
+			    var station = stations[j].Stn;
+				var stationLon = parseFloat(station["@x"]);
+				var stationLat = parseFloat(station["@y"]);
+				coord = new H.geo.Point(parseFloat(stationLat), parseFloat(stationLon));
+				// Create markers to show the stations	
+				shp = new H.map.Marker(coord);
+				shp.$stnName=station["@name"];
+				shp.$stnId=station["@id"];
+				shp.$duration=stations[j]["@duration"];
+				
+				points[j]={x:stationLon,y:stationLat};
+				
+				group.addObject(shp);
+			}
+			points[points.length]={x:lng,y:lat};
+			
+			// Get convex hull polygon coversing all stations retrieved
+			var hullPoints = convexHull(points);
+			var strip = new H.geo.Strip();
+			hullPoints.forEach(function (p) {
+		    		strip.pushLatLngAlt(p.y, p.x, 0);
+			});
+			strip.pushLatLngAlt(hullPoints[0].y, hullPoints[0].x, 0);
+			shp = new H.map.Polygon(strip, {
+					style:{ lineWidth: 5, strokeColor: "rgba(255, 204, 34, 0.5)",fillColor : "rgba(255, 204, 34, 0.5)" }
+			});
+			group.addObject(shp);
+				
+			
+		}else{
+			alert("Oops! Something went wrong.");
+		}
+	
+	    map.addObject(group);
+		map.setViewBounds(group.getBounds());
+	}
+	
+	/**
+	 * Trigger Geocode for finding the isoline
+	 */
+	calcroute.onclick = function ()
+	{
+		geocode(document.getElementById("input-start").value);
+	};
+
+	
+
+</script>

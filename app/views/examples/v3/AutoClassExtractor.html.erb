@@ -1,0 +1,1445 @@
+<% content_for :title, "AutoClass Extractor" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+		<li>Examples:
+		<input id="example1" class="btn btn-default btn-sm" type="button" value="JSON Input" onclick="loadFromFile('testJSONInput.json');"/>
+		<input id="example2" class="btn btn-default btn-sm" type="button" value="CSV Input" onclick="loadFromFile('testCSVInput.csv');"/>
+	</li>
+	</ul>
+	<h5>Input trace</h5>
+		<textarea id="tracetextarea" class="form-control" rows="10"></textarea>
+		<input class="btn btn-default btn-sm" type="button" value="Reset" onclick="reset();"/>
+		<input id="submittracebutton" class="btn btn-default btn-sm" type="button" value="Submit"/>
+		to <input type="text" id="rmeUrl" value="https://rme.api.here.com/2/matchroute.json?routemode=car&attributes=SPEED_LIMITS_FCn(FROM_REF_SPEED_LIMIT,TO_REF_SPEED_LIMIT,SPEED_LIMIT_UNIT),ROAD_ADMIN_FCn(ADMIN_PLACE_IDS,POSTAL_CODES),ROAD_NAME_FCn(*),ROAD_ADMIN_NAMES_FCn(*),LINK_ATTRIBUTE_FCn(ISO_COUNTRY_CODE,VEHICLE_TYPES,URBAN,FUNCTIONAL_CLASS,CONTROLLED_ACCESS,TRAVEL_DIRECTION,BOAT_FERRY,RAIL_FERRY,INTERSECTION_CATEGORY,SPEED_CATEGORY,ROUTE_TYPES),ROAD_GEOM_FCn(NAME,TUNNEL,BRIDGE)" autocomplete="off" size="40">
+	<h5>View</h5>
+	<ul>
+		<li style="color: black;">Input trace points</li>
+		<li style="color: green;">Display Matched Points and route</li>
+		<li style="color: black;"><input id="tracePointMode" type="checkbox" autocomplete="off" onclick="submitTrace();" checked/> Trace Points Only Mode</li>
+		<li style="color: black;"><input id="extractAdminsMode" type="checkbox" autocomplete="off" onclick="submitTrace();" checked/> Extract Admins Mode</li>
+		
+	</ul>
+	<h5>Warnings</h5>
+		<textarea id="warningstextarea" autocomplete="off" class="form-control" rows="5">Please submit...</textarea>
+	<h5>Output</h5>
+		<textarea id="outputtextarea" autocomplete="off" class="form-control" rows="5">Please submit...</textarea>
+</div>
+
+<div id="mapContainer"></div>
+<script type="text/javascript">
+
+	/* 
+	 * author dom schuette
+	 * (C) HERE 2018
+	*/
+	
+	// check for display settings
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	
+	// check if the script is loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// globals
+	var mapContainer = document.getElementById('mapContainer'),
+		platform = new H.service.Platform(
+		{	
+			app_code: app_code,	
+			app_id: app_id,	
+			useHTTPS: secure 
+		}),
+		defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+		map = new H.Map(mapContainer, defaultLayers.normal.map, 
+			{ 
+				center: new H.geo.Point(52.11, 0.68), 
+				zoom: 5 
+			}),
+		zoomToResult = true,
+		uTurn = false;
+		
+	// Do not draw underneath control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// redraw the map, if size changed
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	var	objContainer = new H.map.Group();
+
+	var submitTrace = function ()
+	{
+		objContainer.removeAll();
+		document.getElementById("warningstextarea").value = '';
+		
+		// if there is an app_id specified in the URL then use it, otherwise use the default
+		var url = document.getElementById('rmeUrl').value;
+		var appIdRegEx= /[\?&]app_id=/i;
+		var appCodeRegEx= /[\?&]app_code=/i;
+		if(url.search(appIdRegEx) === -1 && url.search(appCodeRegEx) === -1 )
+		{
+			if(!url.endsWith("&"))
+				url = url.concat("&");
+			url = url.concat("app_id=" + app_id + "&app_code=" + app_code);                
+		}
+		
+		if((url.search(appIdRegEx) >= 0 && url.search(appCodeRegEx) < 0) || (url.search(appIdRegEx) < 0 && url.search(appCodeRegEx) >= 0 ))
+		{
+			alert('If you provide credentials in the RME URL field, please provide both app_id AND app_code.');                
+			return;
+		}
+		
+		// create the icons for faster display if needed
+		var text = document.getElementById('tracetextarea').value,
+			lines = text.split(/\r|\r\n|\n/),
+			count = lines.length;
+		createIcons(count);		
+		
+		// get the post body 
+		var data = document.getElementById('tracetextarea').value;
+		
+		if(data.includes('tracePoints'))
+		{
+			data = parseJSONInput(data);
+		}
+		else if(data.includes(";"))
+		{
+			data = parseCSVInput(data);
+		}
+		
+		var xhr = getXHR();
+		xhr.open('POST', url, true);
+		
+		xhr.onload = function () {
+			gotRouteMatchResponse(JSON.parse(this.responseText));
+		}
+		
+		//xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+		//xhr.setRequestHeader('Content-Type', 'text/plain');
+		xhr.send(data);
+	}
+	document.getElementById('submittracebutton').onclick = submitTrace;
+	
+	function getXHR()
+	{
+		var xhr;
+
+		if(typeof XMLHttpRequest !== 'undefined') 
+			xhr = new XMLHttpRequest();
+		else
+		{
+			var versions = ["MSXML2.XmlHttp.5.0", 
+							"MSXML2.XmlHttp.4.0",
+							"MSXML2.XmlHttp.3.0", 
+							"MSXML2.XmlHttp.2.0",
+							"Microsoft.XmlHttp"]
+
+			for(var i = 0, len = versions.length; i < len; i++)
+			{
+				try
+				{
+					xhr = new ActiveXObject(versions[i]);
+					break;
+				}
+				catch(e){}
+			}
+		}
+		return xhr;
+	}
+	
+	
+	function reset()
+	{
+		var traceTextArea = document.getElementById('tracetextarea');
+		traceTextArea.value = '';
+		var outTextArea = document.getElementById('outputtextarea');
+		outTextArea.value = '';
+		objContainer.removeAll();
+		document.getElementById("warningstextarea").value = '';
+	}
+
+	map.addEventListener('tap', function (currentEvent) {
+		var traceTextArea = document.getElementById('tracetextarea');
+		if (traceTextArea.value.lastIndexOf('SEQNR,\tLATITUDE,\tLONGITUDE', 0) != 0)
+			traceTextArea.value = 'SEQNR,\tLATITUDE,\tLONGITUDE';
+		
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+		var numLines = traceTextArea.value.split(/\r*\n/).length;
+		document.getElementById('tracetextarea').value += "\n" + (numLines - 1) + ",\t" + (Math.round(lastClickedPos.lat * 100000.0) / 100000.0) + ",\t" + (Math.round(lastClickedPos.lng * 100000.0) / 100000.0);
+		zoomToResult = false;
+		submitTrace();
+	});
+
+	document.getElementById('tracetextarea').addEventListener(
+			'dragover', function handleDragOver(evt) {
+				evt.stopPropagation();
+				evt.preventDefault();
+				evt.dataTransfer.dropEffect = 'copy';
+			},
+		false
+	);
+
+	document.getElementById('tracetextarea').addEventListener(
+		'drop', function(evt) {
+			evt.stopPropagation();
+			evt.preventDefault();
+			var files = evt.dataTransfer.files;
+			var file = files[0];
+			var r = new FileReader();
+			r.onload = function(e) { 
+				document.getElementById('tracetextarea').value = r.result;
+				submitTrace();
+			}
+			r.readAsText(file);
+		},
+		false
+	);
+
+	var gotRouteMatchResponse = function (respJsonObj) {
+		if (respJsonObj.error != undefined || respJsonObj.faultCode != undefined || respJsonObj.type) {
+			alert(respJsonObj.message + "\nStatus: " + respJsonObj.responseCode);
+			return;
+		}
+		
+		var routeLinks = respJsonObj.RouteLinks,
+			tracePoints = respJsonObj.TracePoints;
+		if (respJsonObj.RouteLinks !== undefined)
+		{
+			// draw the route
+			addLinkPointsToContainer(respJsonObj.RouteLinks);
+			// draw the original and the matched trace points
+			tracePoints = respJsonObj.TracePoints;
+			for (var l = 0; l < tracePoints.length; l++) {
+				var p = tracePoints[l];
+				objContainer.addObject(new H.map.Marker(new H.geo.Point(p.lat       , p.lon       ), {icon: icons["#000000" + l]}));
+				objContainer.addObject(new H.map.Marker(new H.geo.Point(p.latMatched, p.lonMatched), {icon: icons["#00FF00" + l]}));
+			}
+			var response = processRMEResponse(respJsonObj, document.getElementById('tracePointMode').checked, document.getElementById('extractAdminsMode').checked);
+			document.getElementById('outputtextarea').value = JSON.stringify(response, undefined, 4);
+		}
+	
+		map.addObject(objContainer);
+		if (zoomToResult)
+			map.setViewBounds(objContainer.getBounds());
+		zoomToResult = true;
+
+		var warningsArea = document.getElementById("warningstextarea");
+		if(respJsonObj.Warnings == undefined || respJsonObj.Warnings.length === 0) {
+			warningsArea.value += 'No Warnings.';
+		} else {
+			for(var d = 0; d < respJsonObj.Warnings.length; d++) {
+				if(0 !== d) warningsArea.value += '\n';
+				warningsArea.value += respJsonObj.Warnings[d].text;
+			}
+		}
+	};
+	
+	var processRMEResponse = function(rootNode, removeRouteLinks, extractAdmins)
+	{
+		var routeLinks = rootNode.RouteLinks,
+			tracePoints = rootNode.TracePoints,
+			i = 0,
+			l = routeLinks.length,
+			out = new Array(),
+			lastAdminIds = "",
+			lastIsoCountryCode = "",
+			lastPostalCodes = "",
+			lastBaseNames = new Array(),
+			linkIdToAttributes = new Object();
+
+			
+		for(; i < l; i++)
+		{
+			var cur = routeLinks[i], 
+				linkId = parseInt(cur.linkId);
+
+			if(cur !== undefined && cur.attributes !== undefined && cur.attributes.LINK_ATTRIBUTE_FCN !== undefined && cur.attributes.LINK_ATTRIBUTE_FCN[0] && cur.attributes.LINK_ATTRIBUTE_FCN[0].FUNCTIONAL_CLASS)
+			{
+				var fc = parseInt(cur.attributes.LINK_ATTRIBUTE_FCN[0].FUNCTIONAL_CLASS),
+					bidirect = cur.attributes.LINK_ATTRIBUTE_FCN[0].TRAVEL_DIRECTION !== 'B' ? false : true,
+					ramp = cur.attributes.LINK_ATTRIBUTE_FCN[0].RAMP == "Y" ? true : false,
+					tunnel = cur.attributes.ROAD_GEOM_FCN[0].TUNNEL == "Y" ? true : false,
+					bridge = cur.attributes.ROAD_GEOM_FCN[0].BRIDGE == "Y" ? true : false,
+					pedestrian = ((parseInt(cur.attributes.LINK_ATTRIBUTE_FCN[0].VEHICLE_TYPES) & 16) == 16) ? true : false,
+					ferry = (cur.attributes.LINK_ATTRIBUTE_FCN[0].BOAT_FERRY == "Y" || cur.attributes.LINK_ATTRIBUTE_FCN[0].RAIL_FERRY == "Y") ? true : false,
+					ctrledAccess = cur.attributes.LINK_ATTRIBUTE_FCN[0].CONTROLLED_ACCESS == "Y" ? true : false,
+					roundabout = parseInt(cur.attributes.LINK_ATTRIBUTE_FCN[0].INTERSECTION_CATEGORY) == 4 ? true : false,
+					isoCountryCode = cur.attributes.LINK_ATTRIBUTE_FCN[0].ISO_COUNTRY_CODE,
+					adminIds = cur.attributes.ROAD_ADMIN_FCN[0].ADMIN_PLACE_IDS !== undefined ? cur.attributes.ROAD_ADMIN_FCN[0].ADMIN_PLACE_IDS : "",
+					postalCodes = cur.attributes.ROAD_ADMIN_FCN[0].POSTAL_CODES !== undefined ? cur.attributes.ROAD_ADMIN_FCN[0].POSTAL_CODES : "",
+					roadNames = (cur.attributes.ROAD_NAME_FCN !== undefined && cur.attributes.ROAD_NAME_FCN[0] !== undefined && cur.attributes.ROAD_NAME_FCN[0].NAMES !== undefined) ? cur.attributes.ROAD_NAME_FCN[0].NAMES : "",
+					roadName = cur.attributes.ROAD_GEOM_FCN[0].NAME !== undefined ? cur.attributes.ROAD_GEOM_FCN[0].NAME : "",
+					speed = (linkId < 0) ? cur.attributes.SPEED_LIMITS_FCN[0].TO_REF_SPEED_LIMIT : cur.attributes.SPEED_LIMITS_FCN[0].FROM_REF_SPEED_LIMIT,
+					speedCat = cur.attributes.LINK_ATTRIBUTE_FCN[0].SPEED_CATEGORY !== undefined ? parseInt(cur.attributes.LINK_ATTRIBUTE_FCN[0].SPEED_CATEGORY) : 6,
+					speedLimitUnit = cur.attributes.SPEED_LIMITS_FCN[0].SPEED_LIMIT_UNIT !== undefined ? cur.attributes.SPEED_LIMITS_FCN[0].SPEED_LIMIT_UNIT : "K",
+					urban = cur.attributes.LINK_ATTRIBUTE_FCN[0].URBAN == "Y" ? true : false,
+					foundBaseName = false,
+					basenames = [],
+					routeTypeMask = cur.attributes.LINK_ATTRIBUTE_FCN[0].ROUTE_TYPES !== undefined ? cur.attributes.LINK_ATTRIBUTE_FCN[0].ROUTE_TYPES : 1,
+					routeTypesN = getRouteType(isoCountryCode, routeTypeMask),
+					enhancedAttributesNode;
+					
+					enhancedAttributesNode = new Object();
+					enhancedAttributesNode.routeTypes = routeTypesN;
+					enhancedAttributesNode.urban = urban;
+					enhancedAttributesNode.linkId = linkId;
+					enhancedAttributesNode.speedLimit = Number(speed);
+					enhancedAttributesNode.speedCategory = speedCat;
+					enhancedAttributesNode.speedLimitUnit = speedLimitUnit;
+			}
+			
+			if (roadNames !== "")
+			{
+				var roadNamesSplit = roadNames.split("\\u001D");
+				for (var n in roadNamesSplit)
+				{
+					if (n.charAt(3) == 'B' && n.charAt(4) == 'N')
+					{
+						basenames.push(n.split("\\u001E")[0]);
+					}
+				}
+			}
+
+			for ( var j = 0; j < lastBaseNames.length; j++)
+			{
+				if (basenames.contains(lastBaseNames.get(i)))
+				{
+					foundBaseName = true;
+					lastBaseNames.addAll(basenames);
+					break;
+				}
+			}
+
+			if (extractAdmins && (lastAdminIds.valueOf() != adminIds || lastIsoCountryCode.valueOf() != isoCountryCode || lastPostalCodes.valueOf() != postalCodes || !foundBaseName))
+			{
+				var adminNode = new Object(),
+					languageCode = isoToLanguage[isoCountryCode] !== undefined ? isoToLanguage[isoCountryCode] : "",
+					country = cur.attributes.ROAD_ADMIN_NAMES_FCN[0].COUNTRY_NAMES !== undefined ? cur.attributes.ROAD_ADMIN_NAMES_FCN[0].COUNTRY_NAMES : "",
+					order1 = cur.attributes.ROAD_ADMIN_NAMES_FCN[0].ORDER1_NAMES !== undefined ? cur.attributes.ROAD_ADMIN_NAMES_FCN[0].ORDER1_NAMES : "",
+					order2 = cur.attributes.ROAD_ADMIN_NAMES_FCN[0].ORDER2_NAMES !== undefined ? cur.attributes.ROAD_ADMIN_NAMES_FCN[0].ORDER2_NAMES : "",
+					order8 = cur.attributes.ROAD_ADMIN_NAMES_FCN[0].ORDER8_NAMES !== undefined ? cur.attributes.ROAD_ADMIN_NAMES_FCN[0].ORDER8_NAMES : "",
+					builtup = cur.attributes.ROAD_ADMIN_NAMES_FCN[0].BUILTUP_NAMES !== undefined ? cur.attributes.ROAD_ADMIN_NAMES_FCN[0].BUILTUP_NAMES : "",
+					population = cur.attributes.ROAD_ADMIN_NAMES_FCN[0].POPULATION !== undefined ? cur.attributes.ROAD_ADMIN_NAMES_FCN[0].POPULATION : -1;
+					
+				if(country !== "")
+					adminNode.country = extractLanguageFromString(languageCode, country);
+				if(order1 !== "")
+					adminNode.state = extractLanguageFromString(languageCode, order1);        
+				if(order2 !== "")
+					adminNode.county = extractLanguageFromString(languageCode, order2);        
+				if(order8 !== "")
+					adminNode.city = extractLanguageFromString(languageCode, order8);
+				if(builtup !== "")
+					adminNode.district = extractLanguageFromString(languageCode, builtup);
+				
+				adminNode.code = postalCodes != null ? postalCodes : "";
+				adminNode.street= roadName !== "" ? roadName : (basenames.length > 0 && basenames.get(0) !== undefined ? extractLanguageFromString(languageCode,basenames.get(0)) : "");
+
+				if(population !== -1)
+					adminNode.population = Number(population);
+				
+		        // add the roadEnvironment based on the classification based on Vodafone requirements:
+				/*
+				 * if (rdf_nav_link.controlled_access=Y) THEN “Motorway” 
+				 * else if (rdf_nav_link_status.urban =N) THEN “Extra-urban environment” 
+				 * else if (tot_links > 10000) THEN “Built Up Area 1 (large city)” 
+				 * else if (tot_links between 5000 and 10000) THEN “Built Up Area 2 (medium city)” 
+				 * else if (tot_links < 5000) THEN “Built Up Area 3 (small city)”
+				 */
+				var classificationId = -1;
+				if (ctrledAccess)
+					classificationId = 4;
+				else if (urban)
+					classificationId = 0;
+
+				/*
+				 * for population: CITY_POI_0 City POIs with country capitals and
+				 * cities with a population larger than 5 000 000. 
+				 * CITY_POI_1 City POIs with capitals of order-1 areas and cities with a population larger than 500 000. 
+				 * CITY_POI_2 City POIs with capitals of order-2 areas and cities with a population larger than 50 000. 
+				 * CITY_POI_8 City POIs with capitals of order-8 areas and cities with a population larger than 20 000. 
+				 * CITY_POI_9 City, Hamlet and Neighbourhood POIs. Cities with population of 20000 or less and  without administrative function are added.
+				 */
+
+				if (population > 500000)
+					classificationId = 1;
+				else if (population > 50000)
+					classificationId = 2;
+				else if (population > 0)
+					classificationId = 3;
+			  
+				adminNode.roadEnvironment = classificationId;
+				
+				/*
+				 * if(LINK_TYPE =5 AND CONTROLLED_ACCESS='Y') THEN 4064 
+				 * else if(LINK_TYPE =5 AND ROUNDABOUT='Y') THEN 4016 
+				 * else if(LINK_TYPE =5 AND PEDESTRIAN='Y') THEN 4000 
+				 * else if(LINK_TYPE =5 AND RAMP='Y') THEN 4032 
+				 * else if(LINK_TYPE =5 AND FERRY='Y') THEN 4080 
+				 * else if(LINK_TYPE =5) THEN 4000 
+				 * else if(LINK_TYPE IN (4,3) AND CONTROLLED_ACCESS='Y') THEN 4320 
+				 * else if(LINK_TYPE IN (4,3) AND ROUNDABOUT='Y') THEN 4272 
+				 * else if(LINK_TYPE IN (4,3) AND PEDESTRIAN='Y') THEN 4256 
+				 * else if(LINK_TYPE IN (4,3) AND RAMP='Y') THEN 4288 
+				 * else if(LINK_TYPE IN (4,3) AND FERRY='Y') THEN 4336 
+				 * else if(LINK_TYPE IN (4,3)) THEN 4304 
+				 * else if(LINK_TYPE =2 AND CONTROLLED_ACCESS='Y') THEN 4576 
+				 * else if(LINK_TYPE =2 AND ROUNDABOUT='Y') THEN 4528 
+				 * else if(LINK_TYPE =2 AND PEDESTRIAN='Y') THEN 4512 
+				 * else if(LINK_TYPE =2 AND RAMP='Y') THEN 4544 
+				 * else if(LINK_TYPE =2 AND FERRY='Y') THEN 4592 
+				 * else if(LINK_TYPE =2) THEN 4560 
+				 * else if(LINK_TYPE =1 AND CONTROLLED_ACCESS='Y') THEN 4832 
+				 * else if(LINK_TYPE =1 AND ROUNDABOUT='Y') THEN 4784 
+				 * else if(LINK_TYPE =1 AND PEDESTRIAN='Y') THEN 4768 
+				 * else if(LINK_TYPE =1 AND RAMP='Y') THEN 4800 
+				 * else if(LINK_TYPE =1 AND FERRY='Y') THEN 4848 
+				 * else if(LINK_TYPE =1) THEN 4816
+				 */
+
+				var roadType = 0;
+				if (fc == 5)
+				{
+					  if (ctrledAccess)    roadType = 4064;
+					  else if (roundabout) roadType = 4016;
+					  else if (pedestrian) roadType = 4000;
+					  else if (ramp)       roadType = 4032;
+					  else if (ferry)      roadType = 4080;
+					  else                 roadType = 4000;
+				}
+				else if (fc == 4 || fc == 3)
+				{
+					  if (ctrledAccess)    roadType = 4320;
+					  else if (roundabout) roadType = 4272;
+					  else if (pedestrian) roadType = 4256;
+					  else if (ramp)       roadType = 4288;
+					  else if (ferry)      roadType = 4336;
+					  else                 roadType = 4304;
+				}
+				else if (fc == 2)
+				{
+					  if (ctrledAccess)    roadType = 4576;
+					  else if (roundabout) roadType = 4528;
+					  else if (pedestrian) roadType = 4512;
+					  else if (ramp)       roadType = 4544;
+					  else if (ferry)      roadType = 4592;
+					  else                 roadType = 4560;
+				}
+				else if (fc == 1)
+				{
+					  if (ctrledAccess)    roadType = 4832;
+					  else if (roundabout) roadType = 4784;
+					  else if (pedestrian) roadType = 4768;
+					  else if (ramp)       roadType = 4800;
+					  else if (ferry)      roadType = 4848;
+					  else                 roadType = 4816;
+				}
+				adminNode.roadType = roadType;
+								
+				lastAdminIds = adminIds;
+				lastIsoCountryCode = isoCountryCode;
+				lastPostalCodes = postalCodes;
+				lastBaseNames = basenames;
+			}
+
+			// remove unneeded stuff from the response
+			delete cur["attributes"]["LINK_ATTRIBUTE_FCN"];
+			delete cur["attributes"]["ROAD_ADMIN_FCN"];
+			delete cur["attributes"]["ROAD_NAME_FCN"];
+			delete cur["attributes"]["SPEED_LIMITS_FCN"];
+			delete cur["attributes"]["ROAD_GEOM_FCN"];
+
+			enhancedAttributesNode.functionalClass = "" + fc; // make sure its a string
+			enhancedAttributesNode.bidirected = bidirect;
+			enhancedAttributesNode.ramp = ramp;
+			enhancedAttributesNode.tunnel = tunnel;
+			enhancedAttributesNode.bridge = bridge;
+			enhancedAttributesNode.pedestrian = pedestrian;
+			enhancedAttributesNode.ferry = ferry;
+			enhancedAttributesNode.controlledAccess = ctrledAccess;
+			enhancedAttributesNode.roundAbout = roundabout;
+			
+			// and add new ADDRESS Attribute
+			if (adminNode !== undefined)
+			{
+				cur.attributes.ADDRESS = new Array();
+				cur.attributes.ADDRESS[0] = adminNode;
+			}
+			if (enhancedAttributesNode !== undefined)
+			{
+				cur.attributes.ENHANCED_ATTRIBUTES = new Array();
+				cur.attributes.ENHANCED_ATTRIBUTES[0] = enhancedAttributesNode;
+			}
+
+			// store it to the LinkID
+			var objNodes = new Array();
+			if (adminNode !== undefined)
+				objNodes.push(adminNode);
+			if (enhancedAttributesNode !== undefined)
+				objNodes.push(enhancedAttributesNode);
+			linkIdToAttributes[linkId] = objNodes;
+		}
+		
+		i = 0;
+		l = tracePoints.length;
+		
+		for (; i < l; i++)
+		{
+			var cur = tracePoints[i],
+				linkIdMatched = parseInt(cur.linkIdMatched);
+			cur.id = "" + cur.timestamp; // make sure it's a string
+			delete cur["timestamp"];
+
+
+			var attributes = linkIdToAttributes[linkIdMatched],
+				k = 0,
+				kl = attributes.length;
+			
+			for(; k < kl; k++)
+			{
+				var attr = attributes[k];
+				for (var ll = 0, keys = Object.keys(attr), ii = keys.length; ll < ii; ll++)
+				{
+					cur[keys[ll]] = attr[keys[ll]];
+				}
+			}
+		}
+
+		if (removeRouteLinks)
+		{
+			delete rootNode["RouteLinks"];
+		}
+
+		return rootNode;
+	}
+	
+	var getRouteType = function(iso, mask)
+	{
+		var iMask = parseInt(mask),
+		ret = {};
+		if((iMask & 1) == 1)
+			ret[1] = routeTypes[iso + "_" + 1];
+		if((iMask & 2) == 2)
+			ret[2] = routeTypes[iso + "_" + 2];
+		if((iMask & 4) == 4)
+			ret[3] = routeTypes[iso + "_" + 3];
+		if((iMask & 8) == 8)
+			ret[4] = routeTypes[iso + "_" + 4];
+		if((iMask & 16) == 16)
+			ret[5] = routeTypes[iso + "_" + 5];
+		if((iMask & 32) == 32)
+			ret[6] = routeTypes[iso + "_" + 6];
+		return ret;
+	}
+
+	var extractLanguageFromString = function(languageCode, ext)
+	{
+		var startIdx = ext.indexOf(languageCode) + 5, // remove BN
+			endIdx = ext.indexOf("\\u001e\\u001e\\u001d");
+		if(endIdx <= startIdx)
+			endIdx = ext.length;
+    
+		return ext.substring(startIdx, endIdx);
+	}
+	
+	var loadFromFile = function (filename)
+	{
+		var req = new XMLHttpRequest();
+		req.open('GET', '/sample_data/' + filename);
+		req.onreadystatechange = function() {
+			if (req.readyState != XMLHttpRequest.DONE) return;
+			document.getElementById('tracetextarea').value = req.responseText;
+			submitTrace();
+		}
+		req.send();
+	}
+	
+	var addLinkPointsToContainer = function (routeLinks)
+	{
+		for (var l = 0; l < routeLinks.length; l++) {
+			var coords1 = routeLinks[l].shape.split(" ");
+			var coords2 = new H.geo.Strip();
+			if (routeLinks[l].offset && routeLinks[l].offset < 1) {
+		    	if (routeLinks[l].linkId < 0){
+		    		distance = (1 - routeLinks[l].offset) * routeLinks[l].linkLength; //if  offset is set calculate new length of the link
+				 } else {
+					distance = routeLinks[l].offset * routeLinks[l].linkLength; //if  offset is set calculate new length of the link
+				 }
+			    coords1 = getCoordsWithOffset(coords1, distance, l, routeLinks.length);
+			} 
+			for (var c = 0; c < coords1.length; c += 2){
+			coords2.pushLatLngAlt(coords1[c], coords1[c+1], null); //if it is not offset link, just add new point
+			}
+			objContainer.addObject(new H.map.Polyline(coords2, {zIndex: 3, style: {lineWidth: 8, strokeColor: "rgba(18, 65, 145, 0.7)", lineJoin: "round"}}));
+//! TODO add additional information to link on click			
+		}
+	}
+	
+	var getCoordsWithOffset = function (coords1, distance, currentLink, numberOfLinks)
+	{
+		var temp = [];
+		var prevCoord = [coords1[0], coords1[1]];
+		for (var c = 0; c < coords1.length; c += 2)
+		{
+			var linkLength = getKartesianDistanceInMeter(prevCoord[0], prevCoord[1], coords1[c], coords1[c+1]);  //calculate distance to the next point           // if this is a link with offset, do calculations for the offset
+			if ((distance - linkLength) < 0)
+			{
+				//if offset is not reached add new point
+				var midPoint = getMidPoint(prevCoord[0], prevCoord[1], coords1[c], coords1[c+1], distance);  //if offset is reached calculate new point based on the distance from the first point, and angle of the link.
+				var midPointIndex = c;
+				break;
+			}
+			else
+			{
+				distance = distance - linkLength;
+			}
+			prevCoord[0] = coords1[c];
+			prevCoord[1] = coords1[c + 1];
+		}
+		if(!midPoint)
+		{
+			var midPoint = getMidPoint(coords1[coords1.length - 4], coords1[coords1.length - 3], coords1[coords1.length - 2], coords1[coords1.length - 1], distance);  //if offset is reached calculate new point based on the distance from the first point, and angle of the link.
+			var midPointIndex = coords1.length - 2;
+		}
+		if (currentLink == 0 || uTurn)
+		{
+			if (uTurn) uTurn = false;	
+			temp.push(String(midPoint[0]));
+			temp.push(String(midPoint[1]));
+			for (var c = midPointIndex; c < coords1.length; c += 1)
+			{
+				temp.push(coords1[c]);
+			}
+		}
+		else
+		{
+			if (currentLink != numberOfLinks-1) uTurn = true;         
+			for (var c = 0; c < midPointIndex; c += 1)
+			{
+				temp.push(coords1[c]);
+			}
+			temp.push(midPoint[0]);
+			temp.push(midPoint[1]);
+		}
+		return temp;
+	}
+	
+
+	var getKartesianDistanceInMeter = function(lat1, lon1, lat2, lon2)
+	{
+		var earthRadius = 6371000;
+		// convert input parameters from decimal degrees into radians
+		var phi1 = (lat1) * Math.PI / 180;	  
+		var phi2 = (lat2) * Math.PI / 180;
+		var dphi = phi2 - phi1;
+		var dl = (lon2 - lon1) * (Math.PI / 180);
+
+		var a = Math.sin(dphi/2) * Math.sin(dphi/2) +
+			  Math.cos(phi1) * Math.cos(phi2) *
+			  Math.sin(dl/2) * Math.sin(dl/2);
+		var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+		return earthRadius * c;
+	}
+
+	var getMidPoint = function(lat1, lon1, lat2, lon2, distance)
+	{
+		var heading = getHeading(lat2,lon2,lat1,lon1);
+    	var shiftedLatLon = shiftLatLon(lat1, lon1, ((parseFloat(heading) + 180) % 360), distance);  // only 180 degrees to go into the opposite direction
+    	  
+		return shiftedLatLon;
+	}
+    
+	var getHeading = function(lat1,lng1,lat2,lng2)
+	{
+		var phi1 = lat1 * (Math.PI / 180),
+			phi2 = lat2 * (Math.PI / 180),
+			dl = (lng2 - lng1) * (Math.PI / 180),
+			y = Math.sin(dl) * Math.cos(phi2),
+			x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dl),
+			t = Math.atan2(y, x);
+
+		return Math.round(((t * 180 / Math.PI) + 360) % 360);
+	};
+	
+	// This method shifts the given lat and long along given bearing to the given distance
+	var shiftLatLon = function(latDegrees, lonDegrees, bearing, distance)
+	{
+		var earthRadius = 6371000;
+		// convert input parameters from decimal degrees into radians
+		var latRad = (latDegrees) * Math.PI / 180;
+		var lonRad = (lonDegrees) * Math.PI / 180;
+
+		var bearingRad = bearing * Math.PI / 180;
+		var distRad = distance / earthRadius;
+
+		var latNewRad = Math.asin(Math.sin(latRad) * Math.cos(distRad) + Math.cos(latRad) * Math.sin(distRad) * Math.cos(bearingRad));
+		var lonNewRad = lonRad + Math.atan2(Math.sin(bearingRad) * Math.sin(distRad) * Math.cos(latRad), Math.cos(distRad) - Math.sin(latRad) * Math.sin(latNewRad));
+
+		// convert input parameters from radians into decimal degrees
+		var latNewDegrees = latNewRad * 180 / Math.PI;
+		var lonNewDegrees = lonNewRad * 180 / Math.PI;
+		var latLonRet = [];
+		latLonRet.push(latNewDegrees);
+		latLonRet.push(lonNewDegrees);
+		return latLonRet;
+	}
+	
+	var icons = {};
+	
+	var createIcons = function(l)
+	{
+		for(var i = 0; i < l; i++)
+		{
+			if(icons["red" + i] === undefined)
+				icons["red" + i] = createIcon("red", i);
+			if(icons["blue" + i] === undefined)
+				icons["blue" + i] = createIcon("blue", i);
+			if(icons["#000000" + i] === undefined)
+				icons["#000000" + i] = createIcon("#000000", i);
+			if(icons["00FF00" + i] === undefined)
+				icons["#00FF00" + i] = createIcon("#00FF00", i);
+		}
+	}
+	
+	var createIcon = function (color, text)
+	{
+		var canvas = document.createElement('canvas'),
+			width = 28,
+			height = 16,
+			fontSize = 10;
+			
+		canvas.width = width;
+		canvas.height = height;
+
+		ctx = canvas.getContext('2d');
+			
+		ctx.strokeStyle = color;
+		ctx.beginPath();
+		ctx.moveTo(14, 16);
+		ctx.lineTo(14, 9);
+		ctx.stroke();
+		ctx.closePath();
+
+		ctx.font = 'bold ' + fontSize + 'px Arial';
+		ctx.fillStyle = color;
+		ctx.textAlign = 'center'; 
+		ctx.fillText(text,14,8);
+
+		var icon = new mapsjs.map.Icon(canvas,
+					({
+						'anchor': {
+							'x': 14,
+							'y': 16
+						}
+					}));
+		delete canvas; 
+		return icon;
+	};
+	
+	String.prototype.replaceAll = function(search, replacement)
+	{
+		var target = this;
+		return target.replace(new RegExp(search, 'g'), replacement);
+	};
+	
+	var parseCSVInput = function(body)
+	{
+		// 1524198213001;45.66588;8.64245;76;
+		// 1524198213002;45.66088;8.54245;;
+		// 1524198213003;45.65588;8.44245;;110
+		return ("timestamp_msec;latitude;longitude;speed_kmh;heading\r\n" + body.trim()).replaceAll(";", ",");
+	}
+
+	var parseJSONInput = function(body)
+	{
+		var str = "timestamp_msec,latitude,longitude,heading,speed_kmh\n",
+			bodySplit = body.split("\n"),
+			i = 0,
+			l = bodySplit.length,
+			id = "",
+			lat = "",
+			lon = "",
+			speed = "",
+			heading = "",
+			endTokenFound = false,
+			startTokenFound = false,
+			added = false;
+
+		for (; i < l; i++)
+		{
+			var cur = bodySplit[i];
+			if (cur.includes("id"))
+			{
+				id = cur.substring(cur.indexOf(":") + 1, cur.includes(",") ? cur.indexOf(",") : cur.length);
+			}
+			else if (cur.includes("lat"))
+			{
+				lat = cur.substring(cur.indexOf(":") + 1, cur.includes(",") ? cur.indexOf(",") : cur.length);
+			}
+			else if (cur.includes("lon"))
+			{
+				lon = cur.substring(cur.indexOf(":") + 1, cur.includes(",") ? cur.indexOf(",") : cur.length);
+			}
+			else if (cur.includes("speed"))
+			{
+				speed = cur.substring(cur.indexOf(":") + 1, cur.includes(",") ? cur.indexOf(",") : cur.length);
+			}
+			else if (cur.includes("heading"))
+			{
+				heading = cur.substring(cur.indexOf(":") + 1, cur.includes(",") ? cur.indexOf(",") : cur.length);
+			}
+			else if (cur.includes("}"))
+			{
+				endTokenFound = true;
+			}
+			else if (cur.includes("{"))
+			{
+				startTokenFound = true;
+				if (!added) // ignore last one as it was not in correct format
+				{
+					id = "";
+					lat = "";
+					lon = "";
+					heading = "";
+					speed = "";
+					endTokenFound = false;
+				}
+			}
+
+			if (id !== ""  && lat !== ""  && lon !== ""  && endTokenFound && startTokenFound)
+			{
+				added = true;
+				str += id.trim() + "," + lat.trim() + "," + lon.trim() + "," + heading.trim() + "," + speed.trim() + "\r\n";
+				id = "";
+				lat = "";
+				lon = "";
+				heading = "";
+				speed = "";
+				endTokenFound = false;
+				startTokenFound = false;
+			}
+		}
+		return str;
+	}
+	
+	// route types per country
+	var routeTypes = {};
+	routeTypes["ALB_1"] = "Europian";
+	routeTypes["ALB_2"] = "Autostraden";
+	routeTypes["ALB_3"] = "Rruge Shteterore";
+	routeTypes["ALB_4"] = "Rruge te Rrethi";
+	routeTypes["ALB_5"] = "Rruge Komunale";
+	routeTypes["AND_3"] = "Carretera General";
+	routeTypes["AND_4"] = "Carretera Secundaria";
+	routeTypes["ARE_1"] = "Mashreq Roads, Emirates Roads";
+	routeTypes["ARE_2"] = "Dubai Roads, Sharjah Roads, Fujairah Roads";
+	routeTypes["ARG_1"] = "Ruta National";
+	routeTypes["ARG_2"] = "Ruta Provincial";
+	routeTypes["AUS_1"] = "National";
+	routeTypes["AUS_2"] = "State";
+	routeTypes["AUS_3"] = "Metroad";
+	routeTypes["AUS_4"] = "Tourist Drive";
+	routeTypes["AUS_5"] = "National Highway";
+	routeTypes["AUS_6"] = "State Road Network";
+	routeTypes["AUT_1"] = "Europastrassen";
+	routeTypes["AUT_2"] = "Autobahnen";
+	routeTypes["AUT_3"] = "Schnellstrassen";
+	routeTypes["AUT_4"] = "Bundesstrassen, Landesstrassen";
+	routeTypes["AUT_5"] = "Landesstrassen, Bezirkstrassen, Privatstrassen des Bundes";
+	routeTypes["AZE_1"] = "Avropa, Asiya";
+	routeTypes["AZE_2"] = "Magistral";
+	routeTypes["AZE_3"] = "Respublika";
+	routeTypes["AZE_4"] = "Yerli";
+	routeTypes["BDI_1"] = "National";
+	routeTypes["BDI_3"] = "Provincial";
+	routeTypes["BEL_1"] = "European";
+	routeTypes["BEL_2"] = "Autosnelwegen";
+	routeTypes["BEL_3"] = "Gewestwegen";
+	routeTypes["BEL_6"] = "Bretelle";
+	routeTypes["BEN_1"] = "Route Nationale Inter-Etat";
+	routeTypes["BEN_2"] = "Route Nationale";
+	routeTypes["BGD_1"] = "National";
+	routeTypes["BGD_2"] = "Regional";
+	routeTypes["BGD_3"] = "Zilla";
+	routeTypes["BGR_1"] = "Evropeyski pat";
+	routeTypes["BGR_2"] = "Magistrala";
+	routeTypes["BGR_3"] = "Parvoklasen pat, Vtoroklasen pat";
+	routeTypes["BGR_4"] = "Tretoklasen pat";
+	routeTypes["BHR_1"] = "Mashreq Roads";
+	routeTypes["BIH_1"] = "European";
+	routeTypes["BIH_2"] = "Autocesta";
+	routeTypes["BIH_3"] = "Magistralni put";
+	routeTypes["BIH_4"] = "Regionalni put";
+	routeTypes["BLM_4"] = "Route Departementale";
+	routeTypes["BLR_1"] = "European";
+	routeTypes["BLR_2"] = "Magistrale";
+	routeTypes["BLR_3"] = "Republic Road";
+	routeTypes["BRA_1"] = "Federal";
+	routeTypes["BRA_2"] = "Estadual";
+	routeTypes["BWA_1"] = "National";
+	routeTypes["BWA_2"] = "National";
+	routeTypes["CAN_1"] = "Primary Provincial Route/Autoroute";
+	routeTypes["CAN_2"] = "Secondary Provincial Route/Autoroute";
+	routeTypes["CAN_3"] = "Regional, County, District";
+	routeTypes["CHE_1"] = "European";
+	routeTypes["CHE_2"] = "Autobahnen, Autostrassen, Autoroutes, Semi-Autoroutes, Autostrade, Semiautostrade";
+	routeTypes["CHE_3"] = "Hauptstrassen, Routes Principales, Strade Principali";
+	routeTypes["CHL_1"] = "Primary National";
+	routeTypes["CHL_2"] = "Secondary National";
+	routeTypes["CHL_3"] = "Primary Regional";
+	routeTypes["CHL_4"] = "Secondary Regional";
+	routeTypes["CHN_1"] = "Highways, Urban Highways";
+	routeTypes["CHN_2"] = "National Road (GuoDao)";
+	routeTypes["CHN_3"] = "Provincial Road";
+	routeTypes["CHN_4"] = "County Road";
+	routeTypes["CHN_5"] = "Village Road";
+	routeTypes["COL_1"] = "Carreteras Nacionales";
+	routeTypes["COL_2"] = "Carreteras Departamentales";
+	routeTypes["CRI_1"] = "Ruta Primaria";
+	routeTypes["CRI_2"] = "Ruta Secundaria";
+	routeTypes["CZE_1"] = "European";
+	routeTypes["CZE_2"] = "Dalnice, Rychlostni komunikace";
+	routeTypes["CZE_3"] = "Silnice I.tridy";
+	routeTypes["CZE_4"] = "Silnice II.tridy";
+	routeTypes["CZE_5"] = "Silnice III.tridy";
+	routeTypes["DNK_1"] = "Europavej";
+	routeTypes["DNK_2"] = "Primaerrute";
+	routeTypes["DNK_3"] = "Sekendaerrute";
+	routeTypes["DZA_1"] = "Autoroute";
+	routeTypes["DZA_2"] = "Route Nationale";
+	routeTypes["DZA_3"] = "Chemin de Wilaya";
+	routeTypes["EGY_1"] = "Mashreq roads";
+	routeTypes["ESP_1"] = "European";
+	routeTypes["ESP_2"] = "Autopista";
+	routeTypes["ESP_3"] = "Carretera Nacional";
+	routeTypes["ESP_4"] = "Autonomica 1st order";
+	routeTypes["ESP_5"] = "Autonomica 2nd order";
+	routeTypes["ESP_6"] = "Autonomica Local";
+	routeTypes["EST_1"] = "European";
+	routeTypes["EST_2"] = "Pohimaantee";
+	routeTypes["EST_3"] = "Tugimaantee";
+	routeTypes["EST_4"] = "Korvalmaantee";
+	routeTypes["FIN_1"] = "Eurooppatie";
+	routeTypes["FIN_2"] = "Valtatie";
+	routeTypes["FIN_3"] = "Kantatie";
+	routeTypes["FIN_4"] = "Seututie";
+	routeTypes["FIN_5"] = "Muu Yleinen Tie";
+	routeTypes["FRA_1"] = "European";
+	routeTypes["FRA_2"] = "Autoroute";
+	routeTypes["FRA_3"] = "Route Territoriale";
+	routeTypes["FRA_4"] = "Route Departementale, Departementale Strategique, Route MÃ©tropolitaine";
+	routeTypes["FRA_5"] = "Route Communale, Route Vicinale, Voie Rurale, Voie Communale, Chemin Rural, Chemin Vicinal, Chemin Communal, Sentier Rural or Sente Rurale";
+	routeTypes["GBR_1"] = "Motorways";
+	routeTypes["GBR_2"] = "A-Roads";
+	routeTypes["GBR_3"] = "B-Roads";
+	routeTypes["GBR_4"] = "C-Roads";
+	routeTypes["GER_1"] = "European";
+	routeTypes["GER_2"] = "Autobahn";
+	routeTypes["GER_3"] = "Bundesstrasse";
+	routeTypes["GER_4"] = "Landesstrassen, Staatsstrassen";
+	routeTypes["GER_5"] = "Kreisstrassen";
+	routeTypes["GER_6"] = "Forststrassen";
+	routeTypes["DEU_1"] = "European";
+	routeTypes["DEU_2"] = "Autobahn";
+	routeTypes["DEU_3"] = "Bundesstrasse";
+	routeTypes["DEU_4"] = "Landesstrassen, Staatsstrassen";
+	routeTypes["DEU_5"] = "Kreisstrassen";
+	routeTypes["DEU_6"] = "Forststrassen";
+	routeTypes["GIN_1"] = "Route Nationale";
+	routeTypes["GLP_3"] = "Route Nationale";
+	routeTypes["GLP_4"] = "Route Departementale";
+	routeTypes["GRC_1"] = "European";
+	routeTypes["GRC_2"] = "National Roads";
+	routeTypes["GTM_1"] = "Ruta Centroamericana";
+	routeTypes["GTM_2"] = "Ruta Nacional";
+	routeTypes["GTM_3"] = "Ruta Departamentall";
+	routeTypes["GTM_4"] = "Camino Rural";
+	routeTypes["GUF_3"] = "Route Nationale";
+	routeTypes["GUF_4"] = "Route Departementale";
+	routeTypes["HKG_1"] = "Federal";
+	routeTypes["HRV_1"] = "European";
+	routeTypes["HRV_2"] = "Autocesta";
+	routeTypes["HRV_3"] = "Drzavna Cesta";
+	routeTypes["HRV_4"] = "Zupanijska Cesta";
+	routeTypes["HRV_5"] = "Lokalna cesta";
+	routeTypes["HUN_1"] = "European";
+	routeTypes["HUN_2"] = "Autopalya";
+	routeTypes["HUN_3"] = "Orszagut";
+	routeTypes["HUN_4"] = "Orszagut";
+	routeTypes["IMN_2"] = "A-Roads";
+	routeTypes["IMN_3"] = "B-Roads";
+	routeTypes["IMN_4"] = "C-Roads";
+	routeTypes["IND_1"] = "National Highway, Asian Highway, National Expressways";
+	routeTypes["IND_2"] = "State";
+	routeTypes["IND_3"] = "Major District Road";
+	routeTypes["IRL_1"] = "Motorways";
+	routeTypes["IRL_2"] = "National";
+	routeTypes["IRL_3"] = "Regional";
+	routeTypes["IRL_4"] = "Local";
+	routeTypes["ISR_1"] = "National Roads";
+	routeTypes["ISR_2"] = "Inter-City Roads";
+	routeTypes["ISR_3"] = "Regional Roads";
+	routeTypes["ISR_4"] = "Local Roads";
+	routeTypes["ITA_1"] = "European";
+	routeTypes["ITA_2"] = "Autostrada";
+	routeTypes["ITA_3"] = "Strada Statale";
+	routeTypes["ITA_4"] = "Strada Regionale";
+	routeTypes["KAZ_1"] = "European Road";
+	routeTypes["KAZ_2"] = "International Road";
+	routeTypes["KAZ_3"] = "The Republican Road";
+	routeTypes["KAZ_4"] = "Regional Road";
+	routeTypes["KEN_1"] = "International Trunk Roads";
+	routeTypes["KEN_2"] = "National Trunk Roads";
+	routeTypes["KEN_3"] = "Primary Roads";
+	routeTypes["KEN_4"] = "Secondary Roads";
+	routeTypes["KEN_5"] = "Minor Roads";
+	routeTypes["KOR_1"] = "Express Highway";
+	routeTypes["KOR_2"] = "Urban Expressway";
+	routeTypes["KOR_3"] = "National Road";
+	routeTypes["KOR_4"] = "Regional Road";
+	routeTypes["KOS_1"] = "European";
+	routeTypes["KOS_2"] = "Autoudha";
+	routeTypes["KOS_3"] = "Magistralni put";
+	routeTypes["KOS_4"] = "Regionalni put";
+	routeTypes["KWT_1"] = "Mashreq Roads";
+	routeTypes["KWT_3"] = "Ring Road, State Route";
+	routeTypes["LBN_1"] = "Mashreq Road";
+	routeTypes["LIE_3"] = "Hauptstrassen";
+	routeTypes["LKA_1"] = "Expressway";
+	routeTypes["LSO_1"] = "National";
+	routeTypes["LTU_1"] = "European";
+	routeTypes["LTU_2"] = "Magistraliniai Keliai";
+	routeTypes["LTU_3"] = "Krasto Keliai";
+	routeTypes["LTU_4"] = "Rajoniniai Keliai";
+	routeTypes["LUX_1"] = "European";
+	routeTypes["LUX_2"] = "Autoroutes, Voies Express";
+	routeTypes["LUX_3"] = "Routes Nationales";
+	routeTypes["LUX_4"] = "Chemins Repris";
+	routeTypes["LVA_1"] = "European";
+	routeTypes["LVA_2"] = "Galvenie autoceli";
+	routeTypes["LVA_3"] = "Skiras autoceli (regionalie autoceli)";
+	routeTypes["LVA_4"] = "Skiras autoceli (vietejie autoceli)";
+	routeTypes["MAR_1"] = "Autoroute";
+	routeTypes["MAR_2"] = "Route Nationale";
+	routeTypes["MAR_3"] = "Route Regionale";
+	routeTypes["MAR_4"] = "Route Provinciale";
+	routeTypes["MCO_4"] = "Routes Departementale";
+	routeTypes["MDA_1"] = "Drumuri Europene";
+	routeTypes["MDA_2"] = "Drumuri Magistrale";
+	routeTypes["MDA_3"] = "Drumuri Republicane";
+	routeTypes["MDA_4"] = "Drumuri Locale";
+	routeTypes["MEX_1"] = "Freeway, Tollway";
+	routeTypes["MEX_2"] = "Freeway, Tollway";
+	routeTypes["MKD_1"] = "International Road";
+	routeTypes["MKD_2"] = "Highway, Express Road";
+	routeTypes["MKD_3"] = "Regional Road";
+	routeTypes["MLI_1"] = "National";
+	routeTypes["MLI_2"] = "Regional";
+	routeTypes["MLI_3"] = "Local";
+	routeTypes["MLI_4"] = "Comunal";
+	routeTypes["MNE_1"] = "European";
+	routeTypes["MNE_3"] = "Magistralni Put";
+	routeTypes["MNE_4"] = "Regionalni Put";
+	routeTypes["MOZ_1"] = "National Road";
+	routeTypes["MOZ_2"] = "Regional";
+	routeTypes["MTQ_3"] = "Autoroute";
+	routeTypes["MTQ_4"] = "Route Departementale";
+	routeTypes["MYS_1"] = "National Toll Highway";
+	routeTypes["MYS_2"] = "Federal";
+	routeTypes["MYS_3"] = "Local";
+	routeTypes["NAM_1"] = "National";
+	routeTypes["NAM_2"] = "National";
+	routeTypes["NAM_3"] = "District";
+	routeTypes["NGA_1"] = "National Roads";
+	routeTypes["NLD_1"] = "European";
+	routeTypes["NLD_2"] = "Autosnelwegen";
+	routeTypes["NLD_3"] = "Nationalewegen";
+	routeTypes["NLD_6"] = "Stadsroutenummers";
+	routeTypes["NOR_1"] = "European";
+	routeTypes["NOR_2"] = "National Roads";
+	routeTypes["NOR_3"] = "County Roads Primary";
+	routeTypes["NOR_4"] = "County Road Secondary";
+	routeTypes["NPL_1"] = "National";
+	routeTypes["NPL_2"] = "Feeder Road";
+	routeTypes["NZL_1"] = "State Highway";
+	routeTypes["NZL_2"] = "Urban Route";
+	routeTypes["OMN_1"] = "Mashreq Road";
+	routeTypes["PAK_1"] = "Motorways";
+	routeTypes["PAK_2"] = "Highways";
+	routeTypes["PAN_1"] = "Ruta Nacional Principal";
+	routeTypes["PAN_2"] = "Ruta Nacional Secundaria";
+	routeTypes["PER_1"] = "Carretera Nacional";
+	routeTypes["PER_2"] = "Carretera Departamental";
+	routeTypes["POL_1"] = "Trasa Europejska";
+	routeTypes["POL_2"] = "Autostrada";
+	routeTypes["POL_3"] = "Droga Ekspresowa";
+	routeTypes["POL_4"] = "Droga Krajowa";
+	routeTypes["POL_5"] = "Droga Wojewodzka";
+	routeTypes["POL_6"] = "Droga Powiatowa";
+	routeTypes["PRI_1"] = "Autopista";
+	routeTypes["PRI_2"] = "Carretera Nacional";
+	routeTypes["PRI_3"] = "Carretera Nacional";
+	routeTypes["PRI_4"] = "Carretera Nacional";
+	routeTypes["PRT_1"] = "European";
+	routeTypes["PRT_2"] = "Auto-Estrada";
+	routeTypes["PRT_3"] = "Itinerario Principal, Via Rapida, Via Expresso";
+	routeTypes["PRT_4"] = "Itinerario Complementar";
+	routeTypes["PRT_5"] = "Estrada Nacional, Estrada Regional";
+	routeTypes["PRT_6"] = "Estrada Municipal";
+	routeTypes["PRY_1"] = "National Roads";
+	routeTypes["PSE_1"] = "National Network";
+	routeTypes["PSE_2"] = "Intercity Roads";
+	routeTypes["PSE_3"] = "Regional Roads";
+	routeTypes["PSE_4"] = "Local Roads";
+	routeTypes["QAT_1"] = "Mashreq Roads";
+	routeTypes["REU_3"] = "Route Nationale";
+	routeTypes["REU_4"] = "Route Departementale";
+	routeTypes["ROU_1"] = "European";
+	routeTypes["ROU_2"] = "Autostrada";
+	routeTypes["ROU_3"] = "Drum National";
+	routeTypes["ROU_4"] = "Drum Judetean";
+	routeTypes["ROU_5"] = "Drum Comunal";
+	routeTypes["RUS_1"] = "Asian Highway";
+	routeTypes["RUS_2"] = "Federal Road";
+	routeTypes["RUS_3"] = "Other Federal Road, Regional Road (Crimea)";
+	routeTypes["RUS_4"] = "Regional Road";
+	routeTypes["RUS_5"] = "Regional Road (only Crimea)";
+	routeTypes["RWA_1"] = "National";
+	routeTypes["RWA_3"] = "District";
+	routeTypes["SEN_1"] = "Route Nationale";
+	routeTypes["SEN_2"] = "Route Regionale";
+	routeTypes["SGP_1"] = "Expressway";
+	routeTypes["SRB_1"] = "European";
+	routeTypes["SRB_2"] = "State roads IÐ° category (highway)";
+	routeTypes["SRB_3"] = "Magistralni put / State roads Ib category";
+	routeTypes["SRB_4"] = "Regionalni put / State roads IIÐ° category";
+	routeTypes["SRB_5"] = "State roads IIb category";
+	routeTypes["SVK_1"] = "European";
+	routeTypes["SVK_2"] = "Dialnice, Rychlostne komunikacie";
+	routeTypes["SVK_3"] = "Cesty I.triedy";
+	routeTypes["SVK_4"] = "Cesty II.triedy";
+	routeTypes["SVK_5"] = "Cesty III.triedy";
+	routeTypes["SVN_1"] = "Evropa Cesta";
+	routeTypes["SVN_2"] = "Avtocesta";
+	routeTypes["SVN_3"] = "Hitra Cesta";
+	routeTypes["SVN_4"] = "Glavna Cesta";
+	routeTypes["SVN_5"] = "Regionalna";
+	routeTypes["SWE_1"] = "Europavaeg";
+	routeTypes["SWE_2"] = "Riksvaeg";
+	routeTypes["SWE_3"] = "Laensvaeg";
+	routeTypes["SWZ_1"] = "National";
+	routeTypes["SWZ_2"] = "National";
+	routeTypes["TGO_1"] = "Route Nationale";
+	routeTypes["THA_1"] = "Major/National/Special Highway";
+	routeTypes["THA_2"] = "Regional/Special Highway";
+	routeTypes["THA_3"] = "Secondary Highway";
+	routeTypes["THA_4"] = "Intra-province Highway";
+	routeTypes["TUN_1"] = "Autoroute";
+	routeTypes["TUN_2"] = "Route Nationale";
+	routeTypes["TUN_3"] = "Route Regionale";
+	routeTypes["TUN_4"] = "Route Locale";
+	routeTypes["TUR_1"] = "European";
+	routeTypes["TUR_2"] = "Otoyol";
+	routeTypes["TUR_3"] = "Devlet Yolu";
+	routeTypes["TUR_4"] = "Il Yolu";
+	routeTypes["TWN_1"] = "National";
+	routeTypes["TWN_2"] = "Provincial Highway";
+	routeTypes["TWN_3"] = "Provincial";
+	routeTypes["TWN_4"] = "County Highway";
+	routeTypes["TWN_5"] = "Village Highway";
+	routeTypes["TZA_1"] = "National";
+	routeTypes["TZA_2"] = "National";
+	routeTypes["UKR_1"] = "European Road";
+	routeTypes["UKR_2"] = "International Road";
+	routeTypes["UKR_3"] = "National Road";
+	routeTypes["UKR_4"] = "Regional Road";
+	routeTypes["UKR_5"] = "Territorial Road";
+	routeTypes["USA_1"] = "Interstate";
+	routeTypes["USA_2"] = "Federal";
+	routeTypes["USA_3"] = "State";
+	routeTypes["USA_4"] = "County";
+	routeTypes["VAT_4"] = "Strada Provinciale";
+	routeTypes["VIR_4"] = "County";
+	routeTypes["VNM_1"] = "Quoc Lo";
+	routeTypes["VNM_2"] = "Tinh Lo";
+	routeTypes["WEB_1"] = "National Network";
+	routeTypes["WEB_2"] = "Intercity Roads";
+	routeTypes["WEB_3"] = "Regional Roads";
+	routeTypes["WEB_4"] = "Local Roads";
+	routeTypes["ZAF_1"] = "National";
+	routeTypes["ZAF_2"] = "Provincial";
+	routeTypes["ZAF_3"] = "Metropolitan";
+	
+	// WEU
+	var isoToLanguage = {};
+	isoToLanguage["FRA"] = "FRE";
+	isoToLanguage["ITA"] = "ITA";
+	isoToLanguage["AUT"] = "GER";
+	isoToLanguage["BEL"] = "DUT";
+	isoToLanguage["LUX"] = "FRE";
+	isoToLanguage["VAT"] = "ITA";
+	isoToLanguage["CHE"] = "GER";
+	isoToLanguage["DEU"] = "GER";
+	isoToLanguage["LIE"] = "GER";
+	isoToLanguage["MCO"] = "FRE";
+	isoToLanguage["SMR"] = "ITA";
+	isoToLanguage["ESP"] = "SPA";
+	isoToLanguage["FIN"] = "FIN";
+	isoToLanguage["GBR"] = "ENG";
+	isoToLanguage["GBR"] = "ENG";
+	isoToLanguage["GBR"] = "ENG";
+	isoToLanguage["SWE"] = "SWE";
+	isoToLanguage["DNK"] = "DAN";
+	isoToLanguage["AND"] = "CAT";
+	isoToLanguage["PRT"] = "POR";
+	isoToLanguage["IRL"] = "ENG";
+	isoToLanguage["GBR"] = "ENG";
+	isoToLanguage["NOR"] = "NOR";
+	isoToLanguage["IMN"] = "ENG";
+	isoToLanguage["GBR"] = "ENG";
+	isoToLanguage["GIB"] = "ENG";
+	isoToLanguage["NLD"] = "DUT";
+	isoToLanguage["ISL"] = "ICE";
+	isoToLanguage["MLT"] = "MLT";
+	isoToLanguage["FRO"] = "FAO";
+	isoToLanguage["SJM"] = "WEN";
+
+	//EEU 
+	isoToLanguage["CZE"] = "CZE";
+	isoToLanguage["SVK"] = "SLO";
+	isoToLanguage["GRC"] = "GRE";
+	isoToLanguage["RUS"] = "RUS";
+	isoToLanguage["HUN"] = "HUN";
+	isoToLanguage["POL"] = "POL";
+	isoToLanguage["SVN"] = "SLV";
+	isoToLanguage["LVA"] = "LAV";
+	isoToLanguage["EST"] = "EST";
+	isoToLanguage["HRV"] = "SCR";
+	isoToLanguage["LTU"] = "LIT";
+	isoToLanguage["BGR"] = "BUL";
+	isoToLanguage["ROU"] = "RUM";
+	isoToLanguage["BIH"] = "BOS";
+	isoToLanguage["MDA"] = "MOL";
+	isoToLanguage["TUR"] = "TUR";
+	isoToLanguage["MNE"] = "MNE";
+	isoToLanguage["ARM"] = "ARM";
+	isoToLanguage["KGZ"] = "WEN";
+	isoToLanguage["KAZ"] = "KAZ";
+	isoToLanguage["AZE"] = "AZE";
+	isoToLanguage["TJK"] = "WEN";
+	isoToLanguage["UZB"] = "UZB";
+	isoToLanguage["TKM"] = "WEN";
+	isoToLanguage["GEO"] = "GEO";
+	isoToLanguage["UKR"] = "UKR";
+	isoToLanguage["MKD"] = "MAC";
+	isoToLanguage["KOS"] = "ALB";
+	isoToLanguage["SRB"] = "SRB";
+	isoToLanguage["ALB"] = "ALB";
+	isoToLanguage["BSB"] = "ENG";
+	isoToLanguage["CYP"] = "GRE";
+	isoToLanguage["NCY"] = "TUR";
+	isoToLanguage["CUN"] = "GRE";
+	isoToLanguage["BLR"] = "BEL";
+
+	// NA
+	isoToLanguage["USA"] = "ENG";
+	isoToLanguage["CAN"] = "ENG";
+	isoToLanguage["PRI"] = "SPA";
+	isoToLanguage["VIR"] = "ENG";
+	isoToLanguage["MEX"] = "SPA";
+	isoToLanguage["BHS"] = "ENG";
+	isoToLanguage["CYM"] = "ENG";
+	isoToLanguage["VGB"] = "WEN";
+	isoToLanguage["BLZ"] = "ENG";
+	isoToLanguage["SLV"] = "SPA";
+	isoToLanguage["JAM"] = "ENG";
+	isoToLanguage["CRI"] = "SPA";
+	isoToLanguage["CUB"] = "SPA";
+	isoToLanguage["DOM"] = "SPA";
+	isoToLanguage["TCA"] = "WEN";
+	isoToLanguage["NIC"] = "SPA";
+	isoToLanguage["PAN"] = "SPA";
+	isoToLanguage["HND"] = "SPA";
+	isoToLanguage["HTI"] = "WEN";
+	isoToLanguage["GTM"] = "SPA";
+	isoToLanguage["SPM"] = "WEN";
+	isoToLanguage["BMU"] = "ENG";
+	isoToLanguage["COL"] = "SPA";
+	isoToLanguage["UNI"] = "WEN";
+
+	// SAM
+	isoToLanguage["DMA"] = "WEN";
+	isoToLanguage["AIA"] = "WEN";
+	isoToLanguage["ABW"] = "DUT";
+	isoToLanguage["VCT"] = "ENG";
+	isoToLanguage["KNA"] = "ENG";
+	isoToLanguage["TTO"] = "ENG";
+	isoToLanguage["LCA"] = "WEN";
+	isoToLanguage["GRD"] = "WEN";
+	isoToLanguage["ATG"] = "WEN";
+	isoToLanguage["FLK"] = "ENG";
+	isoToLanguage["ECU"] = "SPA";
+	isoToLanguage["SUR"] = "DUT";
+	isoToLanguage["URY"] = "SPA";
+	isoToLanguage["BRB"] = "ENG";
+	isoToLanguage["MSR"] = "WEN";
+	isoToLanguage["BRA"] = "POR";
+	isoToLanguage["ARG"] = "SPA";
+	isoToLanguage["VEN"] = "SPA";
+	isoToLanguage["GUF"] = "FRE";
+	isoToLanguage["MTQ"] = "FRE";
+	isoToLanguage["GLP"] = "FRE";
+	isoToLanguage["BLM"] = "FRE";
+	isoToLanguage["CHL"] = "SPA";
+	isoToLanguage["MAF"] = "WEN";
+	isoToLanguage["COL"] = "SPA";
+	isoToLanguage["PER"] = "SPA";
+	isoToLanguage["GUY"] = "ENG";
+	isoToLanguage["SXM"] = "WEN";
+	isoToLanguage["CUW"] = "WEN";
+	isoToLanguage["BOL"] = "SPA";
+	isoToLanguage["PRY"] = "SPA";
+	isoToLanguage["NIC"] = "SPA";
+	isoToLanguage["SGS"] = "ENG";
+	isoToLanguage["BES"] = "WEN";
+	isoToLanguage["BES"] = "WEN";
+	isoToLanguage["BES"] = "WEN";
+
+	// APAC
+	isoToLanguage["SGP"] = "ENG";
+	isoToLanguage["HKG"] = "CHT";
+	isoToLanguage["MAC"] = "CHT";
+	isoToLanguage["THA"] = "THA";
+	isoToLanguage["KHM"] = "WEN";
+	isoToLanguage["MNG"] = "WEN";
+	isoToLanguage["PRK"] = "WEN";
+	isoToLanguage["LAO"] = "WEN";
+	isoToLanguage["MMR"] = "WEN";
+	isoToLanguage["CHN"] = "WEN";
+	isoToLanguage["KOR"] = "WEN";
+	isoToLanguage["JPN"] = "WEN";
+	isoToLanguage["BRN"] = "MAY";
+	isoToLanguage["MYS"] = "MAY";
+	isoToLanguage["IDN"] = "IND";
+	isoToLanguage["GUM"] = "ENG";
+	isoToLanguage["SLB"] = "WEN";
+	isoToLanguage["PLW"] = "WEN";
+	isoToLanguage["PNG"] = "WEN";
+	isoToLanguage["MNP"] = "ENG";
+	isoToLanguage["TLS"] = "ENG";
+	isoToLanguage["VNM"] = "VIE";
+	isoToLanguage["PHL"] = "ENG";
+	isoToLanguage["SPI"] = "ENG";
+	isoToLanguage["PLI"] = "ENG";
+
+	// MEA
+	isoToLanguage["SAU"] = "ARA";
+	isoToLanguage["ARE"] = "ARA";
+	isoToLanguage["KWT"] = "ARA";
+	isoToLanguage["QAT"] = "ARA";
+	isoToLanguage["BHR"] = "ARA";
+	isoToLanguage["OMN"] = "ARA";
+	isoToLanguage["BWA"] = "ENG";
+	isoToLanguage["LSO"] = "ENG";
+	isoToLanguage["NAM"] = "ENG";
+	isoToLanguage["SWZ"] = "ENG";
+	isoToLanguage["SOM"] = "ARA";
+	isoToLanguage["GHA"] = "ENG";
+	isoToLanguage["STP"] = "POR";
+	isoToLanguage["GNB"] = "POR";
+	isoToLanguage["YEM"] = "WEN";
+	isoToLanguage["SHN"] = "ENG";
+	isoToLanguage["SYC"] = "ENG";
+	isoToLanguage["CPV"] = "POR";
+	isoToLanguage["GMB"] = "ENG";
+	isoToLanguage["MWI"] = "ENG";
+	isoToLanguage["COM"] = "FRE";
+	isoToLanguage["ERI"] = "ENG";
+	isoToLanguage["LBR"] = "ENG";
+	isoToLanguage["DJI"] = "ARA";
+	isoToLanguage["TUN"] = "ARA";
+	isoToLanguage["SDN"] = "WEN";
+	isoToLanguage["GNQ"] = "FRE";
+	isoToLanguage["SLE"] = "ENG";
+	isoToLanguage["BDI"] = "FRE";
+	isoToLanguage["MYT"] = "FRE";
+	isoToLanguage["JOR"] = "ARA";
+	isoToLanguage["MAR"] = "ARA";
+	isoToLanguage["REU"] = "FRE";
+	isoToLanguage["ZAF"] = "ENG";
+	isoToLanguage["MOZ"] = "POR";
+	isoToLanguage["LBN"] = "ARA";
+	isoToLanguage["AFG"] = "WEN";
+	isoToLanguage["IRN"] = "WEN";
+	isoToLanguage["ISR"] = "HEB";
+	isoToLanguage["SYR"] = "WEN";
+	isoToLanguage["NGA"] = "ENG";
+	isoToLanguage["EGY"] = "ARA";
+	isoToLanguage["GAS"] = "ARA";
+	isoToLanguage["WEB"] = "ARA";
+	isoToLanguage["BEN"] = "FRE";
+	isoToLanguage["TGO"] = "FRE";
+	isoToLanguage["IRQ"] = "ARA";
+	isoToLanguage["RWA"] = "FRE";
+	isoToLanguage["AGO"] = "POR";
+	isoToLanguage["GIN"] = "FRE";
+	isoToLanguage["ZWE"] = "ENG";
+	isoToLanguage["SEN"] = "FRE";
+	isoToLanguage["NER"] = "FRE";
+	isoToLanguage["MLI"] = "FRE";
+	isoToLanguage["MUS"] = "ENG";
+	isoToLanguage["MRT"] = "ARA";
+	isoToLanguage["BFA"] = "FRE";
+	isoToLanguage["LBY"] = "ARA";
+	isoToLanguage["MDG"] = "FRE";
+	isoToLanguage["TCD"] = "FRE";
+	isoToLanguage["COG"] = "FRE";
+	isoToLanguage["GAB"] = "FRE";
+	isoToLanguage["CMR"] = "FRE";
+	isoToLanguage["UNI"] = "WEN";
+	isoToLanguage["ETH"] = "ENG";
+	isoToLanguage["CAF"] = "FRE";
+	isoToLanguage["KEN"] = "ENG";
+	isoToLanguage["ZMB"] = "ENG";
+	isoToLanguage["TZA"] = "ENG";
+	isoToLanguage["ESH"] = "WEN";
+	isoToLanguage["COD"] = "FRE";
+	isoToLanguage["UGA"] = "ENG";
+	isoToLanguage["SSD"] = "ENG";
+	isoToLanguage["CIV"] = "FRE";
+	isoToLanguage["DZA"] = "ARA";
+
+	// AUS
+	isoToLanguage["NZL"] = "ENG";
+	isoToLanguage["NCL"] = "FRE";
+	isoToLanguage["COK"] = "WEN";
+	isoToLanguage["FSM"] = "ENG";
+	isoToLanguage["FJI"] = "ENG";
+	isoToLanguage["ASM"] = "ENG";
+	isoToLanguage["TON"] = "ENG";
+	isoToLanguage["MHL"] = "WEN";
+	isoToLanguage["TUV"] = "WEN";
+	isoToLanguage["KIR"] = "WEN";
+	isoToLanguage["PYF"] = "FRE";
+	isoToLanguage["NRU"] = "WEN";
+	isoToLanguage["NIU"] = "WEN";
+	isoToLanguage["VUT"] = "ENG";
+	isoToLanguage["WSM"] = "WEN";
+	isoToLanguage["WLF"] = "WEN";
+	isoToLanguage["TKL"] = "WEN";
+	isoToLanguage["PCN"] = "WEN";
+	isoToLanguage["UNI"] = "WEN";
+	isoToLanguage["NFK"] = "ENG";
+	isoToLanguage["CXR"] = "ENG";
+	isoToLanguage["CCK"] = "ENG";
+	isoToLanguage["AUS"] = "ENG";
+	
+</script>

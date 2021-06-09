@@ -1,0 +1,2764 @@
+<% content_for :title, "Multi Vehicle Planning - INTERNAL USE ONLY" %>
+<div id="controlPanel" class="ctrl-panel bigger" style="max-width: 1900px">
+ <div id="headerDiv">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left" /></span>
+	<div class="form-horizontal">
+		<label class="control-label col-sm-2" for="demoDataset">1.</label>
+		<select id="demoDataset" class="col-sm-6">
+			<option value="">Please select an example</option>
+			<option value="2orders2trucks.json"                               >Frankfurt          20x 30 km,  2 trucks,   2 orders</option>
+			<option value="16_FrankfurtKoeln_7veh_pickdrop.json"              >Frankfurt Cologne 100x100 km,  7 trucks,  16 pick+drop orders, capacity, deadlines</option>
+			<option value="70_FrankfurtKoeln_21veh_pickdrop.json"             >Frankfurt Cologne 100x100 km, 21 trucks,  70 pick+drop orders, capacity, deadlines</option>
+			<option value="50_KoelnErfurtMuenchenFreiburg_33veh_pickdrop.json">Cologne Munich    400x400 km, 33 trucks,  50 pick+drop orders, capacity, deadlines</option>
+			<option value="100_Stutt_ntw_2veh_pla.json"                       >Stuttgart          20x 30 km, 20 trucks, 100      drop orders, capacity, deadlines</option>
+		</select>
+		&nbsp;or drop your jobs here: <textarea id="planning_setup_textarea" class="form-control" rows="1"></textarea>
+	</div>
+	<div class="form-group">
+		<label class="control-label col-sm-2" for="demoDataset">2.</label>
+		<input class="btn btn-default btn-sm" type="button" id="tourPlanning" value="Assign Orders and Delivery Sequence to Trucks" onclick="startMultiVehiclePlanning()">
+		&nbsp;<input type="checkbox" id="showRoutesOrLines" name="showRoutesOrLines" checked onclick="toggleAirlineDistanceRoute()"/>Show Route Paths
+		&nbsp;<input type="checkbox" id="showRouteSqn" onclick="toggleOrderMarkerIds()"/>Show drive sequence on orders
+ 	</div>
+	<div class="form-group">
+		<div id="feedbackTxt" style="display:none"></div>
+	</div>
+</div>
+	<div id="calendarCanvasDiv" class="details">
+		<canvas id="calendarCanvas"></canvas>
+	</div>
+    </br>
+	<div class="form-horizontal">
+		<div class="form-group">
+			<label class="control-label col-sm-1" for="trucks">Trucks:</label>
+			<div class="col-sm-8">
+              <div id="truckWrap" class="wrap">
+					<table class="head">
+							<tr>
+								<td width="05%">Select</td>
+								<td width="05%">Id</td>
+								<td width="20%">Location</td>
+								<td width="05%">Load</td>
+								<td width="20%">Departure</td>
+								<td width="05%">Capacity</td>
+								<td width="20%">Arrival</td>
+								<td width="20%">Destination</td>
+							</tr>
+					</table>
+					<table id="vehicle-data">
+					</table>
+              </div>
+			  <input class="btn btn-default btn-sm" type="button" id="clear-vehicles" value="clear" onclick="$('#vehicle-data tr').remove();truckIcons.removeAll();entityContainer['VEHICLES'].store = [];clearAllRoutes();redrawCalendarCanvas()">
+			  <input class="btn btn-default btn-sm" type="button" id="saveTrucks" value="Save Vehicle Data" onclick="uploadToCLE(entityContainer['VEHICLES'].store, entityContainer['VEHICLES'].layerName)">
+			  <input class="btn btn-default btn-sm" type="button" id="loadTrucks" value="Load Vehicle Data" onclick="loadFromCLE('VEHICLES')">
+			  <input class="btn btn-default btn-sm" type="button" id="show-vehicles" value="Show all on map" onclick="showAllRoutes()">
+			  <span style="margin-left: 5px;"> Add Vehicles by clicking on the Map</span> 
+			</div>
+		</div>
+	</div>
+
+	<div class="form-horizontal">
+		<div class="form-group">
+			<label class="control-label col-sm-1" for="orders">Orders:</label>
+			<div class="col-sm-8">
+				<div id="orderWrap" class="wrap">
+					<table class="head">
+							<tr>
+								<td>Id</td>
+								<td>Start</td>
+								<td>Destination</td>
+								<td>Price</td>
+								<td>Weight</td>
+								<td>Closing time 0</td>
+								<td>Closing time 1</td>
+
+							</tr>
+					</table>
+
+							<table id="order-data">
+							</table>
+
+				</div>
+				<input class="btn btn-default btn-sm" type="button" id="clear-orders" value="clear" onclick="$('#order-data tr').remove();orderMarkers.removeAll();orders = [];entityContainer['ORDERS'].store = [];redrawCalendarCanvas()">
+				<input class="btn btn-default btn-sm" type="button" id="saveOrders" value="Save Order Data" onclick="uploadToCLE(entityContainer['ORDERS'].store, entityContainer['ORDERS'].layerName)">
+				<input class="btn btn-default btn-sm" type="button" id="loadOrders" value="Load Orders Data" onclick="loadFromCLE('ORDERS')">
+				<span style="margin-left: 5px;">Add Orders by clicking on the Map</span>
+				<div class="form-group">
+				&nbsp;&nbsp;&nbsp;&nbsp;<input type="checkbox" id="showUnassignedOrders" onclick="showUnassignedOrders()" checked/>Show unassigned orders
+			 </div>
+			</div>
+		</div>
+	</div>
+	<div class="form-horizontal">
+	<div class="form-group">
+		<label class="control-label col-sm-1" for="endpointUrl">app_id:</label>
+		<input class="input-customer-data" type="text" id="endpointUrl" value="http://cle.ci.api.here.com" autocomplete="off" size="33"/> <!-- to use a different endpoint you can also load this page with &amp;endpointurl=http://myserver... -->
+		<input class="input-customer-data" type="text" id="appId" class="appCreds" value="RBvfUskZo9VHXO16qN0F" placeholder="Set your app_id" autocomplete="off"/>
+		<input class="input-customer-data" type="password" id="appCode" value="nurAvIabhmop7KOSfQd0bA" placeholder="Set your app_code" class="appCreds" autocomplete="off"/>
+	</div>
+	</div>
+</div>		
+</div>
+<div id="mapContainer"></div>
+<div id="pageblock"></div>
+<div id="spinner"></div>
+
+<style>
+
+	.H_ui {
+		font-size: 16px;
+		font-family: "Lucida Grande", Arial, Helvetica, sans-serif;
+
+		-moz-user-select: none;
+		-khtml-user-select: none;
+		-webkit-user-select: none;
+		-o-user-select: none;
+		-ms-user-select: none;
+
+		z-index: 0;
+		position: absolute;
+		width: 100%;
+		height: 100%;
+		left: 100%;
+	}
+	#notecontent a {
+		color : white;
+	}
+	#notecontent a:hover {
+		color : red;
+	}
+	details {
+		display: none;
+	
+	}
+	.input-details {
+		display: none
+	}
+	.endpoint-details {
+		display: none
+	}
+	.input-customer-data{
+		height: 25px;
+	}
+	#custom-rest-times {
+		display: none
+	}
+
+	table td, table td * {
+		vertical-align: top;
+	}
+
+	textarea {
+		white-space: pre;
+		word-wrap: normal;
+		overflow: scroll;
+	}
+
+	ul.timeline {
+		width: 400px;
+		font-size: x-small;
+		list-style-position: inside;
+		padding: 0;
+		vertical-align: middle;
+		font-weight: bold;
+	}
+
+	ul.timeline li {
+	}
+
+	li.accStarts, li.accEnds {
+		color: #59b354;
+	}
+
+	li.stStarts, li.stEnds {
+		color: #1b5fcc;
+	}
+
+	li.arr {
+		color: red;
+	}
+
+	li.dep {
+		color: white;
+	}
+
+	li.at {
+		color: yellow;
+	}
+
+	li.before {
+		color: orange;
+	}
+	.cont-time {
+		z-index: 999;
+		float: left;
+		height: 21px;
+		padding: 7px 10px 1px 5px;
+		font-family: Arial,Helvetica,sans-serif;
+		font-weight: bold;
+		font-size: 10px;
+		display: none;
+	}
+	.menubkg {
+		background-color: #f8f8f8;
+		border-radius: 15px;
+		color: black;
+	}
+	.menubkg select {
+		font-size: 10px;
+		vertical-align: middle;
+	}
+	.menubkg select option:checked {
+		background-color: #999;
+	}
+	.tselect {
+		background-image: url(/assets/examples/traffic_timebw30x34s.png);
+		width: 30px;
+		height: 34px;
+		margin-top: 2px;
+		display: block;
+		z-index: 999;
+		float: left;
+		cursor: pointer;
+		text-decoration: none;
+	}
+	.cursorPointer {
+		cursor: pointer;
+	}
+	.wrap {
+		width: 700px;
+		overflow-x: auto;
+	}
+
+	.wrap table {
+		width: 300px;
+		table-layout: fixed;
+	}
+
+	table tr td {
+		padding: 5px;
+		border: 1px solid #eee;
+		width: 110px;
+		word-wrap: break-word;
+		overflow-x: hidden;
+	}
+
+	table.head tr td {
+		background: #eee;
+	}
+	
+
+	.inner_table {
+		height: 200px;
+		overflow-y: auto;
+		overflow-x: hidden;
+	}
+	
+	.appCreds {
+		width: 50%;
+	}
+	
+	#calendarCanvasDiv{
+	    width: 700px;
+		height: 500px;
+	}
+	
+	#controlPanel {
+		resize: both;
+	   
+	}
+	
+</style>
+
+
+<script type="text/javascript">
+	/*
+	authors rohit.misra@here.com, ivana.arsenijevic@here.com
+	(C) HERE 2018
+	*/
+
+	/*  Set authentication app_id and app_code
+	*  WARNING: this is a demo-only key
+	*  please register on http://developer.here.com/
+	*  and obtain your own API key
+	*/
+
+	var TRUCK_ICON_HEIGHT              =  90;
+	var TRUCK_ICON_WIDTH               = 150;
+	var TRUCK_ICON_DRAW_OFFSET_Y       =  80;
+	var TRUCK_ICON_DRAW_OFFSET_X       =  40;
+	var ORDER_START_ICON_DRAW_OFFSET_X =  42;
+	var ORDER_START_ICON_DRAW_OFFSET_Y =  59;
+	var TIMELINE_SLOTS_NUMBER          =  11;
+	var TIMELINE_COLUMN_X              =  70;
+	var TIMELINE_COLUMN_Y              =  33;
+	var DROP              =  0;
+	
+	// read the HTML page URL parameters
+	var htmlPageUrlParameters = [];
+	location.search.replace("?","").split("&").forEach( function(nameValue) { nv = nameValue.split("="); htmlPageUrlParameters[nv[0]] = nv[1]; } );
+	if (htmlPageUrlParameters.endpointurl) document.getElementById("endpointUrl").value = htmlPageUrlParameters.endpointurl;
+	
+	$( document ).ready(function() {
+		// Change the selector if needed
+		var $table = $('table.scroll'),
+			$bodyCells = $table.find('tbody tr:first').children(),
+			colWidth;
+
+		// Adjust the width of thead cells when window resizes
+		$(window).resize(function() {
+			// Get the tbody columns width array
+			colWidth = $bodyCells.map(function() {
+				return $(this).width();
+			}).get();
+			
+			// Set the width of thead columns
+			$table.find('thead tr').children().each(function(i, v) {
+				$(v).width(colWidth[i]);
+			});    
+		}).resize(); // Trigger resize handler
+		
+			
+		$("#demoDataset").on("change", addDemoData);	
+		
+		$("#controlPanel").on("mouseup", function(el){
+			if(el.target.id == "controlPanel") resize();
+		});
+			
+	});
+
+	var secure = secure = (location.protocol === 'https:') ? true : false;
+	var noneExampleTxt = getUrlParameter( 'destinations' );
+	var custom_app_id = getUrlParameter( 'app_id' );
+	var custom_app_code = getUrlParameter( 'app_code' );
+	var metaInfos = []; //will hold the vehicle id, which is needed once we got the response from the server to draw the route in the same color, originally assigned to the vehicle
+	var inputNormalStyle = 'width: 100%;display: block;background-color: mintcream;min-height:20px;';
+	//var startDate= new Date( document.getElementById("departureDate").value );
+	var startDate= new Date(2016, 9, 14, 7, 30, 0 );
+	startDate.setMinutes( startDate.getMinutes() - 120 - startDate.getTimezoneOffset() );
+	var effTime= startDate.toLocaleTimeString('en-US', { hour12: false });
+	
+	if( custom_app_id !== null && custom_app_code !== null )
+	{
+		app_id = custom_app_id;
+		app_code = custom_app_code;
+		document.getElementById("endpointDetails").style.display= "table-row";
+	}
+	else
+	{
+		app_id = app_id_cors;
+		app_code = app_code_cors;
+	}
+	
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	var globalRoutingMode="";
+
+	var mapContainer = document.getElementById('mapContainer');
+
+	platform = new H.service.Platform({
+		app_code: app_code,
+		app_id: app_id,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	router = platform.getRoutingService(),
+	basemaptileService = platform.getMapTileService({'type': 'base'}),
+	greyTileLayer = basemaptileService.createTileLayer("maptile", "normal.day.grey", hidpi ? 512 : 256, "png8", null),
+	transport = basemaptileService.createTileLayer("truckonlytile", "normal.day", hidpi ? 512 : 256, "png8", null);
+	map = new H.Map( mapContainer, maptypes.normal.map, { center: center, zoom: zoom } );
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map)); // add behavior control
+	var ui = H.ui.UI.createDefault(map, maptypes); // add UI
+	
+    // Add a map entry for truck restriction 
+	//hack to replace incident layer with truck restrictions.
+	var mapSettings = ui.getControl("mapsettings");
+	mapSettings.setIncidentsLayer(transport);
+	localization = mapSettings.getLocalization();
+	localization.a["layer.incidents"] = "Truck restrictions";
+	mapSettings.setAlignment("right-bottom");
+	var oldMapSettings = ui.removeControl("mapsettings");
+	ui.addControl("mapsettings", mapSettings);
+	
+	
+	platform.configure(H.map.render.panorama.RenderEngine); // setup the Streetlevel imagery
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	map.addLayer(transport);
+
+	/**
+	* This constructor function instantiates an object of the type Vehicle.
+	* @param obj: An object with the required keys as attributes to represent the fields in this 'class'
+	* Note: All values in the obj parameter are strings so that they can be serialized and saved in CLE in a flat format.
+	* 
+	*  Eg.: 
+		{	LOAD: '0', 
+			START: 'lat,lng',
+			DESTINATION: 'lat,lng', 
+			ID: '0',
+			WEIGHT:"0", 
+			VEHICLE: '', 
+			ETA:'', 
+			SEQUENCE:''
+		}
+	* Once they are fetched, they are de-serialized and converted to field values by splitting, parsing etc. 
+	* For example, see: this.location = {lat: coords[0], lng: coords[1]};
+	*/
+	var VehicleClass = function(obj){
+
+		this.length = obj.LENGTH;
+		this.weight = obj.WEIGHT;
+		var coords = obj.LOCATION.split(',');
+		this.location = {lat: coords[0], lng: coords[1]};
+		this.id = obj.ID;
+		this.load = obj.LOAD;
+		this.orders = obj.ORDERS;
+		this.orderedSequence = [];
+		this.eta = obj.ETA
+		this.sequence = obj.SEQUENCE;
+		this.waypointsObj = {};
+		this.color = obj.COLOR;
+		this.departure = obj.DEPARTURE;
+		this.capacity = obj.CAPACITY;
+		this.arrival = obj.ARRIVAL;
+		this.destCoords = obj.DESTCOORDS; //destination location of the vehicle in format destCoords: {"lat": 50.13380,"lng": 8.59648}
+
+		/** 
+		* add truck marker for this vehicle
+		*/
+		this.addOrModifyTruckMarker = function(){
+			//remove previous marker for this truck, if any
+
+			for(var truckMarker of truckIcons.getObjects()){
+				if(truckMarker.$id === this.id)
+					truckIcons.removeObject(truckMarker);
+			}	
+
+			var kmETA, timeETA;
+			if(this.eta){
+				timeETA = 'ETA:'+this.eta.split(',')[0];
+				kmETA = this.eta.split(',')[1];
+			}else{
+				timeETA = '';
+				kmETA = '';
+			}
+
+			var truckMarker = new H.map.Marker({ lat: this.location.lat, lng: this.location.lng }, { icon: createTruckMarker(this.departure?'Dep.'+ new Date(this.departure).toLocaleTimeString([],{hour12: false}) : '', 
+																															 this.id, '', '', this.color) }, false);
+			
+			truckMarker.$html = this.generateTruckInfo();
+			truckMarker.$id = this.id;
+			truckMarker.$that = this;
+			truckMarker.$type = 'truck';
+			truckMarker.setZIndex(0);
+
+			truckMarker.addEventListener("tap", function(e)
+				{
+					if(currentBubble)
+						ui.removeBubble(currentBubble);
+					if(this.$that.sequence!==undefined && this.$that.sequence!==null && this.$that.sequence!==''){
+						currentBubble = new H.ui.InfoBubble(e.target.getPosition(), { content: e.target.$html});
+						ui.addBubble(currentBubble);
+					}
+				}
+			);
+			truckIcons.addObject(truckMarker);
+		};
+
+		this.generateTruckInfo = function(){
+			var info = '';
+			if(this.eta){
+				info+='<h5>ID:  ' + this.id + '</h5>';
+				info+='<h6>Departure: ' + new Date(this.departure) + '</h6>'; 
+				info+='<h6>Travel Time:  ' + this.eta.split(',')[0] + '</h6>';
+				info+='<h6>Travel Distance:  ' + this.eta.split(',')[1] + '</h6>';
+			}
+			if(this.sequence){
+				info+='<h6>Route: ' + this.sequence.replace(/,/g, '->') + '</h6>';
+			}
+			return info;
+		}
+
+		this.modifyETA = function(departure,newEta){
+			this.departure = departure;
+			this.eta = newEta;
+			this.addOrModifyTruckMarker();
+		};
+
+		this.rePlanOrders = function(){
+
+		};
+
+		this.arrangeOrdersInSequence = function(){
+			//if already sequenced, then ignore
+			if(this.sequence!==undefined && this.sequence!==null && this.sequence!==''){
+				entityContainer['ORDERS'].getEntitiesByIds(this.orders.split(',')).forEach(function(order, idx){
+					
+				});
+			}
+		};
+
+		//populate the table
+		this.addRowToTable = function(){
+			//Entry in the table
+			var newRow = vehicleTableref.insertRow(vehicleTableref.rows.length);
+
+			newRow.insertCell(0).innerHTML = '<input type="checkbox" id="'+this.id+'-radio"name="vehicle-id" onchange="showOrHideRoute(this)" value = "'+this.id+'"  checked/>&nbsp;';
+			newRow.insertCell(1).innerHTML = '<span id="'+this.id+'"          contenteditable onfocus="makeElemSelectableOnFocus(this);" style="width: 100%;min-height:20px;display: block;background-color: mintcream;">' + this.id;
+			newRow.insertCell(2).innerHTML = '<span id="'+this.id+'-location" contenteditable onfocus="makeElemSelectableOnFocus(this);" style="width: 100%;min-height:20px;display: block;background-color: mintcream;">' + this.location.lat + ',' + this.location.lng + '</span>';
+			newRow.insertCell(3).innerHTML = '<span id="'+this.id+'-load"     contenteditable onfocus="makeElemSelectableOnFocus(this);" style="width: 100%;min-height:20px;display: block;background-color: mintcream;">' + this.load 								     + '</span>';
+			insertCellAndBindInput(newRow, 4, this.id+'-departure', inputNormalStyle, this.departure, this, 	'departure');
+			insertCellAndBindInput(newRow, 5, this.id+'-capacity', inputNormalStyle, this.capacity, this, 	'capacity');
+			insertCellAndBindInput(newRow, 6, this.id+'-arrival', inputNormalStyle, this.arrival, this, 	'arrival');
+			insertCellAndBindInput(newRow, 7, this.id+'-destCoords', inputNormalStyle, (this.destCoords && this.destCoords.lat !== "undefined" && this.destCoords.lng !== "undefined" ? this.destCoords.lat + ',' + this.destCoords.lng : this.destCoords ) , this, 	'destCoords');
+		};
+		
+		//Return the wkt-format location for this vehicle, needed to save in CLE
+		this.wktLocation = function(){
+			return 'POINT ('+ this.location.lng + " " + this.location.lat + ')';
+		};
+
+		/**
+		*  Associate an order to this vehicle.
+		*/
+		this.addOrderToLoad = function(orderId, isMultivehicle){
+			var unique = true;
+			if(this.orders){
+				this.orders.split(',').forEach(function(val,idx){
+					if(orderId==val){
+						console.error('Order already added to truck');
+						unique = false;
+						return false;
+					}
+				});
+			}
+			
+			if(!unique){
+				console.error('Order is already assigned to this vehicle');
+				return null;
+			}else{
+				var order   = entityContainer['ORDERS'].getEntityById(orderId);
+				var metaInfo = {};
+				if(order.vehicle!==undefined && order.vehicle!=null && order.vehicle!=''){
+					metaInfo.prevVehicle = order.vehicle;
+				} else {
+					order.vehicle = this.id;
+				}
+				metaInfo.currVehicle = this.id;
+				metaInfo.color = this.color;
+				metaInfo.addedOrder = orderId;
+				if(this.orders === undefined || this.orders=='null' || this.orders==''){
+					//first order
+					this.orders = orderId;
+				}else{
+					this.orders += ','+orderId;
+				}
+				this.generateDefaultSequence();
+			    if (!isMultivehicle) {
+			    	this.calculateRouteIncludingOrders(metaInfo);
+			    }
+				
+			}
+		};
+
+		this.removeOrderFromLoad = function(orderId, recalculateRoute){
+			var ordersPresent = this.orders.split(',');
+			var index = ordersPresent.indexOf(orderId);
+			if (index !== -1) {
+				ordersPresent.splice(index, 1);
+			}
+			this.orders = ordersPresent.join(',');
+			this.generateDefaultSequence();
+			if(recalculateRoute)this.calculateRouteIncludingOrders();
+		};
+
+		this.getLinkedOrderObjects = function(){
+			var orderArr = this.orders.split(',');
+			if(orderArr.length<0){
+				console.error('Vehicle has no order associated with it');
+				return null;
+			}
+			var orderObjects = entityContainer['ORDERS'].getEntitiesByIds(orderArr);
+			return orderObjects;
+		};
+
+		this.calculateRouteIncludingOrders = function(metaInfo){
+			if(this.orders!==undefined && this.orders!==null && this.orders!==''){
+				waypointsArr = [];
+				var orderObjects = this.getLinkedOrderObjects();
+				if(orderObjects.length>0){
+					var routeReqObj = this.sequenceToWaypoints();
+					if(routeReqObj!==null && Object.keys(routeReqObj).length>1){
+						routeReqObj.mode = 'fastest;truck;traffic:disabled';
+						routeReqObj.departure = 'now';
+						routeReqObj.algopts = 'nohlprouter,firstWayPointReach0.6,sortQuality7';
+						routeReqObj.ignoreWaypointVehicleRestriction = '30000';
+						routeReqObj.mapMatchSearchRadius = '300';
+						routeReqObj.traverseGates = 'true';
+						if(metaInfo===undefined || metaInfo===null){
+							metaInfo = {};
+						}
+						metaInfo = Object.assign(metaInfo, {vehicleId: this.id, timeInMs: this.departure});
+						restAPICaller("CRE", "calculateRoute", routeReqObj, processCREResult, restoreTruckOrderOnFailedCRECall, metaInfo);
+					}
+				}
+			}else if(this.orders==='' && RouteGroups[this.id].actualRouteGroup!=undefined){
+				RouteGroups[this.id].actualRouteGroup.removeAll();
+				this.modifyETA(undefined);
+			}
+		};
+
+	
+		this.generateDefaultSequence = function(){
+			if(this.orders!==undefined && this.orders!==null && this.orders!==''){
+				var orderObjects = this.getLinkedOrderObjects();
+				var sequenceArr = [];
+				sequenceArr.push(this.id);
+				orderObjects.forEach(function(order, index){
+					sequenceArr.push(order.id + ':start');
+					sequenceArr.push(order.id + ':destination');
+				});
+				this.sequence = sequenceArr.join(',');
+			}
+			else
+				this.sequence = null;
+		};
+
+		this.sequenceToWaypoints = function(){
+			if(this.sequence!==undefined && this.sequence!==null && this.sequence!==''){
+				var waypointsObj = {};
+				waypointsObj["waypoint"+0] = this.location.lat + ',' + this.location.lng;
+				this.sequence.split(',').forEach(function (entityWaypointId, idx){
+					if(idx !== 0){
+						var orderObj = entityContainer['ORDERS'].getEntityById(entityWaypointId.split(':')[0]);
+						var waypointKey = entityWaypointId.split(':')[1];
+						waypointsObj["waypoint"+idx] = orderObj[waypointKey].coords.lat + ',' + orderObj[waypointKey].coords.lng;
+						//waypointsObj["waypoint"+((index*2)+2] = order.destination.lat + ',' + order.destination.lng;
+					}
+				});
+				return waypointsObj;
+			}
+			return null;
+		};
+
+		this.addRowToTable();
+		this.addOrModifyTruckMarker();
+		this.generateDefaultSequence();
+		return this;
+	};
+
+	var overAMarker = null;
+	// truck drag marker
+	/*var hoverMarkerSVG = '<svg height="200" width="200" style="margin-top: 65px; margin-left: 75px; vertical-align:top" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+							'<circle cx="55" cy="80" r="50" stroke="black" stroke-width="4" fill="none" />' +
+						 '</svg>';*/
+
+	
+	var enteredTruckHalos = [];
+
+	var OrderClass = function(obj){
+		
+		// straight line between start and end of the order
+		var strip = new H.geo.Strip();
+		var startCoords = [];
+		var startLoc;
+		var destCoords = [];
+		var destLoc;
+		
+		if (obj.START != ""){
+		startCoords = obj.START.split('::')[0].split(',');
+		startLoc = {coords: {lat: startCoords[0], lng: startCoords[1]}, closingTime: obj.START.split('::')[1]};
+		strip.pushLatLngAlt.apply(strip, startCoords);
+		}
+		
+		if (obj.DESTINATION != ""){
+        destCoords  = obj.DESTINATION.split('::')[0].split(',');
+		destLoc  = {coords: {lat: destCoords [0], lng: destCoords [1]}, closingTime: obj.DESTINATION.split('::')[1]};
+		strip.pushLatLngAlt.apply(strip, destCoords );
+		}
+
+		this.weight = obj.WEIGHT;
+		this.color = obj.COLOR;
+		this.price = obj.PRICE;
+		this.start = startLoc;
+		this.destination = destLoc;
+		this.id = obj.ID;
+		this.load = obj.LOAD;
+		this.vehicle = obj.VEHICLE;
+		this.startTime = null;
+		this.endTime = null;
+		this.pickupLoad = obj.PICKUPLOAD; //Vehicle loses the capacity when it picks up the load
+		this.dropOffLoad = obj.DROPOFFLOAD;	//vehicle gains the capacity when it drops off the load
+		
+		// order marker
+		var startMarker = new H.map.Marker(this.start.coords, { icon: createOrderStartMarker(entityContainer['ORDERS'].store.length, '', '',this.color) });
+		startMarker.$id = this.id;
+		startMarker.setZIndex(1);
+
+		startMarker.draggable = true;
+		startMarker.addEventListener('dragstart', function () {
+			behavior.disable();
+			//document.body.style.cursor = 'pointer';
+		}, false);
+
+		
+		(function (klosure) {
+			startMarker.addEventListener('dragend', function (ev) {
+				behavior.enable();
+				var pointer = ev.currentPointer;
+				var objectsFound = map.getObjectsAt(pointer.viewportX, pointer.viewportY);
+				var uniqueObjects = {};
+				objectsFound.forEach(function (val, idx){
+					if(val.$type === 'truck'){
+						uniqueObjects[val.$id] = val;
+					}
+				});
+				for(id in uniqueObjects){
+					entityContainer["VEHICLES"].getEntityById(id).addOrderToLoad(klosure.id, false);
+				}
+				
+				truckHighlightIcons.removeAll();
+				//Drop truck onto Order
+				//Release truck, put marker back to original location
+				ev.target.setPosition(klosure.start.coords);
+				
+			}, false);
+
+			startMarker.addEventListener('drag', function (ev) {
+				var target = ev.target;
+				var pointer = ev.currentPointer;
+				var screenToGeo = map.screenToGeo(pointer.viewportX, pointer.viewportY);
+				//var pixelcoord  = map.geoToScreen(coord),
+				var objectsFound = map.getObjectsAt(pointer.viewportX, pointer.viewportY);
+				if(objectsFound.length===0){
+					truckHighlightIcons.removeAll();
+					enteredTruckHalos.length = 0;
+				}
+				objectsFound.forEach(function (val, idx){
+					if(val.$type==='truck'){
+						//console.log(val.$id);
+						if(!enteredTruckHalos.includes(val.$id)){
+							truckHighlightIcons.removeAll();
+							enteredTruckHalos.length = 0;
+							val.$that.addOrModifyTruckMarker(true);
+							var truckHighlightedMarker = new H.map.Marker({ lat: val.$that.location.lat, lng: val.$that.location.lng }, { icon: createTruckMarker('', val.$that.id, '', '',val.$that.color, true) });
+							truckHighlightedMarker.setZIndex(0);
+							truckHighlightIcons.addObject(truckHighlightedMarker);
+							enteredTruckHalos.push(val.$id);
+						}
+					}
+				});
+				target.setPosition(screenToGeo);
+			}, false);
+		})(this);
+		
+		orderMarkers.addObject(startMarker);
+
+		
+		if (this.destination) {
+		// add order destination point
+		var orderDesmarker = new H.map.Marker(this.destination.coords, { icon: createOrderDestinationMarker(entityContainer['ORDERS'].store.length, '',this.color) });
+		orderDesmarker.$id = this.id+":dest";
+		orderDesmarker.setZIndex(1);
+		orderMarkers.addObject(orderDesmarker);
+		
+		var polyline= new H.map.Polyline(strip, {
+			style:{
+				lineWidth: 2,
+				strokeColor: 'grey' //'rgba(172, 91, 38, 1)'
+			}
+		});
+		polyline.setArrows( true );
+		orderMarkers.addObject(polyline);
+		}
+		//Entry in the table
+
+		var newRow = orderTableref.insertRow(orderTableref.rows.length);
+		
+
+		/*newRow.insertCell(0).innerHTML = '<span id="'+ this.id+'"                contenteditable style="width: 100%;display: block;background-color: mintcream;">' + this.id + '</span>';
+		newRow.insertCell(1).innerHTML = '<span id="'+ this.id+'-start-location" contenteditable style="width: 100%;display: block;background-color: mintcream;">' + this.start.lat + ',' + this.start.lng + '</span>';
+		newRow.insertCell(2).innerHTML = '<span id="'+ this.id+'-dest-location"     contenteditable style="width: 100%;display: block;background-color: mintcream;">' + this.destination.lat + ',' + this.destination.lng + '</span>';
+		
+
+		(function(klosure){
+			newRow.insertCell(3).innerHTML = '<span id="'+ klosure.id+'-price"          contenteditable style="width: 100%;display: block;background-color: mintcream;">' + klosure.price + '</span>';
+			newRow.insertCell(4).innerHTML = '<span id="'+ klosure.id+'-weight"         contenteditable style="width: 100%;display: block;background-color: mintcream;">' + klosure.weight + '</span>';
+
+			function bind(elemId, obj){
+				document.getElementById(klosure.id+'-price').addEventListener('DOMSubtreeModified', function(e){
+					klosure.price = this.innerHTML;
+				});
+			}
+
+		})(this);*/
+
+		insertCellAndBindInput(newRow, 0, this.id 						, inputNormalStyle, this.id, 							  			 					this, 				'id'   		 );
+		insertCellAndBindInput(newRow, 1, this.id+'-start-location'		, inputNormalStyle, this.start.coords.lat 		 + ',' + this.start.coords.lng, 	 	null,				''			 );
+		insertCellAndBindInput(newRow, 2, this.id+'-dest-location' 		, inputNormalStyle, this.destination ? this.destination.coords.lat + ',' + this.destination.coords.lng : "",	null,				''			 );
+		insertCellAndBindInput(newRow, 3, this.id+'-price'		   		, inputNormalStyle, this.price, 														this, 				'price'		 );
+		insertCellAndBindInput(newRow, 4, this.id+'-pickupLoad'		   	, inputNormalStyle, this.pickupLoad, 													this, 				'pickupLoad' );
+		insertCellAndBindInput(newRow, 5, this.id+'-start-closing-time'	, inputNormalStyle, this.start.closingTime, 											this.start, 		'closingTime');
+		insertCellAndBindInput(newRow, 6, this.id+'-dest-closing-time'	, inputNormalStyle, this.destination ? this.destination.closingTime : "", 					    				this.destination, 	'closingTime');
+			
+		this.wktLocation = function(){
+			return 'POINT ('+ this.start.coords.lng + " " + this.start.coords.lat + ')';
+		};
+	
+		return this;
+	};
+	
+	var insertCellAndBindInput = function(row, pos, id, styleStr, innerHTML, klosure, bind){	
+		
+		row.insertCell(pos).innerHTML = '<span id="' + id + '" contenteditable style="'+styleStr+'">' + innerHTML + '</span>';
+		if(klosure!==null){
+			document.getElementById(id).addEventListener('DOMSubtreeModified', function(e){
+				klosure[bind] = this.textContent;
+			});
+		}
+		
+		var element = document.getElementById(id);
+		element.onfocus = function(){
+			makeElemSelectableOnFocus(this);
+		};
+		
+	};
+
+	var truckIcons = new H.map.Group();
+	map.addObject(truckIcons);
+
+	var unassignedOrders = new H.map.Group();
+	map.addObject(unassignedOrders);
+
+	var currentBubble;
+
+	var truckHighlightIcons = new H.map.Group();
+	map.addObject(truckHighlightIcons);
+
+	var orderMarkers = new H.map.Group();
+	map.addObject(orderMarkers);
+
+	var tempStartMarkers = new H.map.Group();
+	map.addObject(tempStartMarkers);
+
+	var unsignOrders = [];
+	var labels = new H.map.Group();
+	map.addObject(labels);
+
+	var vehicleTableref = document.getElementById("vehicle-data");
+	var orderTableref = document.getElementById("order-data");
+	var routeTableref = document.getElementById("route-data");
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+	function addNewEntity(entityName, obj){
+		entityContainer[entityName].entityFactory(obj);
+	}
+
+	function generateRandomColor(truckId) {
+		// Blue, Green, Yellow, Orange, Lime, Brown, Mint, Olive, Teal, Navy
+		var colors = ['#0C8ED9','#3cb44b','#ffe119','#f58231','#d2f53c','#aa6e28','#aaffc3','#808000','#008080','#F093BC'];
+
+		if(truckId > colors.length-1){
+			var letters = '0123456789ABCDEF';
+			var color = '#';
+			for (var i = 0; i < 6; i++) {
+				color += letters[Math.floor(Math.random() * 16)];
+			}
+			return color;
+		}
+		return colors[truckId];
+	}
+
+	function addNewVehicle(coords, departure, capacity, arrival, destCoords, color, id){
+		var vehicleObj = {LOCATION: coords.lat.toFixed(5)+','+coords.lng.toFixed(5), LOAD: "0", LENGTH: "0", COLOR: color == undefined ? generateRandomColor(entityContainer['VEHICLES'].store.length) : color, ID: id== undefined ? String(entityContainer['VEHICLES'].store.length) : id, WEIGHT: "0", DEPARTURE: departure, CAPACITY: capacity, ARRIVAL: arrival, DESTCOORDS: destCoords};
+		addNewEntity('VEHICLES', vehicleObj);
+	}
+
+	var tempOrder = null;
+	//order consists of two locations (pick up location where it has a positive load and a drop off location where it has a negative load) 
+	function addNewOrder(coords, closingTime, orderLoad, id, orderType){ 
+		
+		switch (orderType) {
+		case DROP: 
+			var orderObj;
+			orderObj = {PRICE: "0", LOAD: "0", DESTINATION: "", START: coords.lat.toFixed(5)+','+coords.lng.toFixed(5) + "::" + closingTime, ID: id == undefined ? "order-"+entityContainer['ORDERS'].store.length : id, WEIGHT:"0", VEHICLE: '', ETA:'', SEQUENCE:'', PICKUPLOAD: orderLoad ? orderLoad : "0", DROPOFFLOAD:(orderLoad ? orderLoad : "0")}
+			entityContainer['ORDERS'].entityFactory(orderObj);
+		    break;
+		default:
+			if(tempOrder){
+				tempStartMarkers.removeAll();
+				var orderObj;
+				orderObj = {PRICE: "0", LOAD: "0", DESTINATION: coords.lat.toFixed(5)+','+coords.lng.toFixed(5) + '::'+ closingTime, START: tempOrder.coords.lat.toFixed(5)+','+tempOrder.coords.lng.toFixed(5) + "::" + tempOrder.closingTime, ID: id == undefined ? "order-"+entityContainer['ORDERS'].store.length : id, WEIGHT:"0", VEHICLE: '', ETA:'', SEQUENCE:'', PICKUPLOAD: tempOrder.pickupload, DROPOFFLOAD:(orderLoad ? orderLoad : "0")}
+				entityContainer['ORDERS'].entityFactory(orderObj);
+				tempOrder = null;
+			}else{
+				tempOrder = {
+						"coords": coords,
+						"closingTime": closingTime,
+						"pickupload": orderLoad ? orderLoad : "0"
+				}
+				tempStartMarkers.addObject(new H.map.Marker(tempOrder.coords, { icon: createOrderStartMarker(entityContainer['ORDERS'].store.length, '','') }));
+				tempStartMarkers.setZIndex(1);
+			}
+			break;	
+		}
+	}
+	
+    function addDemoData(data){	
+    	
+    	var vehicles = [];
+    	var start = [];
+    	var dest = [];
+    	
+    	switch(data.target.value) {
+        case "demo1":
+
+        	vehicles.push({"coords": {"lat": 50.1338014,"lng": 8.596481}, "departure": "2018-05-03T11:16:46"});
+            vehicles.push({"coords": {"lat": 50.225091,"lng": 8.676116}, "departure": "2018-05-03T10:06:46"});
+            
+            start.push({"coords": {"lat": 50.131676,"lng": 8.683953}, "closingTime": "2018-05-03T11:57:46"});
+            start.push({"coords": {"lat": 50.233732,"lng": 8.758181}, "closingTime": "2018-05-03T11:57:46"});
+            
+            dest.push({"coords": {"lat": 50.155669,"lng": 8.755162}, "closingTime": "2018-05-03T11:57:46"});
+            dest.push({"coords": {"lat": 50.326233,"lng": 8.874512}, "closingTime": "2018-05-03T11:57:46"});
+
+			break;
+			
+		case "demo2":
+
+			// 3 hubs with several vehicles each
+			vehicles.push({"coords": {"lat": 50.13380,"lng": 8.59648}, "departure": "2018-08-10T06:00:00"}); // Oberems
+			vehicles.push({"coords": {"lat": 50.13380,"lng": 8.59648}, "departure": "2018-08-10T06:00:00"}); // Oberems
+			vehicles.push({"coords": {"lat": 50.13380,"lng": 8.59648}, "departure": "2018-08-10T06:00:00"}); // Oberems
+			vehicles.push({"coords": {"lat": 50.22509,"lng": 8.67611}, "departure": "2018-08-10T06:00:00"}); // Ober-Erlenbach
+			vehicles.push({"coords": {"lat": 50.22509,"lng": 8.67611}, "departure": "2018-08-10T06:00:00"}); // Ober-Erlenbach
+			vehicles.push({"coords": {"lat": 50.22509,"lng": 8.67611}, "departure": "2018-08-10T06:00:00"}); // Ober-Erlenbach
+			vehicles.push({"coords": {"lat": 50.82818,"lng": 6.90052}, "departure": "2018-08-10T06:00:00"}); // Brühl
+			vehicles.push({"coords": {"lat": 50.82818,"lng": 6.90052}, "departure": "2018-08-10T06:00:00"}); // Brühl
+			vehicles.push({"coords": {"lat": 50.82818,"lng": 6.90052}, "departure": "2018-08-10T06:00:00"}); // Brühl
+			vehicles.push({"coords": {"lat": 50.82818,"lng": 6.90052}, "departure": "2018-08-10T06:00:00"}); // Brühl
+
+			start.push({"coords":{"lat":50.36376,"lng":8.37343}, "closingTime": ""});
+			start.push({"coords":{"lat":50.40221,"lng":8.5588}, "closingTime": ""});
+			start.push({"coords":{"lat":50.52506,"lng":8.57136}, "closingTime": ""});
+			start.push({"coords":{"lat":50.70965,"lng":8.62154}, "closingTime": ""});
+			start.push({"coords":{"lat":50.74648,"lng":8.24834}, "closingTime": ""});
+			start.push({"coords":{"lat":50.72356,"lng":8.56313}, "closingTime": ""});
+			start.push({"coords":{"lat":50.37087,"lng":8.0654}, "closingTime": ""});
+			start.push({"coords":{"lat":50.75467,"lng":8.59078}, "closingTime": ""});
+			start.push({"coords":{"lat":50.15025,"lng":8.14981}, "closingTime": ""});
+			start.push({"coords":{"lat":50.97873,"lng":7.84317}, "closingTime": ""});
+			start.push({"coords":{"lat":50.7933,"lng":8.00237}, "closingTime": ""});
+			start.push({"coords":{"lat":51.04076,"lng":7.85653}, "closingTime": ""});
+			start.push({"coords":{"lat":50.9181,"lng":7.91808}, "closingTime": ""});
+			start.push({"coords":{"lat":50.88383,"lng":8.14023}, "closingTime": ""});
+			start.push({"coords":{"lat":51.01755,"lng":7.18156}, "closingTime": ""});
+			start.push({"coords":{"lat":50.90461,"lng":7.33576}, "closingTime": ""});
+			start.push({"coords":{"lat":50.74011,"lng":8.34202}, "closingTime": ""});
+			start.push({"coords":{"lat":50.91096,"lng":8.53294}, "closingTime": ""});
+			start.push({"coords":{"lat":50.718,"lng":7.44915}, "closingTime": ""});
+			start.push({"coords":{"lat":50.64293,"lng":7.185}, "closingTime": ""});
+			start.push({"coords":{"lat":50.78198,"lng":7.161}, "closingTime": ""});
+			start.push({"coords":{"lat":50.98396,"lng":7.55472}, "closingTime": ""});
+			start.push({"coords":{"lat":50.31281,"lng":6.83871}, "closingTime": ""});
+			start.push({"coords":{"lat":50.68478,"lng":7.66204}, "closingTime": ""});
+			start.push({"coords":{"lat":50.8028,"lng":7.9024}, "closingTime": ""});
+			start.push({"coords":{"lat":50.7525,"lng":7.93636}, "closingTime": ""});
+			start.push({"coords":{"lat":50.72252,"lng":7.68346}, "closingTime": ""});
+			start.push({"coords":{"lat":50.57095,"lng":7.16967}, "closingTime": ""});
+			start.push({"coords":{"lat":50.58508,"lng":7.45768}, "closingTime": ""});
+			start.push({"coords":{"lat":50.60466,"lng":7.21842}, "closingTime": ""});
+			start.push({"coords":{"lat":50.50964,"lng":7.96067}, "closingTime": ""});
+			start.push({"coords":{"lat":50.74348,"lng":7.82174}, "closingTime": ""});
+			start.push({"coords":{"lat":50.33109,"lng":7.21385}, "closingTime": ""});
+			start.push({"coords":{"lat":50.175,"lng":7.45152}, "closingTime": ""});
+			start.push({"coords":{"lat":50.2376,"lng":7.20363}, "closingTime": ""});
+			start.push({"coords":{"lat":50.37117,"lng":7.99651}, "closingTime": ""});
+			start.push({"coords":{"lat":50.34089,"lng":7.94237}, "closingTime": ""});
+			start.push({"coords":{"lat":50.63249,"lng":7.93999}, "closingTime": ""});
+			start.push({"coords":{"lat":50.31698,"lng":7.52058}, "closingTime": ""});
+			start.push({"coords":{"lat":50.64921,"lng":7.71564}, "closingTime": ""});
+			start.push({"coords":{"lat":50.4109,"lng":7.40577}, "closingTime": ""});
+			start.push({"coords":{"lat":50.54995,"lng":8.77122}, "closingTime": ""});
+			start.push({"coords":{"lat":50.96392,"lng":7.24833}, "closingTime": ""});
+			start.push({"coords":{"lat":50.96505,"lng":7.51086}, "closingTime": ""});
+			start.push({"coords":{"lat":51.03334,"lng":7.42014}, "closingTime": ""});
+			start.push({"coords":{"lat":50.91629,"lng":6.94816}, "closingTime": ""});
+			start.push({"coords":{"lat":50.29986,"lng":7.7153}, "closingTime": ""});
+			start.push({"coords":{"lat":50.51069,"lng":8.27427}, "closingTime": ""});
+			start.push({"coords":{"lat":50.57318,"lng":7.24806}, "closingTime": ""});
+			start.push({"coords":{"lat":50.74583,"lng":7.92605}, "closingTime": ""});
+
+			break;
+			
+			/* way points generated by following query in RDFViewer:
+			select 'AAA' || (g.lat / 100000.0) || 'BBB' || (g.lon / 100000.0) || 'CCC'
+			from RDF_LINK_GEOMETRY g
+			join RDF_NAV_LINK l on g.link_id = l.link_id
+			where seq_num = 1 and lat between 5012387 and 5106593 and lon between 676757 and 897885 and access_id = 1023 and g.link_id % 2117 = 0
+			limit 200
+			Verify in RDFViewer (select lat, lon ...) that the values are nicely distributed. Otherwise modify the % 2117 = 0.
+			then replace AAA -> start.push({"coords":{"lat":
+						 BBB -> ,"lng":
+						 CCC -> }, "closingTime": "2018-10-09T17:00:00"});     or by          "closingTime": ""
+			then replace the 2nd half start. -> dest .
+			*/
+			
+		default:
+
+			loadTrucksAndOrdersFromFile(data.target.value);
+			return;
+    	}
+				
+		reset(); //first clear all the existing data before populating the new one in the html fields		
+	    for (var i= 0; i< vehicles.length; i++){
+	    	addNewVehicle(vehicles[i].coords, vehicles[i].departure, typeof(vehicles[i].capacity) === "undefined" ? "" : vehicles[i].capacity, typeof(vehicles[i].arrival) === "undefined" ? "" : vehicles[i].arrival,  typeof(vehicles[i].destCoords) === "undefined" ? "" : vehicles[i].destCoords);
+	    }
+	    for (var i = 0; i < start.length; i++){
+	    	addNewOrder(start[i].coords, start[i].closingTime, typeof(start[i].load) === "undefined" ? "0" : start[i].load);
+	    	addNewOrder(dest[i] ? dest[i].coords : "", dest[i] ? dest[i].closingTime : "", dest[i] ? typeof(dest[i].load) === "undefined" ? "0" : dest[i].load : "0");
+	    }
+	    redrawCalendarCanvas();
+	}
+
+	var loadTrucksAndOrdersFromFile = function (filename) {
+		var req = new XMLHttpRequest();
+		req.open('GET', '/sample_data/tour_planning/' + filename);
+		req.onreadystatechange = function() {
+			if (req.readyState != XMLHttpRequest.DONE) return;
+			planning_setup_textarea.value = req.responseText;
+			processPlanningSetup();
+		};
+		req.send();
+	}
+
+	document.getElementById('planning_setup_textarea').addEventListener('dragover',
+		function(evt) {
+			evt.stopPropagation();
+			evt.preventDefault();
+			evt.dataTransfer.dropEffect = 'copy';
+		}, false
+	);
+
+	document.getElementById('planning_setup_textarea').addEventListener('drop',
+		function(evt) {
+			evt.stopPropagation();
+			evt.preventDefault();
+			var files = evt.dataTransfer.files;
+			var file = files[0];
+			var r = new FileReader();
+			r.onload = function(e) { 
+				planning_setup_textarea.value = r.result;
+				processPlanningSetup();
+			}
+			r.readAsText(file);
+		}, false
+	);
+	
+	var processPlanningSetup = function () {
+			reset(); //first clear all the existing data before populating the new one in the html fields
+			var planning_setup = JSON.parse(planning_setup_textarea.value);
+			// read the trucks
+			for (var t = 0; t < planning_setup.fleet.types.length; t++) {
+				var fleetType = planning_setup.fleet.types[t];
+				for (var numberOfSameCars = 0; numberOfSameCars < fleetType.amount; numberOfSameCars++) {
+
+					var vehicleColor = generateRandomColor(entityContainer['VEHICLES'].store.length);
+					var vehicleId;
+					if (fleetType.amount >= 10 && numberOfSameCars < 10) 	vehicleId = fleetType.id + "-0" + numberOfSameCars;
+					else   vehicleId = fleetType.id + ":" + numberOfSameCars;
+
+					addNewVehicle({"lat": round5(fleetType.shifts[0].start.location[0]), "lng": round5(fleetType.shifts[0].start.location[1])},
+							fleetType.shifts[0].start.time.replace("\.000", ""),
+							typeof(fleetType.capacity) === "undefined" ? "" : fleetType.capacity.join(","),
+									(typeof(fleetType.shifts[0].end) === "undefined" || typeof(fleetType.shifts[0].end.time) === "undefined") ? "" : fleetType.shifts[0].end.time.replace("\.000", ""),
+											typeof(fleetType.shifts[0].end) === "undefined" || typeof(fleetType.shifts[0].end.location) === "undefined" ? "" : {"lat": round5(fleetType.shifts[0].end  .location[0]),"lng": round5(fleetType.shifts[0].end  .location[1])}, vehicleColor, vehicleId);
+
+					metaInfos.push({vehicleId: vehicleId, timeInMs: fleetType.shifts[0].start.time.replace("\.000", ""), color: vehicleColor});
+
+				}
+			}
+			// read the orders
+			var orderWayPointCounter = 0;
+			var ordersHashMap = new Object();
+			for (var o = 0; o < planning_setup.plan.jobs.length; o++) {
+		
+				var order = planning_setup.plan.jobs[o];
+				if (order.places.pickup == undefined){
+					addNewOrder({"lat": round5(order.places.delivery.location[0]), "lng": round5(order.places.delivery.location[1])}, "", -order.demand, order.id , DROP); // if start and dest have the same coordinates, then it is treated as "drop only" point
+				    ordersHashMap[orderWayPointCounter] = order.id + ":start";
+				    orderWayPointCounter++;
+				}
+				else if (order.places.delivery == undefined){
+					addNewOrder({"lat": round5(order.places.pickup  .location[0]), "lng": round5(order.places.pickup  .location[1])}, "",  order.demand, order.id, DROP); // pickup
+				    ordersHashMap[orderWayPointCounter] = order.id + ":start";
+				    orderWayPointCounter++;
+				}
+				else {
+					addNewOrder({"lat": round5(order.places.pickup  .location[0]), "lng": round5(order.places.pickup  .location[1])}, "", -order.demand, order.id); // if start and dest have the same coordinates, then it is treated as "drop only" point
+                    addNewOrder({"lat": round5(order.places.delivery.location[0]), "lng": round5(order.places.delivery.location[1])}, "",  order.demand, order.id); // pickup
+                    ordersHashMap[orderWayPointCounter] = order.id + ":start";
+                    orderWayPointCounter++;
+                    ordersHashMap[orderWayPointCounter] = order.id + ":destination";
+                    orderWayPointCounter++;
+				}
+			}
+			entityContainer['ORDERS'].ordersToWaypointsMap = ordersHashMap;
+			redrawCalendarCanvas();
+	}		
+
+	function reset(){
+		metaInfos = [];
+		$('#vehicle-data tr').remove();
+		truckIcons.removeAll();
+		map.addObject(truckIcons);
+		$('#order-data tr').remove();
+		orderMarkers.removeAll();
+		map.addObject(orderMarkers);
+		$('#route-data tr').remove();
+		entityContainer['VEHICLES'].removeAllEntities();
+		entityContainer['ORDERS'].removeAllEntities();
+		clearAllRoutes();
+		redrawCalendarCanvas();
+	}
+	
+	function resize(){
+		
+		var width = document.getElementById("controlPanel").clientWidth - 90;
+	    document.getElementById("truckWrap").style.width = width + "px";
+	    document.getElementById("orderWrap").style.width = width + "px";
+	    redrawCalendarCanvas();
+	}
+	
+
+/*	map.addEventListener('tap', function(evt) {
+          if(evt.target.$id === undefined){//ignore clicking on existing markers
+			var coords = map.screenToGeo(evt.currentPointer.viewportX, evt.currentPointer.viewportY);
+			if($('input[name="clickToAdd"]:checked').val() === "vehicles"){
+					addNewVehicle(coords);
+			}else{
+				addNewOrder(coords);
+			}
+		  }
+        }, false);*/
+
+
+	map.addEventListener('contextmenu', function(e){
+		if(e.target.type==3){
+			return;
+		}
+		clickCoords = map.screenToGeo(e.viewportX, e.viewportY);
+		e.items.push(new H.util.ContextItem({
+			label: 'Add Vehicle',
+			callback: function(){
+				addNewVehicle(clickCoords, "", "", "", "");
+				redrawCalendarCanvas();
+			}
+		}));
+
+		e.items.push(new H.util.ContextItem({
+			label: tempOrder?'Add Destination for Order':'Add Start point for New Order',
+			callback: function(){
+				addNewOrder(clickCoords, "", "0"); //adding the load of the order to zero
+				redrawCalendarCanvas();
+			}
+		}));
+
+	});
+	
+	function getTableRowAsArray(tableId, nofilter){
+		var array = [];
+
+		$('table#'+tableId+' tr').has('td').each(function() {
+			var tempArr = [];
+			var collect = false;
+			$('td', $(this)).each(function(index, item) {
+				if(index==0 && $(item).children()[0].checked){//radio or checkbox
+					collect = true;
+				}
+				if(collect || nofilter){
+					tempArr[index] = $(item).children()[0].innerHTML;
+				}
+			});
+			if(tempArr.length>0){
+				array.push(tempArr);
+			}
+		});
+		return array;
+	}
+
+	function getTrucks(onlychecked){
+		var selection = getTableRowAsArray('vehicle-data', !onlychecked);
+		if(selection.length==0){
+			alert('Please select a truck');
+		}
+		return selection;
+	}
+
+	function getOrders(onlychecked){
+		var selection = getTableRowAsArray('order-data', !onlychecked);
+		return selection;
+	}
+
+	function getOrderIds(onlychecked){
+		var selection = getTableRowAsArray('order-data', !onlychecked);
+		var orderIdsArr = [];
+		selection.forEach(function(val,idx){
+			orderIdsArr.push(val[1]);
+		});
+		return orderIdsArr;
+	}
+
+	var planMap = {};
+	var tempPlan = {};
+
+	var makeElemSelectableOnFocus = function(that){
+		var doc = document;
+		//console.log(this, element);
+		if (doc.body.createTextRange) {
+			var range = document.body.createTextRange();
+			range.moveToElementText(that);
+			range.select();
+		} else if (window.getSelection) {
+			var selection = window.getSelection();        
+			var range = document.createRange();
+			range.selectNodeContents(that);
+			selection.removeAllRanges();
+			selection.addRange(range);
+		}	
+	};
+
+	var zIndex = 1;
+    var currentColor ="rgba(0,85,170,";
+	var wayPointColor ="#A9D4FF";
+
+	var truckIcon = new H.map.Icon('/assets/icons/markerTruck.png');
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	var EntityType = Object.freeze({
+		VEHICLES : 'vehicles',
+		ORDERS: 'orders',
+		ROUTES: 'routes'
+	});
+
+	function instanceFactory(entityType, attributes){
+		if(!(entityType in EntityType)){
+			console.error("invalid entityType. Allowed values: "+ Object.keys(EntityType).join(","));
+			return;
+		}
+
+	}
+
+	var entityContainer = Object.freeze({
+		VEHICLES : new EntityDef(VehicleClass, 'MAINSTRIKEVEHICLES'),
+		ORDERS: new EntityDef(OrderClass, 'MAINSTRIKEORDERS')
+	});
+
+	function EntityDef(EntityClass, layerName){
+		this.constructor = EntityClass;
+		this.store = [];
+		this.layerName = layerName;
+		
+		this.getEntityById = function (id){
+			var foundEntities = [];
+			this.store.forEach(function(val, idx){
+				if(val.id===id){
+					foundEntities.push(val);
+				}
+			});
+			return foundEntities[0];
+		};
+		
+		this.getEntitiesByIds = function (ids){
+			//ids = [id1, id2...]
+			var foundEntities = [];
+			for (i= 0; i< ids.length; i++){
+				for (j= 0; j< this.store.length; j++){
+					if(ids[i] == this.store[j].id)	foundEntities.push(this.store[j]);
+				}
+			}
+			return foundEntities;
+		};
+		
+		this.getAllEntities = function(){
+			return this.store;
+		};
+
+		this.entityFactory = function(obj, override){
+			if(this.getEntityById(obj.ID)!=null && !override){
+				console.error("Entity by this ID Already Exists");
+				return null;
+			}
+			var entityObj = new this.constructor(obj);
+			this.store.push(entityObj);
+			return entityObj;
+		};
+
+		//useful in the predefined examples, where it is required to remove the entities from previously selected example and then add the new entities from the selected example
+		this.removeAllEntities = function(){
+			this.store = [];
+		}
+	}
+
+	function calculateAllRoutes(){
+		entityContainer["VEHICLES"].store.forEach(function (vehicle, idx){
+			vehicle.generateDefaultSequence();
+			vehicle.calculateRouteIncludingOrders();
+		});
+	}
+
+	function addLoadToTruck(orderId, vehicleId){
+		var vehicle = entityContainer['VEHICLES'].getEntityById(vehicleId);
+		vehicle.addLoad(orderId);
+		vehicle.load; 
+	}
+
+	var haloOptions = {
+      style: {
+        fillColor: 'rgba(0, 0, 0, 0.0)',
+        lineWidth: 0,
+        strokeColor: 'green'
+      }
+	};
+
+	var haloHoverOptions = {
+      style: {
+        fillColor: 'rgba(0, 0, 0, 0.0)',
+        lineWidth: 2,
+        strokeColor: 'red'
+      }
+	};
+
+	var svgMarkerImage_Order='<svg width="90" height="65" xmlns="http://www.w3.org/2000/svg">  <metadata>Svg Vector Icons : http://www.onlinewebfonts.com/icon</metadata>   <g>   <title>background</title>   <rect x="-1" y="-1" width="92" height="67" id="canvas_background" fill="none"/>  </g>  <g>   <title>Layer 1</title>   <ellipse fill="#f2f2f2" stroke="#000" stroke-width="0.5" cx="44.499954" cy="35.547548" id="svg_5" rx="20" ry="20"/>   <g id="svg_1" stroke="null">    <g id="svg_2" stroke="null">     <path d="m28.333299,44.871934l15.78382,7.97652l0,-17.84389l-15.78382,-7.13613l0,17.00351l0,-0.00001zm4.84348,-10.38726l6.08352,3.02324l-0.03667,2.38227l-6.08019,-3.02324l0.03334,-2.38227l0,0zm12.09704,0.51989l0,17.84389l15.72714,-7.97651l0,-17.0035l-15.72714,7.13612l0,0zm-0.66336,-15.75717l-16.17383,7.44237l16.1905,7.3854l16.35717,-7.4032l-16.37384,-7.42457z" id="svg_3" stroke="null"/>    </g>   </g>   <text fill="#000000" stroke="#000" stroke-width="0" x="2.786117" y="10.928904" id="svg_4" font-size="12" font-family="Helvetica, Arial, sans-serif" text-anchor="start" xml:space="preserve" font-weight="bold">ETA:hh:mm:ss</text>   <path fill="#000000" stroke="#000" stroke-width="0.5" stroke-opacity="null" d="m39.724209,62.044364l4.66658,-6.99988l4.66658,6.99988l-9.33316,0z" id="svg_6" transform="rotate(180 44.39078521728515,58.54442596435547) "/>   <text fill="#ffffff" stroke="#000" stroke-width="0" stroke-opacity="null" x="37.833407" y="30.214311" id="svg_7" font-size="10" font-family="Helvetica, Arial, sans-serif" text-anchor="start" xml:space="preserve" font-weight="bold">_n_</text>  </g> </svg>';
+
+	// create order start marker
+	var createOrderStartMarker = function (num, time, line3, color) {
+		var svgMarker = svgMarkerImage_Order;
+		svgMarker = svgMarker.replace(/_n_/g, num);
+		svgMarker = svgMarker.replace(/ETA:hh:mm:ss/g, time);
+		svgMarker = svgMarker.replace(/__line3__/g, line3);
+		if(color)svgMarker = svgMarker.replace(/#f2f2f2/g, color);
+		return new H.map.Icon(svgMarker, { anchor: new H.math.Point(ORDER_START_ICON_DRAW_OFFSET_X, ORDER_START_ICON_DRAW_OFFSET_Y)	});
+	};
+
+	var svgMarkerImage_order_dest='<svg width="90" height="48" xmlns="http://www.w3.org/2000/svg">   <g>   <title>background</title>   <rect fill="none" id="canvas_background" height="50" width="92" y="-1" x="-1"/>  </g>  <g>   <title>Layer 1</title>   <path stroke="null" fill="#191919" id="svg_1" d="m43.594929,13.83118c-5.290472,0 -9.57939,5.450965 -9.57939,11.479087c0,8.491318 9.382324,20.284639 9.57939,20.38949c0.196534,0.104851 9.578858,-11.898171 9.578858,-20.38949c0,-6.342356 -4.288386,-11.479087 -9.578858,-11.479087zm0,18.450229c-3.140295,0 -5.6862,-3.050552 -5.6862,-6.813387c0,-3.763473 2.545905,-6.814025 5.6862,-6.814025c3.140029,0 5.685668,3.050552 5.685668,6.814025c0,3.762836 -2.545639,6.813387 -5.685668,6.813387z"/>   <text font-weight="bold" xml:space="preserve" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="12" id="svg_4" y="11.997928" x="2.37452" stroke-opacity="null" stroke-width="0" stroke="null" fill="#000000">ETA:hh:mm:ss</text>  <text fill="#ffffff" stroke="#000" stroke-width="0" stroke-opacity="null" x="38.333400" y="40.214311" id="svg_7" font-size="10" font-family="Helvetica, Arial, sans-serif" text-anchor="start" xml:space="preserve" font-weight="bold">_n_</text></g> </svg>';
+
+	// create order destination marker   
+	var createOrderDestinationMarker = function (num, time,color) {
+		var svgMarker = svgMarkerImage_order_dest;
+		svgMarker = svgMarker.replace(/_n_/g, num);
+		svgMarker = svgMarker.replace(/ETA:hh:mm:ss/g, time);
+		if(color)svgMarker = svgMarker.replace(/#191919/g, color);
+		return new H.map.Icon(svgMarker, { anchor: new H.math.Point(41, 42)	});
+	}
+
+	var svgTruckMarker     = '<svg width="' + TRUCK_ICON_WIDTH + '"	height="' + TRUCK_ICON_HEIGHT + '" xmlns="http://www.w3.org/2000/svg"> <g> <title>background</title> <rect fill="none" id="canvas_background" width="' + (TRUCK_ICON_WIDTH + 2) + '" height="' + (TRUCK_ICON_HEIGHT + 2) + '" y="-1" x="-1"/>  </g>  <g>   <title>Layer 1</title>   <g id="svg_3"/>   <g id="svg_4"/>   <g id="svg_5"/>   <g id="svg_6"/>   <g id="svg_7"/>   <g id="svg_8"/>   <g id="svg_9"/>   <g id="svg_10"/>   <g id="svg_11"/>   <g id="svg_12"/>   <g id="svg_13"/>   <g id="svg_14"/>   <g id="svg_15"/>   <g id="svg_16"/>   <g id="svg_17"/>   <ellipse ry="23" rx="23" id="svg_18" cy="45.500003" cx="39.666698" stroke-width="0.5" stroke="#0c0000" fill="#f2f2f2"/>   <g stroke="null" id="svg_1">    <path stroke="null" id="svg_2" fill=" rgb(0, 0, 0)" d="m22.023395,50.121757l0,-16.217702c0,-0.901184 0.741048,-1.631773 1.655275,-1.631773l16.442816,0c0.914164,0 1.655212,0.730589 1.655212,1.631773l0,16.217764c0,0.300395 -0.246974,0.543924 -0.551758,0.543924l-18.649786,0c-0.304784,0 -0.551758,-0.24353 -0.551758,-0.543987zm13.278087,5.555838c0,1.869136 -1.537127,3.384376 -3.433121,3.384376c-1.895994,0 -3.433121,-1.51524 -3.433121,-3.384376c0,-1.869199 1.537127,-3.384376 3.433121,-3.384376c1.895994,0 3.433121,1.515178 3.433121,3.384376zm-1.716624,0c0,-0.934568 -0.768532,-1.692188 -1.716561,-1.692188s-1.716624,0.75762 -1.716624,1.692188s0.768595,1.692251 1.716624,1.692251s1.716561,-0.757682 1.716561,-1.692251zm-4.673424,-3.384439l-7.693027,0c-0.304721,0 -0.551758,0.24353 -0.551758,0.543924l0,1.650209c0,0.300395 0.247037,0.543924 0.551758,0.543924l6.166325,0c0.160985,-1.08897 0.718556,-2.050881 1.526702,-2.738058zm24.352616,3.384439c0,1.869136 -1.537127,3.384376 -3.433121,3.384376c-1.896057,0 -3.433121,-1.51524 -3.433121,-3.384376c0,-1.869199 1.537064,-3.384376 3.433121,-3.384376c1.895994,-0.000062 3.433121,1.515178 3.433121,3.384376zm-1.716497,0c0,-0.934568 -0.768595,-1.692188 -1.716624,-1.692188c-0.948092,0 -1.716561,0.75762 -1.716561,1.692188s0.768532,1.692251 1.716561,1.692251s1.716624,-0.757682 1.716624,-1.692251zm7.785776,-2.840514l0,1.650209c0,0.300395 -0.247037,0.543924 -0.551758,0.543924l-4.467139,0c-0.319506,-2.160189 -2.205391,-3.825906 -4.483376,-3.825906c-2.278428,0 -4.164376,1.66578 -4.483882,3.825906l-8.995184,0c-0.161048,-1.088907 -0.718556,-2.050881 -1.526702,-2.738058l8.529036,0l0,-15.55793c0,-0.600789 0.494074,-1.087849 1.103517,-1.087849l5.208945,0c1.46668,0 2.837515,0.718194 3.658171,1.916472l3.358062,4.903042c0.492558,0.719191 0.755769,1.567122 0.755769,2.434922l0,7.391342l1.342783,0c0.304721,0 0.551758,0.24353 0.551758,0.543924zm-5.597318,-10.244624l-2.685249,-3.761505c-0.103364,-0.144748 -0.271678,-0.230886 -0.451238,-0.230886l-4.188574,0c-0.304658,0 -0.551758,0.24353 -0.551758,0.543924l0,3.761505c0,0.300457 0.247037,0.543924 0.551758,0.543924l6.87395,0c0.446941,0 0.708384,-0.496589 0.451111,-0.856963z"/>   </g>   <path stroke="#000000" transform="rotate(180 39.28764343261718,73.34564971923828) " id="svg_22" d="m33.620991,78.512298l5.666653,-10.3333l5.666653,10.3333l-11.333306,0z" stroke-width="0.5" fill="#000000"/>   <text font-weight="bold" xml:space="preserve" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="12" id="svg_23" y="46.833382" x="25.167048" stroke-width="0" stroke="#000000" fill="#ffffff">_n_</text>   <text style="cursor: move;" font-weight="bold" xml:space="preserve" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="12" id="svg_24" y="33.66657" x="62.66639" stroke-width="0" stroke="#000000" fill="#000000">_eta_</text>   <text stroke="#000000" font-weight="bold" xml:space="preserve" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="12" id="svg_25" y="48.166826" x="66.166752" stroke-width="0" fill="#000000">_km_</text>   <text font-weight="bold" xml:space="preserve" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="12" id="svg_27" y="17.833522" x="4.167064" fill-opacity="null" stroke-opacity="null" stroke-width="0" stroke="#000000" fill="#000000">_time_</text>  </g> </svg>';
+	var svgTruckMarker_red = '<svg width="' + TRUCK_ICON_WIDTH + '"	height="' + TRUCK_ICON_HEIGHT + '" xmlns="http://www.w3.org/2000/svg"> <g> <title>background</title> <rect fill="none" id="canvas_background" width="' + (TRUCK_ICON_WIDTH + 2) + '" height="' + (TRUCK_ICON_HEIGHT + 2) + '" x="-1" y="-1"/>  </g>  <g>   <title>Layer 1</title>   <g id="svg_3"/>   <g id="svg_4"/>   <g id="svg_5"/>   <g id="svg_6"/>   <g id="svg_7"/>   <g id="svg_8"/>   <g id="svg_9"/>   <g id="svg_10"/>   <g id="svg_11"/>   <g id="svg_12"/>   <g id="svg_13"/>   <g id="svg_14"/>   <g id="svg_15"/>   <g id="svg_16"/>   <g id="svg_17"/>   <ellipse fill="#f2f2f2" stroke="#ff0000" stroke-width="0.5" cx="39.666698" cy="45.500003" id="svg_18" rx="23" ry="23"/>   <g id="svg_1" stroke="null">    <path d="m22.0234,50.12176l0,-16.21771c0,-0.90118 0.74104,-1.63177 1.65527,-1.63177l16.44282,0c0.91416,0 1.65521,0.73059 1.65521,1.63177l0,16.21777c0,0.30039 -0.24698,0.54392 -0.55176,0.54392l-18.64979,0c-0.30478,0 -0.55175,-0.24353 -0.55175,-0.54398zm13.27808,5.55584c0,1.86913 -1.53712,3.38437 -3.43312,3.38437c-1.89599,0 -3.43312,-1.51524 -3.43312,-3.38437c0,-1.8692 1.53713,-3.38438 3.43312,-3.38438c1.896,0 3.43312,1.51518 3.43312,3.38438zm-1.71662,0c0,-0.93457 -0.76853,-1.69219 -1.71656,-1.69219s-1.71663,0.75762 -1.71663,1.69219s0.7686,1.69225 1.71663,1.69225s1.71656,-0.75769 1.71656,-1.69225zm-4.67343,-3.38444l-7.69302,0c-0.30472,0 -0.55176,0.24353 -0.55176,0.54392l0,1.65021c0,0.30039 0.24704,0.54392 0.55176,0.54392l6.16632,0c0.16099,-1.08897 0.71856,-2.05088 1.5267,-2.73806l0,0.00001zm24.35262,3.38444c0,1.86913 -1.53713,3.38437 -3.43312,3.38437c-1.89606,0 -3.43312,-1.51524 -3.43312,-3.38437c0,-1.8692 1.53706,-3.38438 3.43312,-3.38438c1.89599,-0.00006 3.43312,1.51518 3.43312,3.38438zm-1.7165,0c0,-0.93457 -0.76859,-1.69219 -1.71662,-1.69219c-0.94809,0 -1.71656,0.75762 -1.71656,1.69219s0.76853,1.69225 1.71656,1.69225s1.71662,-0.75769 1.71662,-1.69225zm7.78578,-2.84052l0,1.65021c0,0.3004 -0.24704,0.54392 -0.55176,0.54392l-4.46714,0c-0.3195,-2.16019 -2.20539,-3.8259 -4.48337,-3.8259c-2.27843,0 -4.16438,1.66578 -4.48389,3.8259l-8.99518,0c-0.16105,-1.0889 -0.71856,-2.05088 -1.5267,-2.73805l8.52903,0l0,-15.55793c0,-0.60079 0.49408,-1.08785 1.10352,-1.08785l5.20895,0c1.46668,0 2.83751,0.71819 3.65817,1.91647l3.35806,4.90304c0.49256,0.71919 0.75577,1.56712 0.75577,2.43492l0,7.39135l1.34278,0c0.30472,0 0.55176,0.24353 0.55176,0.54392zm-5.59732,-10.24462l-2.68525,-3.76151c-0.10336,-0.14475 -0.27168,-0.23088 -0.45124,-0.23088l-4.18857,0c-0.30466,0 -0.55176,0.24353 -0.55176,0.54392l0,3.76151c0,0.30045 0.24704,0.54392 0.55176,0.54392l6.87395,0c0.44694,0 0.70838,-0.49659 0.45111,-0.85696z" fill=" rgb(0, 0, 0)" id="svg_2" stroke="null"/>   </g>   <path fill="#000000" stroke-width="0.5" d="m33.62099,78.5123l5.66665,-10.3333l5.66666,10.3333l-11.33331,0z" id="svg_22" transform="rotate(180 39.28764343261718,73.34564971923828) " stroke="#000000"/>   <text fill="#ff0000" stroke="#000000" stroke-width="0" x="25.167048" y="46.833382" id="svg_23" font-size="12" font-family="Helvetica, Arial, sans-serif" text-anchor="start" xml:space="preserve" font-weight="bold">_n_</text>   <text fill="#000000" stroke="#000000" stroke-width="0" x="62.66639" y="33.66657" id="svg_24" font-size="12" font-family="Helvetica, Arial, sans-serif" text-anchor="start" xml:space="preserve" font-weight="bold">_eta_</text>   <text fill="#000000" stroke-width="0" x="66.166752" y="48.166826" id="svg_25" font-size="12" font-family="Helvetica, Arial, sans-serif" text-anchor="start" xml:space="preserve" font-weight="bold" stroke="#000000">_km_</text>   <text fill="#000000" stroke="#000000" stroke-width="0" stroke-opacity="null" fill-opacity="null" x="4.167064" y="17.833522" id="svg_27" font-size="12" font-family="Helvetica, Arial, sans-serif" text-anchor="start" xml:space="preserve" font-weight="bold">_time_</text>   <text font-weight="bold" xml:space="preserve" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="12" id="svg_19" y="63.666529" x="58.833443" stroke-width="0" stroke="#ff0000" fill="#ff0000">_msg_</text>  </g> </svg>';
+
+	var truckColors = [""]   
+
+	var createTruckMarker = function (departureTime, num, eta, km, color, highlight) {
+		var svgMarker = highlight?svgTruckMarker_red:svgTruckMarker;
+		svgMarker = svgMarker.replace(/_time_/g, departureTime);
+		svgMarker = svgMarker.replace(/_n_/g, num);
+		svgMarker = svgMarker.replace(/_eta_/g, eta);
+		svgMarker = svgMarker.replace(/_km_/g, km);
+		if(color)svgMarker = svgMarker.replace(/#f2f2f2/g, color);
+		if(highlight)
+			svgMarker = svgMarker.replace(/_msg_/g, ' Assign to this truck');
+		else
+			svgMarker = svgMarker.replace(/_msg_/g, '');
+		return new H.map.Icon(svgMarker, { anchor: new H.math.Point(TRUCK_ICON_DRAW_OFFSET_X, TRUCK_ICON_DRAW_OFFSET_Y)	}, {hitArea: new H.map.HitArea(0, [20, 40, 100])});
+	};
+
+	//////////REST API CALLERS
+
+	var restHelper = {
+            CLE: {
+				hostname: 'https://cle.api.here.com',
+				resources: {
+					searchAll: {
+						path: '/2/search/all.json',
+						method: 'GET'
+					},
+					upload: {
+						path: '/2/layers/upload.json',
+						method: 'POST'
+					}
+				}
+			},
+			CRE: {
+				hostname: "https://cle.api.here.com",
+				resources: {
+					calculateRoute: {
+						path: '/2/calculateroute.json',
+						method: 'GET'
+					}
+				}
+			},
+			CRE_MULTIVEHICLE: {
+				hostname: "https://cle.api.here.com", // "http://localhost:8080/cle",
+				resources: {
+					calculateroutemultivehicle: {
+						path: '/2/calculateroutemultivehicle.json',
+						method: 'POST'
+					}
+				}
+			}
+    };	
+
+	var restAPICaller = function(service, resource, params, callbackOnSuccess, callbackOnFailure, metaInfo) {
+		feedbackTxt.innerHTML = ""; //clearing the any error message from the previous request before sending the new request
+		Spinner.showSpinner();
+		var url = ((document.getElementById("endpointUrl").value) ? document.getElementById("endpointUrl").value : (restHelper[service].hostname) )+ (restHelper[service].resources[resource].path);
+		if (document.getElementById('appId').value != "" && document.getElementById('appCode').value != ""){
+		    app_id = document.getElementById('appId').value.trim();
+			app_code = document.getElementById('appCode').value.trim();
+		}
+		/**if (restHelper[service].resources[resource].method=='POST') {
+			params['app_id'  ] = app_id  ;
+			params['app_code'] = app_code;
+		} else {*/
+			url += "?app_id="   + app_id;
+			url += "&app_code=" + app_code;
+		//}
+		$.ajax({
+			url: url,
+			dataType: "json",
+			async: true,
+			type: restHelper[service].resources[resource].method,
+			data: params,
+			success: function(data){
+					Spinner.hideSpinner();
+					callbackOnSuccess(data, metaInfo);
+				},
+			contentType: (restHelper[service].resources[resource].method=='POST')?'application/x-www-form-urlencoded':'application/json',
+			processData: (restHelper[service].resources[resource].method=='POST')?true:true,
+			method: restHelper[service].resources[resource].method,
+			error: function(xhr, status, e) {
+				Spinner.hideSpinner();
+				if(service==="CRE")
+					callbackOnFailure(metaInfo.currVehicle, metaInfo.addedOrder, false);
+				if(service === "CRE_MULTIVEHICLE"){
+					//calculateroutemultivehicle.json returns multiple responses in the same response therefore the errors must be handled differnetly
+					callbackOnFailure(metaInfo, xhr);
+					return;
+				}
+				var errorObj = "";
+				if(xhr.responseJSON && xhr.responseJSON.issues){
+					errorObj = xhr.responseJSON.issues;
+				}else if(xhr.responseJSON && xhr.responseJSON.errors){
+					errorObj = xhr.responseJSON.errors;
+				}
+				var errorResp = (errorObj[0] || {
+					"message": "unknown error occured"
+				});
+				console.log(errorResp.message);
+				alert(errorResp.message);
+			}
+		});
+    };
+
+	function loadFromCLE(entityname){
+		var params = {
+			layer_id: entityContainer[entityname].layerName
+		};
+		restAPICaller("CLE", "searchAll", params, function(data){
+			displayResultsFromCLE(entityname, data.geometries);
+		});
+	}
+
+	function displayResultsFromCLE(entityName, data){
+		data.forEach(function(geom){
+			addNewEntity(entityName, geom.attributes);
+		});
+		calculateAllRoutes();
+	}
+	
+	function uploadToCLE(target, layerId){
+		var formData = new FormData();
+		var tsvText = parseToTSVFormat(target);
+		var wktFile = new Blob([tsvText], { type: 'plain/text' });
+		formData.append('file', wktFile,'multipart.wkt');
+		formData.append('layer_id', layerId);
+		restAPICaller("CLE", "upload", formData, function(data){
+			console.log(data);
+		});
+	}
+
+	function parseToTSVFormat(target){
+		var headers = [];
+		Object.keys(target[0]).forEach(function(val){
+			if(typeof target[0][val] !== 'function' && val!=='waypointsObj'){
+				headers.push(val);
+			}
+		});
+		headers.push('wkt');
+		var data = [];
+		data.push(headers.join('\t'));
+		target.forEach(function(item){
+			data.push(toTSV(item));
+		});
+		return data.join('\n');
+	}
+
+	var toTSV = function(self){
+		var dataRow = [];
+		Object.keys(self).forEach(function(key){
+			if(typeof self[key] !== 'function' && typeof self[key] !== 'object' && key!=='waypointsObj'){
+				dataRow.push(self[key])
+			}
+
+			if(self[key] !== null && typeof self[key] === "object"  && ('lat' in self[key] && 'lng' in self[key])  && key!=='waypointsObj'){
+				dataRow.push(self[key].lat + ',' + self[key].lng);
+			}
+
+			if(typeof self[key] === "object"  && (key === 'orders' || key === 'waypoints') && key!=='waypointsObj'){
+				dataRow.push(self[key].join(','));
+			}
+		});
+		dataRow.push(self.wktLocation());
+		return dataRow.join('\t');
+	};
+
+	/**
+		This method clears the waypoint markers on the map
+	*/
+	function clearWayPointMarkersOnMap(){
+		labels.removeAll();
+	}
+
+	var RouteGroups = [];
+	var routeStroke = 8;
+	var routeLinkHashMap = new Object();
+    var legLinkHashMap = new Object();
+    var routeColor = ["rgba(18, 65, 145, 0.8)", "rgba(0, 145, 255, 0.7)", "rgba(127, 201, 255, 0.6)"];
+
+	var restoreTruckOrderOnFailedCRECall = function(truckId, orderId){
+		var truck = entityContainer["VEHICLES"].getEntityById(truckId);
+		truck.removeOrderFromLoad(orderId,false);
+	}
+
+	var clearAllRoutes = function(){
+		for(var truckId in RouteGroups){
+			RouteGroups[truckId].actualRouteGroup.removeAll();
+			RouteGroups[truckId].airlineDistancesGroup.removeAll();
+			RouteGroups[truckId].markersGroup.removeAll();
+		}
+		RouteGroups = [];
+	}
+
+	var processCREResult = function(resp, metaInfo){
+		   
+		RouteGroups[metaInfo.vehicleId] = new RouteGroup();
+		
+		 truckIcons.getObjects().forEach(function(val, idx){
+			 if(val.$id===metaInfo.vehicleId){
+			 RouteGroups[metaInfo.vehicleId].markersGroup.addObject(val);
+			 }
+		 });
+		if(entityContainer["VEHICLES"].getEntityById(metaInfo.vehicleId).orders){
+		var orders = entityContainer["VEHICLES"].getEntityById(metaInfo.vehicleId).orders.split(",");
+		for (var i= 0; i< orders.length; i++){
+		    var order = entityContainer["ORDERS"].getEntityById(orders[i]);	
+		    order.vehicle = metaInfo.vehicleId;
+			// update the color of the order with the color of the truck
+			orderMarkers.getObjects().forEach(function(val, idx){
+				if(val.$id===order.id){
+					//found the order
+					val.setIcon(createOrderStartMarker(order.id.replace(/order-/,''), '', '', entityContainer["VEHICLES"].getEntityById(metaInfo.vehicleId).color));
+					RouteGroups[metaInfo.vehicleId].markersGroup.addObject(val);
+				}
+				else if(val.$id===order.id+":dest"){
+					val.setIcon(createOrderDestinationMarker(order.id.replace(/order-/,''), '', entityContainer["VEHICLES"].getEntityById(metaInfo.vehicleId).color));
+					RouteGroups[metaInfo.vehicleId].markersGroup.addObject(val);
+				}
+			});
+		 }
+		} 
+            routeLinkHashMap = new Object();
+            
+            
+    		// set tour polylines
+            for (var r = 0; r < resp.response.route.length; r++) {
+            	
+              //ordering waypoints to their seqNrOnRoute
+    	      var respRoute = resp.response.route[r];	
+    	            var orderedWaypoints = respRoute.waypoint.slice(); 	
+    	            for( var i= 0; i < respRoute.waypoint.length - 1; i++ ) {
+    	            	orderedWaypoints[respRoute.waypoint[i].seqNrOnRoute] = respRoute.waypoint[i];
+    	      }
+    	           
+    	    var orderedSequence = [];      
+    	    orderedSequence.push(metaInfo.vehicleId);
+    		for( var k= 0; k < orderedWaypoints.length - 1; k++ ) {
+    					var strip = new H.geo.Strip();
+    					strip.pushPoint( { lat: orderedWaypoints[k].mappedPosition.latitude, lng: orderedWaypoints[k].mappedPosition.longitude } );
+    					strip.pushPoint( { lat: orderedWaypoints[k + 1].mappedPosition.latitude, lng: orderedWaypoints[k + 1].mappedPosition.longitude } );
+                        var polyline = createPolylineForIndex(strip, k, entityContainer["VEHICLES"].getEntityById(metaInfo.vehicleId).color);
+                        polyline.setArrows(true);
+                        RouteGroups[metaInfo.vehicleId].airlineDistancesGroup.addObject(polyline);
+                        
+                        if(orderedWaypoints[k].globalWayPointSeqNr !== undefined){
+                        var globalSeqNum = orderedWaypoints[k].globalWayPointSeqNr;
+                        	orderedSequence.push(entityContainer['ORDERS'].ordersToWaypointsMap[globalSeqNum]);
+                        }
+
+    		}
+    		if(orderedWaypoints[orderedWaypoints.length - 1].globalWayPointSeqNr !== undefined){
+    		var globalSeqNum = orderedWaypoints[orderedWaypoints.length - 1].globalWayPointSeqNr;
+        	 orderedSequence.push(entityContainer['ORDERS'].ordersToWaypointsMap[globalSeqNum]);
+    		}
+                    /*if(document.getElementById("showManeuvers").checked){
+                         var maneuvers = resp.response.route[0].leg[k].maneuver
+                        for(var i in maneuvers){
+                            var lat = maneuvers[i].position.latitude;
+                            var lon = maneuvers[i].position.longitude;
+                            var point = new H.geo.Point(parseFloat(lat), parseFloat(lon));
+                            var instr = maneuvers[i].instruction.replace(new RegExp("</span>", 'g'), "").replace(new RegExp('<span class="[a-z\-]+">', 'g'), "");
+                            var marker = new H.map.Marker(point, { icon: createOrderStartMarker(maneuvers[i].travelTime + " seconds", instr) });
+                            routeGroup.addObject(marker);
+                        }
+                    }*/
+                   
+            }
+            
+            /**
+             *   draw a smooth route
+             */
+            for (var r = 0; r < resp.response.route.length; r++) {
+                for(var k = 0; k<resp.response.route[r].leg.length; k++){
+                    for (var linkIdx in resp.response.route[0].leg[k].link) {
+                        var strip = new H.geo.Strip();
+                        var shape = resp.response.route[0].leg[k].link[linkIdx].shape;
+                        var l = shape.length;
+                        var linkId = resp.response.route[0].leg[k].link[linkIdx].linkId;
+
+                        for (var i = 0; i < l; i = i + 2) {
+                            strip.pushLatLngAlt.apply(strip, [shape[i], shape[i + 1]].map(function(item) {
+                                return parseFloat(item);
+                            }));
+						}
+                        var polyline = createPolylineForIndex(strip, linkIdx, entityContainer["VEHICLES"].getEntityById(metaInfo.vehicleId).color);
+                        polyline.setArrows(true);
+                        RouteGroups[metaInfo.vehicleId].actualRouteGroup.addObject(polyline);
+                    }
+
+                    /*if(document.getElementById("showManeuvers").checked){
+                         var maneuvers = resp.response.route[0].leg[k].maneuver
+                        for(var i in maneuvers){
+                            var lat = maneuvers[i].position.latitude;
+                            var lon = maneuvers[i].position.longitude;
+                            var point = new H.geo.Point(parseFloat(lat), parseFloat(lon));
+                            var instr = maneuvers[i].instruction.replace(new RegExp("</span>", 'g'), "").replace(new RegExp('<span class="[a-z\-]+">', 'g'), "");
+                            var marker = new H.map.Marker(point, { icon: createOrderStartMarker(maneuvers[i].travelTime + " seconds", instr) });
+                            routeGroup.addObject(marker);
+                        }
+                    }*/
+                   
+                }
+            }
+            
+			//Modify the ETA for the truck
+			var travelTime = resp.response.route[0].summary.travelTime;
+			var timeETA = humanReadabletimeShort(travelTime);
+			var kmETA = humanReadableDist(resp.response.route[0].summary.distance);
+
+			var index=0;
+			var absoluteTimes = [];
+			absoluteTimes[index++] = new Date(metaInfo.timeInMs).toLocaleTimeString([],{hour12: false});
+
+			entityContainer['VEHICLES'].getEntityById(metaInfo.vehicleId).modifyETA(metaInfo.timeInMs, timeETA+','+kmETA);
+
+            // create link objects
+            for (var r = 0; r < resp.response.route.length; r++) {
+                for(var k = 0; k<resp.response.route[r].leg.length; k++){
+                    for (var m = 0; m < resp.response.route[r].leg[k].link.length; m++) {
+                        // only add new link if it does not exist so far - so alternatives are not drawn multiple times
+                        var linkId = (resp.response.route[r].leg[k].link[m].linkId.lastIndexOf("+", 0) === 0 ? resp.response.route[r].leg[k].link[m].linkId.substring(1) : resp.response.route[r].leg[k].link[m].linkId);
+                        if (routeLinkHashMap[linkId] == null) {
+                            var strip = new H.geo.Strip(),
+                                shape = resp.response.route[r].leg[k].link[m].shape,
+                                i,
+                                l = shape.length;
+
+                            for (i = 0; i < l; i += 2) {
+                                strip.pushLatLngAlt(shape[i], shape[i + 1], 0);
+                            }
+
+                            var link = new H.map.Polyline(strip, {
+                                style: {
+                                    lineWidth: (routeStroke - (r + 1)), // alternatives get smaller line with
+                                    strokeColor: "rgba(255, 255, 255, 0)",
+                                    lineCap: 'butt'
+                                }
+                            });
+                            link.$linkId = resp.response.route[r].leg[k].link[m].linkId;
+                            //The router can send back links ids with "-" or "+" prefix: only "-" prefix is kept and stored in this HashMap, the "+" is removed
+                            routeLinkHashMap[linkId] = link;
+                            legLinkHashMap[linkId] = resp.response.route[r].leg[k].link[m];
+                            // add event listener to link
+                            link.addEventListener("mouseover", function(e) {
+                                if (currentOpenBubble)
+                                    ui.removeBubble(currentOpenBubble);
+                                var html = '<div>' +
+                                    '<p style="font-family:Arial,sans-serif; font-size:12px;">LinkId: ' + e.target.$linkId + '</p>'
+                                '</div>';
+
+                                var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+
+                                currentOpenBubble = new H.ui.InfoBubble(pos, {
+                                    content: html
+                                });
+                                ui.addBubble(currentOpenBubble);
+                            });
+
+                            /*link.addEventListener('tap', createTapLinkHandler(link));
+                            link.addEventListener('pointerenter', createPointerEnterLinkHandler(link));
+      			            link.addEventListener('pointerleave', createPointerLeaveLinkHandler(link));*/
+                            RouteGroups[metaInfo.vehicleId].actualRouteGroup.addObject(polyline);
+						}
+						
+						if(m==resp.response.route[r].leg[k].link.length-1){
+							var elapsedTimeInSec = travelTime - resp.response.route[r].leg[k].link[m].remainTime;
+							absoluteTimes[index++] = new Date(metaInfo.timeInMs).getTime() + elapsedTimeInSec*1000;
+							//absoluteTimes[index++] = new Date(metaInfo.timeInMs + elapsedTimeInSec*1000).toLocaleTimeString([],{hour12: false});
+						}
+
+                    }
+                }
+            }
+			//console.log(absoluteTimes);
+            entityContainer['VEHICLES'].getEntityById(metaInfo.vehicleId).orderedSequence = orderedSequence;
+            entityContainer['VEHICLES'].getEntityById(metaInfo.vehicleId).absoluteTimes = absoluteTimes;
+            /*orderedSequence.forEach(function (waypoint, idx){
+				if(idx !== 0){
+					var orderObj = entityContainer['ORDERS'].getEntityById(waypoint.split(':')[0]);
+					var waypointType = waypoint.split(':')[1];
+					var time = new Date(absoluteTimes[idx]);
+					orderMarkers.getObjects().forEach(function(val, id){
+						if(val.$id===orderObj.id && waypointType === 'start'){
+							orderObj.color = entityContainer["VEHICLES"].getEntityById(metaInfo.vehicleId).color;
+							val.setIcon(createOrderStartMarker(orderObj.id.replace(/order-/,''), 'ETA:' + time.toLocaleTimeString([],{hour12: false}), '', orderObj.color));
+							orderObj.startTime = time.getTime();
+						}
+						else if(val.$id === orderObj.id+":dest" && waypointType == 'destination'){
+							orderObj.color = entityContainer["VEHICLES"].getEntityById(metaInfo.vehicleId).color;
+							val.setIcon(createOrderDestinationMarker(orderObj.id.replace(/order-/,''),'ETA:' + time.toLocaleTimeString([],{hour12: false}), orderObj.color));
+							orderObj.endTime = time.getTime();
+						}
+					});
+				}
+			});*/
+            map.addObject(RouteGroups[metaInfo.vehicleId].airlineDistancesGroup);
+            map.addObject(RouteGroups[metaInfo.vehicleId].markersGroup);
+            map.addObject(RouteGroups[metaInfo.vehicleId].actualRouteGroup);
+			map.setViewBounds(RouteGroups[metaInfo.vehicleId].airlineDistancesGroup.getBounds());
+			toggleAirlineDistanceRoute();
+	};
+
+	/**
+	* Draws pins with timelines for destinations.
+	* @returns {H.map.DomIcon}
+	*/
+	var createSvgMarkerIconWithImg = function(num, waypoint, routeDepartureTime, routeTotalTime)
+	{
+		var estDep = waypoint.estimatedDeparture;
+		var estArv = waypoint.estimatedArrival;
+		var spent= ( estArv !== null ? (estArv.substr(11) + " - ") : ''  ) + ( estDep !== null ? estDep.substr(11) :'' );
+		var constraintsDescr = waypoint.fulfilledConstraints[0] || null;
+		var line1 = waypoint.id;
+		var line2 = spent.length > 2 ? spent : null;
+
+		var div = document.createElement("div");
+		div.style.marginTop = "-57px";
+		div.style.marginLeft = "-23px";
+
+		var timelineEvents = [];
+
+		var timeline = '<rect id="label-box" ry="3" rx="3" stroke="#000000" stroke-width="1" fill-opacity="0.6" height="9" width="188" y="0" x="17.5" fill="white"/>';
+
+		var totalLenght = 188;
+		var startX = 17.5;
+
+		var completedWidth;
+		if (waypoint.estimatedDeparture) {
+			var waypointDepartureTime = new Date(waypoint.estimatedDeparture).getTime() / 1000;
+			timelineEvents.push({ name: 'dep', time: waypointDepartureTime });
+			var waypointDepartureTimeOffset = waypointDepartureTime - routeDepartureTime;
+			completedWidth = (totalLenght / routeTotalTime * waypointDepartureTimeOffset);
+		} else {
+			completedWidth = totalLenght;
+		}
+		timeline += '<rect id="label-box" ry="3" rx="3" stroke-width="0" fill-opacity="0.6" height="9" width="' + completedWidth + '" y="0" x="17.5" fill="#121212" />';
+
+		// Arrival red line, not for the first waypoint.
+		if (waypoint.estimatedArrival) {
+			var waypointArrivalTime = new Date(waypoint.estimatedArrival).getTime() / 1000;
+			timelineEvents.push({ name: 'arr', time: waypointArrivalTime });
+			var waypointArrivalTimeOffset = waypointArrivalTime - routeDepartureTime;
+			var arrX = startX + (totalLenght / routeTotalTime * waypointArrivalTimeOffset);
+			var arrBox = '<rect id="label-box" stroke-width="0" height="9" width="2" y="0" x="' + arrX + '" fill="red" />';
+		}
+
+		if (constraintsDescr) {
+			var constraints = constraintsDescr.split(';');
+
+			var accBoxes = '';
+			var stBox = '';
+			var atBox = '';
+
+			for (var i = 0; i < constraints.length; i++) {
+				var sepIndex = constraints[i].indexOf(':');
+				var constraintType = constraints[i].substr(0, sepIndex);
+				var constraint = constraints[i].substr(sepIndex + 1);
+				switch (constraintType) {
+					case 'acc':
+						// Only one supported ad the moment. When we have more, just position them at different y and make the st higher.
+						var accessStart = constraint.split('|')[0];
+						var accessEnd = constraint.split('|')[1];
+
+						var days = { 'mo': 1, 'tu': 2, 'we': 3, 'th': 4, 'fr': 5, 'sa': 6, 'su': 0 };
+						var constraintDay = days[accessStart.substring(0, 2)];
+						var arrivalDate = new Date(waypoint.estimatedArrival);
+						var firstPart = waypoint.estimatedArrival.split('T')[0];
+
+						function getMinAccessTimeOffset() {
+							var nextCheckDate = new Date(firstPart + 'T' + accessStart.substring(2));
+
+							while (arrivalDate.getDay() !== nextCheckDate.getDay() || arrivalDate < nextCheckDate) {
+								nextCheckDate.setDate(nextCheckDate.getDate() - 1);
+							}
+
+							var offset = nextCheckDate.getTime() / 1000 - routeDepartureTime;
+							return offset < 0 ? 0 : offset;
+						}
+
+						function getMaxAccessTimeOffset() {
+							var nextCheckDate = new Date(firstPart + 'T' + accessEnd.substring(2));
+
+							while (arrivalDate.getDay() !== nextCheckDate.getDay() || arrivalDate > nextCheckDate) {
+								nextCheckDate.setDate(nextCheckDate.getDate() + 1);
+							}
+
+							var offset = nextCheckDate.getTime() / 1000 - routeDepartureTime;
+							return offset > routeTotalTime ? Number(routeTotalTime) : offset;
+						}
+
+						var leftMatchingTimeOffset = getMinAccessTimeOffset();
+						timelineEvents.push({ name: 'accStarts', time: leftMatchingTimeOffset + routeDepartureTime });
+
+						var rightMatchingTimeOffset = getMaxAccessTimeOffset();
+
+						timelineEvents.push({ name: 'accEnds', time: rightMatchingTimeOffset + routeDepartureTime });
+						var acc = rightMatchingTimeOffset - leftMatchingTimeOffset;
+
+
+						var accX = startX + (totalLenght / routeTotalTime * leftMatchingTimeOffset);
+						var accWidth = (totalLenght / routeTotalTime * acc);
+
+						accBoxes += '<rect id="label-box" stroke-width="0" ry="1" rx="1" height="2" width="' + accWidth + '" y="6" x="' + accX + '" fill="#59b354" />';
+						break;
+					case 'st':
+						var st = Number(constraint);
+						var stWidth =  (totalLenght / routeTotalTime * st);
+						break;
+					case 'at':
+						var at = new Date(constraint);
+						var waypointConstrainedArrivalTime = at.getTime() / 1000;
+						timelineEvents.push({ name: 'at', time: waypointConstrainedArrivalTime });
+						var waypointConstrainedArrivalTimeOffset = waypointConstrainedArrivalTime - routeDepartureTime;
+
+						var atX = startX + (totalLenght / routeTotalTime * waypointConstrainedArrivalTimeOffset);
+						atBox = '<rect id="at-constraint-box-' + num + '" stroke-width="0" height="9" width="2" y="0" x="' + atX + '" fill="yellow" />';
+						break;
+					case 'before':
+						var beforeConstraint = constraint;
+						timelineEvents.push({ name: 'before', time: '', constraintDescription: beforeConstraint});
+						break;
+					default:
+						console.error('Cannot visualize unsupported constraint: ' + constraintType);
+				}
+			}
+
+			if (st) {
+				// If 'at' constraint is matched, service time starts there.
+				var stX = atX || arrX;
+				if (atX) {
+					timelineEvents.push({ name: 'stStarts', time: waypointConstrainedArrivalTime });
+					timelineEvents.push({ name: 'stEnds', time: waypointConstrainedArrivalTime + st });
+				} else {
+					timelineEvents.push({ name: 'stStarts', time: waypointArrivalTime });
+					timelineEvents.push({ name: 'stEnds', time: waypointArrivalTime + st });
+				}
+				stBox = '<rect id="at-constraint-box-' + num + '" stroke-width="0" height="4" width="' + stWidth + '" y="1" x="' + stX + '" fill="#1b5fcc" />';
+			}
+
+			// SVG z-order depends on relative order of elements.
+			timeline += accBoxes + stBox + atBox + arrBox;
+
+		}		
+		var svg = '<svg overflow="visible" width="220" height="900" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+			'<g>' +
+			'<rect id="label-box-' + num + '" ry="3" rx="3" stroke="#000000" height="30" width="155" y="11" x="50" fill="'+wayPointColor+'"/>'+
+			'<a onclick=\'toggleWaypointDetails(' + num + ', ' + waypoint.lat + ', ' + waypoint.lng + ', ' + JSON.stringify(timelineEvents) + ');\' xlink:href="#">' +
+			'<image width="16" height="16" x="54" y="14"  xlink:href="<%= image_path('examples/history.svg') %>" />' +
+			'</a>' +
+			'<text id="label-text" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="10" font-weight="bold" y="24" x="70" stroke-width="0" fill="#000000">__line1__</text>' +
+			'<text id="label-text" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="9" font-weight="bold" y="37" x="55" stroke-width="0" fill="#000000">__line2__</text>' +
+			'<image width="50" height="50" x="8.5" y="9.5" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAH0AAADCCAYAAABkHM2FAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3wEVEQ0Rt+EdvwAABdZJREFUeF7t2+1V20AUhGHDSSW0QAUph4oohwpogVYIcqJ4La00Wlkfe2ff/EkirozvPB5F+MRPl7W/Xt++157KeRsl8Pn+tOaRlp0E8JpszzlnwQthHl1hv/w+ZzG+6+Xy9TGfwgz+NHoKDu58wDV9NX0xTMDn0QGvibH8uQj4MTrg5SHXeMYM/D064DXyrX9OE/A3dMDXh1vzmRn459Hz5aZtFEnoAxnPv03vW54ZCL0wT/6WQN/4nzv6cdMJyj4B0O2JxwuCPs7E/gjo9sTjBZ8v6v318TkciZzAj/et6dy5R6bUzz3x5fKu47KbAN2OVC8Eus7IbgJ0O1K9EOg6I7sJ0O1I9UKg64zsJkC3I9ULga4zspsA3Y5ULwS6zshuAnQ7Ur0Q6DojuwnQ7Uj1QqDrjOwmQLcj1QuBrjOymwDdjlQvBLrOyG4CdDtSvRDoOiO7CdDtSPVCoOuM7CZAtyPVC4GuM7KbAN2OVC8Eus7IbgJ0O1K9EOg6I7sJ0O1I9UKg64zsJkC3I9ULga4zspsA3Y5ULwS6zshuAnQ7Ur0Q6DojuwnQ7Uj1QqDrjOwmQLcj1QuBrjOymwDdjlQvBLrOyG4CdDtSvRDoOiO7CdDtSPVCoOuM7CZAtyPVC4GuM7KbAN2OVC8Eus7IbgJ0O1K9EOg6I7sJ0O1I9UKg64zsJkC3I9ULga4zspsA3Y5ULwS6zshuAnQ7Ur0Q6DojuwnQ7Uj1QqDrjOwmQLcj1QuBrjOymwDdjlQvBLrOyG4CdDtSvRDoOiO7CdDtSPVCoOuM7CZAtyPVC4GuM7KbAN2OVC8Eus7IbgJ0O1K9EOg6I7sJ0O1I9UKg64zsJkC3I9ULga4zspsA3Y5ULwS6zshuAnQ7Ur0Q6DojuwnQ7Uj1QqDrjOwmQLcj1QuBrjOymwDdjlQvBLrOyG4CdDtSvRDoOiO7CdDtSPVCN/SvDz3NRNwEEt/ny+f7U9xNeObFCfx4c3kvTi3+CaDHNyzeAPTiyOKfAHp8w+INbjdxr2/f17Nffhc/CCdUnkB/5/7vpn3cdH50q1yw8OllPO9/XOvbTuMLk610PAVPfjQf/4wOfKWChU9rArx7lDF6dxT4woQrG58Bn0YHvjLFgqcjwOfRh/C578udfi6VY45lbtDuvvHM2+v5y/vwaaeX++HXWvj72S9uBZwazGD3Y8vQc7AtvRDORJ8DXwCco1uPnns0t2Nnv2HVg6/EneIYvzkzNdna8bOvZDuBd4ygqxfzGZf2HcG7dbm859DPvKzvDE7Tc+BnHjsAnKbngM9oeXqHvvFNW27FX7mDzR474+btoHanptzI5V7hR928nQDO5T0FP/qyfhJ4tzJNzzV972MngtP0HvfIlp8MTtP3bvTw8SsAp+ldAke1vBJwmj5s4l5/rwicph/R8srAafpeze4ft0Lwtpu+d8srBafpezW9YvB2m75nyysHp+lbNz0AeJtN36vlQcBp+lZNDwTeXtP3aHkwcJr+aNMDgrfV9K1bHhScpq9temDwdpq+ZcuDg7fR9B58bavT8wzA20Dv0R79z44m4P7oW7XcCNwffYuWm4F3kfh+lm2LmzdD8Haa3je+5HdTcN+mP9pyY3Canmu+Obhn09e2vMfuUjngk6O519tRx/jUapd0A+1OX1Bed+9rWt4YeIff9gcYGwTv0H2aXtryRsHbbXrD4D5NL2l54+DtNR3w6018/H/Tl7Yc8Ct496uNu3fA/4N3f4jd9CUtB/wO3L/pgI/AYzddtRzwLHjcpvfgU2sBPpXM9XjsG7ncf3YEfBa8+2K8G7m5yzrgEjx+09MVAV8EHq/pUy0HfDG4R9MBLwKP1fRcywEvBo/ddMBXgcdp+rDlgK8Gj9l0wB8Cj9H0tOWAPwweq+mAbwJef9OH77GbfwhhM1XxQHHeewdcUC7/cr3vvactB3y56ILJ+psO+AJGh5Gu5cN/zx32YoeZBACfCYcvkQAJkAAJkEA2gT8reWIzdSwMcQAAAABJRU5ErkJggg==" />' +
+			'<text id="label-text" xml:space="preserve" text-anchor="middle" font-family="Sans-serif" font-size="18" font-weight="bold" y="33" x="33" stroke-width="0" fill="#ffffff">__num__</text>'+
+			(timeline || '') +
+			'</g>' +
+			'</svg>';
+			
+			
+			
+
+		svg = svg.replace( /__line1__/g, line1 );
+		svg = svg.replace( /__line2__/g, line2 !== null ? line2 :'' );
+		svg = svg.replace( /__num__/g, num );
+		div.innerHTML = svg;
+
+		return new H.map.DomIcon(div, {
+			width: 33,
+			height: 33,
+			drawable: false
+		});
+	};
+
+	var createPolylineForIndex = function( strip, num, color)
+	{
+		if(color)
+			routeColor=color;	
+		else 
+			routeColor=colorForIndex( num, 0.6);
+
+		var polyline= new H.map.Polyline(strip, {
+			style:
+			{
+				lineWidth: 5,
+				strokeColor: routeColor,
+				fillColor:   colorForIndex( num, 0.4 )
+			}
+		});
+		
+		// to give a highlight to select
+		// polyline in case multiple routes present
+		polyline.addEventListener('pointerenter', function(e) {
+						var style = e.target.getStyle();
+						var newStyle= style.getCopy({lineWidth:10});
+						e.target.setStyle(newStyle);
+					
+					});
+		polyline.addEventListener('pointerleave', function(e) {
+						var style = e.target.getStyle();
+						var newStyle= style.getCopy({lineWidth:7});
+						e.target.setStyle(newStyle);
+					
+		});
+		return polyline;
+	};
+
+	var colorForIndex= function( num, alpha )
+	{
+		return currentColor +  alpha + ")";
+		
+	};
+
+	var createConnectionLabel = function( lat, lng, distance, basetime, rest, wait, color )
+	{
+		var inscriptions= ["D: " + humanReadableDist( distance ),  "T: " + humanReadabletimeShort(basetime)];
+		if( rest !== 0 )    inscriptions.push( "R: " + humanReadabletimeShort( rest ) );
+		if( wait !== 0 )    inscriptions.push( "W: " + humanReadabletimeShort( wait ) );
+
+		var label = new H.map.DomMarker(
+			new H.geo.Point(lat, lng),
+			{
+				icon: createSvgMarkerLabel( inscriptions, 70, 5, color )
+			});
+
+			return label;
+	};
+
+	var humanReadabletimeShort= function( timeSeconds )
+	{
+		if( timeSeconds < 60)
+			return timeSeconds + "s ";
+		else
+			return padZerosNumbers(Math.floor( (timeSeconds / 3600) ), 2) + ":"
+		+ padZerosNumbers( Math.floor((timeSeconds / 60) % 60), 2) + ":" + padZerosNumbers(timeSeconds % 60, 2);
+	};
+
+	var humanReadableDist= function( distMeters )
+	{
+		if( distMeters < 1000 )
+			return distMeters + "m";
+		else
+			return ( distMeters / 1000 ).toFixed( 1 ) + "km";
+	};
+
+	var humanReadabletime= function( timeSeconds )
+	{
+		if( timeSeconds < 60)
+			return timeSeconds + "s ";
+		if( timeSeconds < 3600 )
+			return Math.floor( (timeSeconds / 60) ) + "min " + timeSeconds % 60 + 's';
+		else
+			return Math.floor( (timeSeconds / 3600) ) + "h " + Math.floor((timeSeconds / 60) % 60) + "min " + timeSeconds % 60 + 's';
+	};
+
+	/**
+	* Lookup coordinate
+	*/
+	var getWayPointByID = function( waypoints, id )
+	{
+		for( var i= 0; i < waypoints.length; i++)
+		{
+			if( waypoints[ i ].split(";")[0] === id )
+				return waypoints[ i ];
+		}
+		console.log( "no waypoint found for id " + id );
+		return null;
+	};
+
+	var round5 = function( num )
+	{
+		return Math.round(num * 100000.0) / 100000.0;
+	}
+	
+	/**
+	*   TextMarkers for labeling on interconnection
+	*/
+	var createSvgMarkerLabel = function( inscriptions, svgWidth, svgBorderHeight, color )
+	{
+		var svgHeight= 2*svgBorderHeight + inscriptions.length * 11;
+		var div = document.createElement("div");
+		var svg='<svg width="' + (svgWidth + 1) + '" height="' + (svgHeight + 1) + '" xmlns="http://www.w3.org/2000/svg">' +
+			'<rect fill="'+ color +'" x="0.5" y="0.5" rx="5" ry="5" width="' + svgWidth + '" height="' + svgHeight + '"' +
+			' style="stroke:#FFF;stroke-width:1;"/>' +
+			'<text x="8" y="' + 2 + '" fill="#FFF" style="font-weight:normal;font-family:sans-serif;font-size:10px;">';
+
+		for( var i= 0; i < inscriptions.length; i++ )   svg+= '<tspan x="6" dy="1.2em">' + inscriptions[ i ] + '</tspan>'
+
+		svg+= '</text></svg>'
+
+		div.innerHTML = svg;
+
+		return new H.map.DomIcon( div, {
+			width: svgWidth,
+			height: svgHeight,
+			drawable: false
+		});
+	};
+
+	var padZerosNumbers= function(num, size)
+	{
+		var negative= ( num  < 0 );
+		if( negative )
+		{
+			num= Math.abs( num );
+			size--;
+		}
+		var s = num + "";
+		while( s.length < size ) s = "0" + s;
+		return negative ? "-" + s : s;
+	};
+	var groups = [];
+	var createConnectionLabel = function( lat, lng, distance, basetime, rest, wait, color )
+	{
+		var inscriptions= ["D: " + humanReadableDist( distance ),  "T: " + humanReadabletimeShort(basetime)];
+		if( rest !== 0 )    inscriptions.push( "R: " + humanReadabletimeShort( rest ) );
+		if( wait !== 0 )    inscriptions.push( "W: " + humanReadabletimeShort( wait ) );
+
+		var label = new H.map.DomMarker(
+			new H.geo.Point(lat, lng),
+			{
+				icon: createSvgMarkerLabel( inscriptions, 70, 5, color )
+			});
+
+			return label;
+	};
+
+	/**
+	* Encapsulation for storing visual groups for each calculated route. 
+	**/
+	var RouteGroup = function(actualRouteGroup, airlineDistancesGroup, markersGroup){
+		this.actualRouteGroup = null;
+		this.airlineDistancesGroup = null;
+		this.markersGroup = null;
+
+		if(actualRouteGroup){
+			this.actualRouteGroup = actualRouteGroup;
+		}else{
+			this.actualRouteGroup = new H.map.Group();
+		}
+
+		if(airlineDistancesGroup){
+			this.airlineDistancesGroup = airlineDistancesGroup;
+		}else{
+			this.airlineDistancesGroup = new H.map.Group();
+		}
+
+		if(markersGroup){
+			this.markersGroup = markerGroup;
+		}else{
+			this.markersGroup = new H.map.Group();
+		}
+
+		this.showActualRoute = function(){			
+			this.actualRouteGroup.setVisibility(true);
+			this.airlineDistancesGroup.setVisibility(false);
+		};
+
+		this.showAirlineDistances = function(){
+			this.airlineDistancesGroup.setVisibility(true);
+			this.actualRouteGroup.setVisibility(false);
+		};
+
+		this.hideGroup = function(){
+			this.actualRouteGroup.setVisibility(false);
+			this.airlineDistancesGroup.setVisibility(false);
+			this.markersGroup.setVisibility(false);
+		};
+
+		this.showGroup = function(){
+			this.actualRouteGroup.setVisibility(true);
+			this.markersGroup.setVisibility(true);
+			this.airlineDistancesGroup.setVisibility(true);
+			map.setViewBounds(this.actualRouteGroup.getBounds());
+		};
+	}
+
+	var RouteGroups = {};
+	/**
+	*  Function calculates single routes for display purposes only
+	*/
+	var latestRouteId = null;
+	function getLatestRouteId(){
+		return 'route-'+(+entityContainer['ROUTES'].store.length);
+	}
+
+	var calculateRoute= function( startPoint, endPoint, currentMode, group, num, departure, wseRestTime, wseWaitingTime, wseRouterTime, routeId )
+	{
+		var wp0= startPoint.split(";")[1],
+		wp1= endPoint.split(";")[1];
+		var calculateRouteParams = {
+			'waypoint0': wp0,
+			'waypoint1': wp1,
+			'mode': "fastest;truck;traffic:disabled;",
+			'departure': departure,
+			'representation': 'display',
+			'routeAttributes':'all',
+			'app_code': app_code,
+			'app_id': app_id
+		},
+		onResult = function(result) {
+				var strip = new H.geo.Strip(),
+				shape = result.response.route[0].shape,
+				l = shape.length;
+
+				for(var i = 0; i < l; i++)
+				{
+					strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+				}
+
+				var polyline = createPolylineForIndex( strip, num);
+				polyline.setArrows( true );
+
+				var s= strip.getPointCount(),
+				point= new H.geo.Point( 0, 0),
+				cPoint= strip.extractPoint ( Math.floor(s / 2), point),
+				lLat= cPoint.lat,
+				lLng= cPoint.lng;
+				
+				RouteGroups[routeId].actualRouteGroup.addObject( polyline );
+				RouteGroups[routeId].actualRouteGroup.addObject( createConnectionLabel( lLat, lLng,  result.response.route[0].summary.distance,
+					wseRouterTime, wseRestTime, wseWaitingTime, colorForIndex( num, 0.7 ) ) );
+				//map.setViewBounds( RouteGroups[latestRouteId].actualRouteGroup.getBounds() );
+				showRoute(routeId);
+		},
+		onError = function(error) {
+			console.log("fail:" + error);
+		};
+
+		var truckParams= truckParameters( );
+		for( var p in truckParams ){	
+			calculateRouteParams [ p ]= truckParams[ p ];
+		}
+		router.calculateRoute(calculateRouteParams, onResult, onError);
+	};
+
+	var truckParameters = function(){
+		return { 
+			height: 4, weight: 6, length: 15, width: 2.5
+		};
+	};
+
+	
+	function showOrHideRoute(element){
+		 if (element.checked) {
+			 RouteGroups[element.value].showGroup();
+			 toggleRoutes(element.value);
+		 }
+		 else {
+			 RouteGroups[element.value].hideGroup();
+		 }
+		
+	}
+ 
+	function showUnassignedOrders(){
+		if (document.getElementById("showUnassignedOrders").checked) {
+			unassignedOrders.setVisibility(true);
+		} else {
+			unassignedOrders.setVisibility(false);		 }
+	}
+	function showAllRoutes()
+	{
+		var radioSelected = $('input[type=checkbox]', '#truckWrap');
+		for (var i= 0 ; i< radioSelected.length; i++){
+			if (!radioSelected[i].checked){
+				radioSelected[i].checked = true;
+				showOrHideRoute(radioSelected[i]);
+			}
+		}
+	}
+
+	function selectTruckById(truckId){
+		var trucksArr = getTrucks(false);
+		trucksArr.forEach(function(val, index){
+			//val[1]: id
+			if(truckId == val[1]){
+				//have to highlight this
+				document.getElementById(val[1]).style.backgroundColor='coral';
+			}else{
+				document.getElementById(val[1]).style.backgroundColor='mintcream';
+			}
+			
+		});
+	}
+
+	function selectOrdersByIds(orderIds){
+		var orderssArr = getOrders(false);
+		orderssArr.forEach(function(val, index){
+			//val[1]: id
+			if(orderIds.includes(val[1])){
+				//have to highlight this
+				document.getElementById(val[1]).style.backgroundColor='coral';
+			}else{
+				document.getElementById(val[1]).style.backgroundColor='mintcream';
+			}
+		});
+	}
+
+	function toggleAirlineDistanceRoute(){
+		
+		var radioSelected = $('input[type=radio]:checked', '#truckWrap');
+		if (radioSelected.length > 0){
+			var routeId = radioSelected[0].value;
+			toggleRoutes(routeId);
+		} else {
+		Object.keys(RouteGroups).forEach(function(routeId){
+			toggleRoutes(routeId);
+		});
+		}
+		return false;
+	}
+	
+	function toggleRoutes(routeId){
+		if (!document.getElementById("showRoutesOrLines").checked) RouteGroups[routeId].showAirlineDistances();
+		else                                                      RouteGroups[routeId].showActualRoute     ();
+	}
+	
+	function toggleOrderMarkerIds(){
+
+	for (var i=0; i< metaInfos.length; i++){
+		 entityContainer['VEHICLES'].getEntityById(metaInfos[i].vehicleId).orderedSequence.forEach(function (waypoint, idx){
+			if(idx !== 0){
+				var orderObj = entityContainer['ORDERS'].getEntityById(waypoint.split(':')[0]);
+				var waypointType = waypoint.split(':')[1];
+				var time = new Date(entityContainer['VEHICLES'].getEntityById(metaInfos[i].vehicleId).absoluteTimes[idx]);
+			RouteGroups[metaInfos[i].vehicleId].markersGroup.getObjects().forEach(function(val, id){
+					if(val.$id===orderObj.id && waypointType === 'start'){
+						orderObj.color = entityContainer["VEHICLES"].getEntityById(metaInfos[i].vehicleId).color;
+						if (document.getElementById("showRouteSqn").checked)
+						val.setIcon(createOrderStartMarker(idx, 'ETA:' + time.toLocaleTimeString([],{hour12: false}), '', orderObj.color));
+						else
+						val.setIcon(createOrderStartMarker(orderObj.id.replace(/order-/,''), 'ETA:' + time.toLocaleTimeString([],{hour12: false}), '', orderObj.color));
+						orderObj.startTime = time.getTime();
+					}
+					else if(val.$id === orderObj.id+":dest" && waypointType == 'destination'){
+						orderObj.color = entityContainer["VEHICLES"].getEntityById(metaInfos[i].vehicleId).color;
+						if (document.getElementById("showRouteSqn").checked)
+						val.setIcon(createOrderDestinationMarker(idx,'ETA:' + time.toLocaleTimeString([],{hour12: false}), orderObj.color));
+						else 
+						val.setIcon(createOrderDestinationMarker(orderObj.id.replace(/order-/,''),'ETA:' + time.toLocaleTimeString([],{hour12: false}), orderObj.color));	
+						orderObj.endTime = time.getTime();
+					}
+				});
+			}
+		 });
+	   }
+	}
+
+	/**
+	* Called when the button "Tour Planning across all Trucks" is called. 
+	* First do some verifications like if there are trucks and orders.
+	* If trucks and orders are present then calculateroutemultivehicle.json resource is called to assign the oreder to each truck.
+	*/
+	function startMultiVehiclePlanning(){
+		
+		var paramsHashMap = new Object();
+		if (planning_setup_textarea.value == ""){
+			useOldParsingLogicFromTables();
+		}else {
+			
+		paramsHashMap['config'] = planning_setup_textarea.value;
+		//it is mandatory to give the driver and vehicle cost if the request contains a pickup/dropoff waypoints
+		paramsHashMap['driver_cost'] = '11';
+		paramsHashMap['vehicle_cost'] = '0';
+		paramsHashMap['currency'] = 'EUR';
+		calculateMultiRouteIncludingOrders(paramsHashMap);
+		}
+	}
+
+	var useOldParsingLogicFromTables = function (){
+		//Get the truck array
+		var vehicleObjects = entityContainer['VEHICLES'].store;
+
+		if (vehicleObjects === 'undefined' || vehicleObjects.length === 0){
+			alert("Please add vehicle(s) first."); //alert message is shown in the getTrucks function so no need to show the message again, just return from the function
+			return;
+		}
+
+		//Get the orders array
+		var orderObjects = entityContainer['ORDERS'].store;
+		if (orderObjects === 'undefined' || orderObjects.length === 0){
+			alert("Please create order(s) which will be assigned to the vehicle(s). Make sure both start and destination points are given for each order.");
+			return;
+		}
+
+		//we have vehicle(s) and order(s) now prepare them to call calculateroutemultivehicle.json resource
+		//we ignore the assignments and send the orders and vehicles to calculateroutemultivehicle.json to assign the order to appropriate vehicle
+		var paramsHashMap = new Object();
+		var capacityParamValue = 0; 
+		for(var i=0; i<vehicleObjects.length;i++){
+			var vehicle = vehicleObjects[i];
+			if (!vehicle || !vehicle.location)
+				continue;
+			if (vehicle.capacity && vehicle.capacity !== "" && vehicle.capacity !== "undefined"){
+				paramsHashMap['capacity'+i] = vehicle.capacity;
+			} 
+			
+			var vehicleDestLocation = (vehicle.destCoords && vehicle.destCoords !== "" && vehicle.destCoords !== "undefined") ? ( typeof vehicle.destCoords !== 'object' && vehicle.destCoords.includes(",") ? vehicle.destCoords : vehicle.destCoords.lat.toFixed(6) +','+vehicle.destCoords.lng.toFixed(6)) : "";
+			var vehicleDestLocationWithOptions = vehicleDestLocation && vehicleDestLocation !== "" && vehicle.arrival && vehicle.arrival !== "" && vehicle.arrival !== "undefined" ? vehicleDestLocation + ";closing:" + vehicle.arrival : vehicleDestLocation; 
+			paramsHashMap['vehicle'+i] = vehicle.location.lat + ',' + vehicle.location.lng + (vehicleDestLocationWithOptions && vehicleDestLocationWithOptions !== "" && vehicleDestLocationWithOptions !== "undefined" ? (","+vehicleDestLocationWithOptions) : "" );
+			var metaInfo = {vehicleId: vehicle.id, timeInMs: vehicle.departure};
+			metaInfos.push(metaInfo);
+			if (vehicle.arrival && vehicle.arrival !== "" && vehicle.arrival !== "undefined"){
+				paramsHashMap['arrival'+i] = vehicle.arrival;
+			}
+			if (vehicle.departure != ""){
+				paramsHashMap['departure'+i] = vehicle.departure;
+			} else {
+				alert("Please enter departure time for vehicle first. And then press update.");
+				return;
+			} 
+		}
+
+		var orderWayPointCounter = 0;
+		var ordersHashMap = new Object();
+		for(var j=0; j<orderObjects.length; j++){
+			var order = orderObjects[j];
+			//start coordinate
+			var startPoint =  order.start;
+			var destinationPoint = order.destination;
+			if (!startPoint){
+				feedbackTxt.innerHTML += "Order "+j+" has been taken out of the tour planning because it does not have start or destination position.";
+				continue; // if anyone of the start or destination is missing then do not take this order into account???
+			} 
+			//make the start and destination waypoints of each order as an optional waypoints and set the load value too high so that the order could be picked up by the router
+			//additionally also set the start waypoint as the pickup waypoint and its corresponding destination waypoint as the drop off waypoint so that these two waypoints of the
+			//same order get assigned to the same vehicle
+			paramsHashMap['waypoint'+ (orderWayPointCounter)] = startPoint.coords.lat + ',' + startPoint.coords.lng + ';sort' + (!destinationPoint ? '' : (';before:'+(orderWayPointCounter+1))) + ((order.pickupLoad && order.pickupLoad !== "0") ? (';load:' + order.pickupLoad) : '');			
+			if (startPoint.closingTime != "" && startPoint.closingTime !== "undefined"){
+			paramsHashMap['waypoint'+ (orderWayPointCounter)] += ';closing:' + startPoint.closingTime;
+			} 
+			ordersHashMap[orderWayPointCounter] = order.id + ":start";
+			orderWayPointCounter ++;
+			if (destinationPoint) {
+				//for load: if an order pickup load is specified but not the drop off load then we take the negative of the pickup load as the drop off load because when the order gets dropped off then
+				//the vehicle gains back that much of a capacity. The backend service also works better when both drop off and pick up loads are specified in the request
+				paramsHashMap['waypoint'+ (orderWayPointCounter)] = destinationPoint.coords.lat + ',' + destinationPoint.coords.lng +		
+				';sort'+ ((order.dropOffLoad && order.dropOffLoad !== "0") ? (';load:' + order.dropOffLoad) : ((order.pickupLoad && order.pickupLoad !== "0") ? (';load:' + -(order.pickupLoad)) : ''));
+				if (destinationPoint.closingTime != "" && destinationPoint.closingTime !== "undefined" ){
+					paramsHashMap['waypoint'+ (orderWayPointCounter)] += ';closing:' + destinationPoint.closingTime;
+				} 
+				ordersHashMap[orderWayPointCounter] = order.id + ":destination";
+				orderWayPointCounter ++;
+			}
+		}    
+		entityContainer['ORDERS'].ordersToWaypointsMap = ordersHashMap;
+		//it is mandatory to give the driver and vehicle cost if the request contains a pickup/dropoff waypoints
+		
+		calculateMultiRouteIncludingOrders(paramsHashMap);
+	}
+	
+	var calculateMultiRouteIncludingOrders = function(params){
+		if(params!==null && Object.keys(params).length>1){
+//			params.mode = 'fastest;car;traffic:disabled';
+			params.mode = 'fastest;truck;traffic:disabled';
+			params.algopts = 'nohlprouter,firstWayPointReach0.6,sortQuality7';
+			params.ignoreWaypointVehicleRestriction = '30000';
+			params.mapMatchSearchRadius = '300';
+			params.traverseGates = 'true';
+			params.driver_cost = '11';
+			params.vehicle_cost = '0';
+			params.currency = 'EUR';
+			
+			restAPICaller("CRE_MULTIVEHICLE", "calculateroutemultivehicle", params, processCREMultiVehicleResult, restoreTruckOrderOnFailedCREMultiVehicleCall, metaInfos);
+		}
+	};
+	
+
+	var processCREMultiVehicleResult = function(resp, metaInfos){
+	
+		clearAllRoutes();
+		map.removeObject(orderMarkers);
+		map.removeObject(truckIcons);
+		for (var r=0; r < metaInfos.length; r++){
+			//before processing the returned response we need to assign the order to the vehicles, this assignment is done by the backend server but we have to go through the returned response and 
+			//find this assignment
+	        
+			var orders = findAssignedOrders(resp[metaInfos[r].vehicleId.replace(":","#")],metaInfos[r].vehicleId);
+			if(orders.length == 0){
+				feedbackTxt.innerHTML += "Leaving vehicle "+resp[r],metaInfos[r].vehicleId+" from the overall planning as no order was assigned to it";
+				continue;
+			}
+			//got the orders for this vehicle, now assign them to the vheicle by calling the vehicle class
+			for(var o=0;o<orders.length;o++){
+				var vehicleObject = entityContainer["VEHICLES"].getEntityById(metaInfos[r].vehicleId);
+				if (vehicleObject !== undefined){
+					vehicleObject.addOrderToLoad(orders[o], true);
+				}
+			}
+			entityContainer['VEHICLES'].getEntityById(metaInfos[r].vehicleId).orderedSequence = [];
+			entityContainer['VEHICLES'].getEntityById(metaInfos[r].vehicleId).absoluteTimes = [];
+			processCREResult(resp[metaInfos[r].vehicleId.replace(":","#")], metaInfos[r]);
+		}
+		toggleOrderMarkerIds();
+		redrawCalendarCanvas();
+		for (var i = 0; i< unsignOrders.length; i++){
+			var or = unsignOrders[i];
+			orderMarkers.getObjects().forEach(function(val, idx){
+				if(val.$id===or.id || val.$id===or.id+":dest"){
+				//found the order
+				unassignedOrders.addObject(val);
+				unassignedOrders.setVisibility(true);
+				}  
+			  });
+		}
+	}
+
+	var restoreTruckOrderOnFailedCREMultiVehicleCall = function(metaInfo, xhr){
+		if(xhr && xhr.responseJSON){
+			var errorObj = "";
+			var errorMsg;
+			for (var r = 0; r < xhr.responseJSON.length; r++) {
+				if (xhr.responseJSON[r].issues) {
+					errorObj = xhr.responseJSON[r].issues[0].message ? ("Error occured for vehicle " + r + ": " + xhr.responseJSON[r].issues[0].message) : "unknown error occured for vehicle "+r;
+					errorMsg = (errorMsg ? errorMsg + '\n' + errorObj : errorObj);
+				}
+			}
+			if(errorMsg){
+				alert(errorMsg);
+			}else{
+				alert('unknown error occured');
+			}
+		} else{
+			alert('unknown error occured');
+		}
+	}
+
+	function findAssignedOrders(response){
+		var orders = [];
+        //ordering waypoints to their seqNrOnRoute
+	   var respRoute = response.response.route[0];	
+	   var orderedWaypoints = respRoute.waypoint.slice(); 	
+	       for( var i= 0; i < respRoute.waypoint.length - 1; i++ ) {
+	         orderedWaypoints[respRoute.waypoint[i].seqNrOnRoute] = respRoute.waypoint[i];
+	      }
+		for(var w=0;w<orderedWaypoints.length;w++){
+			if(orderedWaypoints[w].globalWayPointSeqNr !== undefined){
+				var globalWayPointSeqNr = orderedWaypoints[w].globalWayPointSeqNr;
+				var orderId = entityContainer['ORDERS'].ordersToWaypointsMap[globalWayPointSeqNr].split(":")[0];
+				if($.inArray(orderId, orders) === -1){
+					orders.push(orderId);
+				}
+			}
+		}
+		return orders;
+	}
+
+	var redrawCalendarCanvas = function(){
+		
+		let controlPanel = document.getElementById("controlPanel");
+ 		let canvas = document.getElementById('calendarCanvas');
+		context = canvas.getContext("2d");
+		context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+		canvas.width = controlPanel.clientWidth - 30;
+		canvas.height = 500;
+		context.strokeStyle = "#ffffff"; // window frame
+		context.lineJoin = "round";
+		context.lineWidth = 5;
+		context.beginPath();
+		context.moveTo(0, 0); // x, y
+		context.lineTo(context.canvas.width, 0                    );
+		context.lineTo(context.canvas.width, context.canvas.height);
+		context.lineTo(0                   , context.canvas.height);
+		context.closePath();
+		context.stroke();
+
+		// draw the trucks in the top row
+		var numTrucks = entityContainer['VEHICLES'].store.length; // for T trucks we have T+2 columns, the first one for the time scale, the last one for unassigned orders
+		var columnWidthPixel = ( context.canvas.width - TIMELINE_COLUMN_X ) / (numTrucks + 1);
+		for (var t = 0; t < numTrucks; t++) {
+			var tr = entityContainer['VEHICLES'].store[t];
+			var truckSvg = svgTruckMarker;
+			truckSvg = truckSvg.replace(/_time_/g, '');
+			truckSvg = truckSvg.replace(/_n_/g, tr.id);
+			truckSvg = truckSvg.replace(/_eta_/g, '');
+			truckSvg = truckSvg.replace(/_km_/g, ''); // km ???
+			truckSvg = truckSvg.replace(/#f2f2f2/g, tr.color);
+			truckSvg = truckSvg.replace(/_msg_/g, ''); // message when highlighted
+			drawSvgOntoCanvas(context, (2*t + 1)/2 * columnWidthPixel + TIMELINE_COLUMN_X - TRUCK_ICON_DRAW_OFFSET_X, - 8, truckSvg);
+		}
+		
+		
+		
+		//calculating starting and ending time for whole calendar
+		var numOrders = entityContainer['ORDERS'].store.length;
+		var timelineStartTime = Date.now();
+		var timelineEndTime = timelineStartTime + 12*60*60*1000;
+
+		if (numOrders > 0){
+			
+		  if (entityContainer['ORDERS'].store[0].startTime != null){
+			timelineStartTime = entityContainer['ORDERS'].store[0].startTime;
+		    }
+		  if (entityContainer['ORDERS'].store[0].endTime != null){
+			timelineEndTime = entityContainer['ORDERS'].store[0].endTime;
+		  }  else if (entityContainer['ORDERS'].store[0].startTime != null){
+			timelineEndTime =  timelineStartTime;
+		  }
+		  unsignOrders = [];
+			for (var t=0; t < numOrders; t++) {
+				var or = entityContainer['ORDERS'].store[t];
+					
+				if (or.startTime != null && or.startTime < timelineStartTime){
+					timelineStartTime = or.startTime;
+				}
+				if (or.endTime != null && or.endTime > timelineEndTime){
+					timelineEndTime = or.endTime;
+				} else if (or.startTime > timelineEndTime){
+					timelineEndTime = or.startTime;
+				}
+				if (or.vehicle == ""){
+					unsignOrders.push(or);  //also checking for unsigned orders
+				}
+
+			}
+
+		}
+		 
+		//adding the timeline, based on the earliest start time and latest end time of any order (if no info, using now - now + 12h)
+			var deltaTimeline = Math.round((timelineEndTime - timelineStartTime) / TIMELINE_SLOTS_NUMBER);
+			var timelineValues = [];
+			
+			for (var p = 0; p <= TIMELINE_SLOTS_NUMBER; p++) {
+				
+				context.font = "500 14px Arial";
+				context.fillStyle=fontColour= "#989898";
+				var currentValue = timelineStartTime + p * deltaTimeline;
+				timelineValues.push(currentValue);
+				context.fillText(new Date(currentValue).toLocaleTimeString([],{hour: '2-digit', minute:'2-digit', hour12: false}), 1/4 * TIMELINE_COLUMN_X, (p + 3/4)* TIMELINE_COLUMN_Y + TRUCK_ICON_HEIGHT);
+				context.strokeStyle = "#F5F5F5";
+				context.lineJoin = "round";
+				context.lineWidth = 1;
+				context.beginPath();
+				context.moveTo(0                   , TRUCK_ICON_HEIGHT + p * TIMELINE_COLUMN_Y);
+				context.lineTo(context.canvas.width, TRUCK_ICON_HEIGHT + p * TIMELINE_COLUMN_Y);
+				context.strokeStyle = "#ffffff";
+				context.moveTo(TIMELINE_COLUMN_X, 0);
+				context.lineTo(TIMELINE_COLUMN_X, context.canvas.height);
+				context.stroke();
+			}	
+		
+		// as long as we don't have departure/arrival and pickup opening/closing times, we just draw the loads underneath each other in the routing order
+		var maxNumWayPointsPerTruck = 0;
+		for (var t = 0; t < numTrucks; t++) {
+			var numPickups = entityContainer['VEHICLES'].store[t].orders ? entityContainer['VEHICLES'].store[t].getLinkedOrderObjects().length : 0;
+			if (maxNumWayPointsPerTruck < numPickups * 2) maxNumWayPointsPerTruck = numPickups * 2;
+		}
+		var rowHeightPixel = (context.canvas.height - TRUCK_ICON_HEIGHT) / (maxNumWayPointsPerTruck == 0 ? 1 : maxNumWayPointsPerTruck);
+		
+		
+		// adding unsigned orders to the last column
+		for(var i = 0; i< unsignOrders.length; i++)
+		{
+			//adding pickup marker
+			var orderStartSvg = svgMarkerImage_Order;
+			orderStartSvg = orderStartSvg.replace(/_n_/g, unsignOrders[i].id.slice(unsignOrders[i].id.indexOf("-")+1));
+			orderStartSvg = orderStartSvg.replace(/ETA:hh:mm:ss/g, ''); // time
+			orderStartSvg = orderStartSvg.replace(/__line3__/g, ''); // text
+			drawSvgOntoCanvas(context, numTrucks * columnWidthPixel + (i + 1) * columnWidthPixel / ( unsignOrders.length + 1) + TIMELINE_COLUMN_X - ORDER_START_ICON_DRAW_OFFSET_X, TRUCK_ICON_HEIGHT + getTimelineSlot(timelineStartTime, timelineValues) * TIMELINE_COLUMN_Y + 5, orderStartSvg);
+			
+			// if destination is set 
+			if (unsignOrders[i].destination){
+				
+		    //adding line to connect pickup and drop
+			context.strokeStyle = "black";
+			context.lineJoin = "round";
+			context.lineWidth = 5;
+			context.beginPath();
+			context.moveTo(numTrucks * columnWidthPixel + (i + 1) * columnWidthPixel / (unsignOrders.length + 1) + TIMELINE_COLUMN_X, TRUCK_ICON_HEIGHT + getTimelineSlot(timelineStartTime, timelineValues) * TIMELINE_COLUMN_Y + ORDER_START_ICON_DRAW_OFFSET_Y);
+			context.lineTo(numTrucks * columnWidthPixel + (i + 1) * columnWidthPixel / (unsignOrders.length + 1)  + TIMELINE_COLUMN_X, TRUCK_ICON_HEIGHT + getTimelineSlot(timelineEndTime, timelineValues) * TIMELINE_COLUMN_Y + 5);
+			context.stroke();
+			
+			//adding unsigned marker for drop
+			var orderEndSvg = svgMarkerImage_order_dest;
+			orderEndSvg = orderEndSvg.replace(/ETA:hh:mm:ss/g, ''); // time
+			orderEndSvg = orderEndSvg.replace(/_n_/g, unsignOrders[i].id.slice(unsignOrders[i].id.indexOf("-")+1)); // time
+			drawSvgOntoCanvas(context, numTrucks * columnWidthPixel + (i + 1) * columnWidthPixel / (unsignOrders.length + 1) + TIMELINE_COLUMN_X - ORDER_START_ICON_DRAW_OFFSET_X, TRUCK_ICON_HEIGHT + getTimelineSlot(timelineEndTime, timelineValues) * TIMELINE_COLUMN_Y + 5, orderEndSvg);
+			
+			//adding line to connect pickup and drop
+			context.strokeStyle = "black";
+			context.lineJoin = "round";
+			context.lineWidth = 5;
+			context.beginPath();
+			context.moveTo(numTrucks * columnWidthPixel + (i + 1) * columnWidthPixel / (unsignOrders.length + 1) + TIMELINE_COLUMN_X, TRUCK_ICON_HEIGHT + getTimelineSlot(timelineStartTime, timelineValues) * TIMELINE_COLUMN_Y + ORDER_START_ICON_DRAW_OFFSET_Y);
+			context.lineTo(numTrucks * columnWidthPixel + (i + 1) * columnWidthPixel / (unsignOrders.length + 1)  + TIMELINE_COLUMN_X, TRUCK_ICON_HEIGHT + getTimelineSlot(timelineEndTime, timelineValues) * TIMELINE_COLUMN_Y + 5);
+			context.stroke();
+			}	
+		}
+		
+		// draw a grid
+		
+		for (var t = 0; t < numTrucks; t++) {
+			context.strokeStyle = "#ffffff";
+			context.lineJoin = "round";
+			context.lineWidth = 1;
+			context.beginPath();
+			context.moveTo((t + 1) * columnWidthPixel + TIMELINE_COLUMN_X, 0                    );
+			context.lineTo((t + 1) * columnWidthPixel + TIMELINE_COLUMN_X, context.canvas.height);
+			context.stroke();
+		}
+			
+		
+		for (var t = 0; t < numTrucks; t++) {
+			var tr = entityContainer['VEHICLES'].store[t];
+			var pickups = tr.orders ? tr.getLinkedOrderObjects() : [];
+			for (var p = 0; p < pickups.length; p++) {
+			    var startTimeslot = getTimelineSlot(pickups[p].startTime, timelineValues);
+			    var endTimeslot = getTimelineSlot(pickups[p].endTime, timelineValues);
+
+			    if (startTimeslot != endTimeslot){
+			    	
+			    	//pickup marker
+			    	var orderStartSvg = svgMarkerImage_Order;
+			    	orderStartSvg = orderStartSvg.replace(/_n_/g, pickups[p].id.slice(pickups[p].id.indexOf("-")+1));
+			    	orderStartSvg = orderStartSvg.replace(/ETA:hh:mm:ss/g, ''); // time
+			    	orderStartSvg = orderStartSvg.replace(/__line3__/g, ''); // text
+			    	orderStartSvg = orderStartSvg.replace(/#f2f2f2/g, tr.color);
+			    	drawSvgOntoCanvas(context, t * columnWidthPixel + (p + 1) * columnWidthPixel / (pickups.length + 1) + TIMELINE_COLUMN_X - ORDER_START_ICON_DRAW_OFFSET_X, TRUCK_ICON_HEIGHT + startTimeslot * TIMELINE_COLUMN_Y + 5, orderStartSvg);
+			    	
+			    	//adding only if destination is set (so there are both pickup and drop defined)
+			    	if (pickups[p].destination){
+			    		
+			    	//drop marker	
+			    	var orderEndSvg = svgMarkerImage_order_dest;
+			    	orderEndSvg = orderEndSvg.replace(/ETA:hh:mm:ss/g, ''); // time
+			    	orderEndSvg = orderEndSvg.replace(/#191919/g, tr.color);
+			    	orderEndSvg = orderEndSvg.replace(/_n_/g, pickups[p].id.slice(pickups[p].id.indexOf("-")+1));
+			    	drawSvgOntoCanvas(context, t * columnWidthPixel + (p + 1) * columnWidthPixel / (pickups.length + 1) + TIMELINE_COLUMN_X - ORDER_START_ICON_DRAW_OFFSET_X, TRUCK_ICON_HEIGHT + endTimeslot * TIMELINE_COLUMN_Y + 5, orderEndSvg);
+			    	
+			    	//line connection pickup and drop
+			    	context.strokeStyle = tr.color;
+			    	context.lineJoin = "round";
+			    	context.lineWidth = 5;
+			    	context.beginPath();
+			    	context.moveTo(t * columnWidthPixel + (p + 1) * columnWidthPixel / (pickups.length + 1) + TIMELINE_COLUMN_X, TRUCK_ICON_HEIGHT + startTimeslot * TIMELINE_COLUMN_Y + ORDER_START_ICON_DRAW_OFFSET_Y);
+			    	context.lineTo(t * columnWidthPixel + (p + 1) * columnWidthPixel / (pickups.length + 1)  + TIMELINE_COLUMN_X, TRUCK_ICON_HEIGHT + endTimeslot * TIMELINE_COLUMN_Y + 5);
+			    	context.stroke();
+			    	
+			    	}
+			    	
+			   } else {
+			    	
+			    	var orderStartSvg = svgMarkerImage_Order;
+			    	orderStartSvg = orderStartSvg.replace(/_n_/g, pickups[p].id.slice(pickups[p].id.indexOf("-")+1));
+			    	orderStartSvg = orderStartSvg.replace(/ETA:hh:mm:ss/g, ''); // time
+			    	orderStartSvg = orderStartSvg.replace(/__line3__/g, ''); // text
+			    	orderStartSvg = orderStartSvg.replace(/#f2f2f2/g, tr.color);
+			    	drawSvgOntoCanvas(context, t * columnWidthPixel + (p + 1) * columnWidthPixel / (pickups.length + 1) + TIMELINE_COLUMN_X - ORDER_START_ICON_DRAW_OFFSET_X, TRUCK_ICON_HEIGHT + startTimeslot * TIMELINE_COLUMN_Y + 5, orderStartSvg);
+
+			    }
+			}
+		}
+	}
+		
+	/**
+	* updates route on radio-box click, if different routes are available
+	* @param groupNumber
+	*/
+	var showGroup = function( groupNumber )
+	{
+		
+		map.removeObject( activeGroup[0] );
+		activeGroup[0]= groups[ groupNumber ];
+		map.addObject( activeGroup [0]);
+		
+		
+		if( (groupNumber + 2) <  groups.length){
+			if(activeGroup[1])
+			map.removeObject( activeGroup[1] );
+		
+			activeGroup[1]= groups[ groupNumber+2 ];
+			map.addObject( activeGroup [1]);
+		}		
+		
+	};
+
+	var drawSvgOntoCanvas = function(context, x, y, svgText){
+	
+		svgText = svgText.replace(/	/g, ' '); // text
+		svgText = svgText.replace(/#/g, '%23'); // text
+		var svg = {	header: 'data:image/svg+xml', data: svgText };
+		var image = new Image();
+		image.onload = function() { // event listener must be set before loading the image by .src
+			context.drawImage(image, x, y);
+		};
+		image.src = svg.header + ',' + svg.data;
+	}
+	
+	
+	var getTimelineSlot = function(time, timeline){
+		
+		var t = 0;
+		while(time > timeline[t])  {
+			t++; 
+		}
+	    t--;
+		return t;
+	}
+	
+	var getMiliseconds = function (time){
+		return new Date(time).getTime();
+	}
+	
+	redrawCalendarCanvas();
+	
+var activeGroup = null;
+	
+</script>

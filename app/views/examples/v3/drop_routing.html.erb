@@ -1,0 +1,246 @@
+<% content_for :title, "Routing Drag 'n Drop" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p><H5>Drag and Drop a file to get the Routes</H5></p>
+	<div class="form-group">
+	</div>
+	<hr>
+	<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+</div>
+
+<div id="mapContainer"></div>
+
+<style type="text/css">
+	.H_ib_body {
+		width: 220px;
+	}
+	textarea
+	{
+		color: black;
+		font-size: 12px;
+	}
+</style>
+
+<script type="text/javascript">
+	/*
+		author domschuette
+		(C) HERE 2017
+	*/
+	
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	router = platform.getRoutingService(),
+	group = new H.map.Group(),
+	errors = new Array();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+	
+	var ps0 = 2,
+		ps1 = 4,
+		ps2 = 5,
+		currentBubble;
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	// add the group container to the map
+	map.addObject(group);
+	
+	// enable drag & drop into the map display
+	var file_drop = document.getElementById('mapContainer');
+		
+	file_drop.addEventListener(
+		'dragover',
+		function handleDragOver(evt) 
+		{
+			evt.stopPropagation();
+			evt.preventDefault();
+			evt.dataTransfer.dropEffect = 'copy';
+		},
+	false
+	);
+		
+	file_drop.addEventListener(
+		'drop',
+		function(evt) {
+			evt.stopPropagation();
+			evt.preventDefault();
+			var files = evt.dataTransfer.files;
+			var file = files[0];
+			var r = new FileReader();
+			r.onload = function(e) { 
+				var contents = e.target.result;             
+				var ct = r.result;
+				parse(ct);
+			}
+			r.readAsText(file);
+		},
+		false
+	);
+	
+	function parse(input)
+	{
+		group.removeAll();
+		document.getElementById("feedbackTxt").innerHTML = "";
+		errors = new Array();
+		var routes = input.split(/\n/),
+			i = 1, // ignore header line
+			l = routes.length;
+		
+		for(;i < l; i++)
+		{
+			var current = routes[i].split(";");
+			if(current[ps0] != "" && current[ps0] != undefined && current[ps1] != "" && current[ps1] != undefined && current[ps2] != "" && current[ps2] != undefined)
+			{
+				var id = current[0],
+					s0 = current[ps0].split(","),
+					s1 = current[ps1].split(","),
+					s2 = current[ps2].split(","),
+					wp0 = s0[0].trim() + "," + s0[1].trim(),
+					wp1 = s1[0].trim() + "," + s1[1].trim(),
+					wp2 = s2[0].trim() + "," + s2[1].trim();
+
+				route(wp0, wp1, wp2, id);
+			}
+		}
+	}
+	
+	function route(start, waypoint, destination, requestId)
+	{
+		var calculateRouteParams = 
+		{
+			'waypoint0' : start,
+			'waypoint1' : waypoint,
+			'waypoint2' : destination,
+			'mode': 'fastest;car;',
+			'representation': 'display',
+			'requestId': requestId
+		},
+		onResult = function(result)
+		{
+			// check Emtpy / Error Response
+			if(result && result.response && result.response.route && result.response.route[0])
+			{
+				var strip = new H.geo.Strip(),
+					shape = result.response.route[0].shape,
+					i = 0,
+					l = shape.length,
+					id = result.response.metaInfo.requestId;
+
+				for(; i < l; i++)
+				{
+					strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+				}
+				var polyline = new H.map.Polyline(strip,
+					{
+						style:
+						{
+							lineWidth: 10,
+							strokeColor: "rgba(0, 128, 255, 0.3)"
+						}
+					});
+				polyline.$id = id;
+				
+				polyline.addEventListener('tap', function(e)
+					{
+						var pointer = e.currentPointer,
+							objects = map.getObjectsAt(pointer.viewportX, pointer.viewportY),
+							current = 0,
+							objsLength = objects.length,
+							text = "",
+							ids = new Array();
+						
+						for(; current < objsLength; current++)
+						{
+							ids.push(objects[current].$id);
+						}
+						
+						ids.sort();
+						
+						current = 0;
+						
+						for(; current < objsLength; current++)
+						{
+							text += ids[current] + "\r\n";
+						}
+						
+						if (currentBubble) 
+						{
+							ui.removeBubble(currentBubble);
+						}
+						
+						var html = '<div>' +
+										'<p style="font-family:Arial,sans-serif; font-size:12px;">Routes: ' +
+										objsLength +
+										'<br> IDs: <br>' +
+										'<textarea rows="10" cols="30">' +
+										text +
+										'</textarea>'+
+										'</p>' +
+									'</div>';
+												
+						var pos = map.screenToGeo(pointer.viewportX, pointer.viewportY);
+						
+						currentBubble = new H.ui.InfoBubble(pos,
+							{
+								content: html
+							}
+						);
+						ui.addBubble(currentBubble);
+					}
+				);
+				
+				polyline.setArrows({color:"white",width:0.5,length:0.5,frequency: 2});
+				group.addObject(polyline);
+				map.setViewBounds(group.getBounds(), true);
+			}
+			else
+			{
+				errors.push(result.metaInfo.requestId);
+				errors.sort();
+				var ec = 0,
+					el = errors.length,
+					t = "<H5>Error(s) on Route ID(s):</H5><br>";
+				for(; ec < el; ec++)
+				{
+					t += errors[ec] + "<br>";
+				}
+				document.getElementById("feedbackTxt").innerHTML = t;
+			}
+		},
+		onError = function(error)
+		{
+			console.log(error);
+		}
+		router.calculateRoute(calculateRouteParams, onResult, onError);		
+	}
+</script>
+

@@ -1,0 +1,237 @@
+<% content_for :title, "Traffic Flow Heatmap" %>
+
+<script type="text/javascript" src="https://js.datalens.api.here.com/2.6.1/mapsjs-datalens.js"></script>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>Display of the current Traffic Flow Data</p>
+	<div id="centerCoordinate"></div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/* 
+		author domschuette
+		(C) HERE 2017
+        author asadovoy
+        (C) HERE 2019 -> migrate to 3.1
+	*/
+	
+	
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		apikey: api_key,
+        useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), maptypes.vector.normal.map, {
+		center: new H.geo.Point(50.12353130546709, 8.474707204509514),
+		zoom: 18,
+		pixelRatio: window.devicePixelRatio || 1
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+	
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+	console.log("H.ui.UI.createDefault(map, maptypes);");
+	
+	// Instantiate data lens service
+	var service = platform.configure(new H.datalens.Service());
+
+	
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	map.addEventListener("mapviewchange", function() 
+		{ 
+			var d = document.getElementById("centerCoordinate"),
+				c = map.getCenter(),
+				lat = c.lat,
+				lon = c.lng;
+			d.innerHTML = "" + lat + " " + lon + " @" + map.getZoom();
+		}
+	);
+	
+	service.fetchQueryData = function(queryId, params)
+	{
+		return new Promise(function(resolve, reject)
+		{
+			var url = "https://traffic.api.here.com/traffic/6.2/flow/json/" + params.z + "/" + params.x + "/" + params.y + "?app_id=" + app_id + "&app_code=" + app_code;
+				url += "&i18n=true&responseattributes=simplifiedShape&units=metric";
+			$.ajax({
+				url: url,
+				jsonp: "jsoncallback",
+				dataType: "jsonp",
+				success: function( response ) {
+					resolve(response, [params.x, params.y, params.z]); 
+				}
+			});
+		})
+	}
+	
+	const provider = new H.datalens.QueryTileProvider(
+        service, {
+            queryId: null,
+            tileParamNames: {
+                x: 'x',
+                y: 'y',
+                z: 'z'
+            }
+        }
+    );
+	
+	let layer = new H.datalens.HeatmapLayer(
+		provider, {
+			bandwidth: 2,
+			dataToRows: function(response, x, y, z) {
+				var dataPoints = new Array();
+				var tileSize = 256;
+
+				if (response.RWS) {
+					for (i = 0; i < response.RWS.length; i++) {
+						if (response.RWS[i].RW) {
+							for (j = 0; j < response.RWS[i].RW.length; j++) {
+								if (response.RWS[i].RW[j].FIS) {
+									for (k = 0; k < response.RWS[i].RW[j].FIS.length; k++) {
+										if (response.RWS[i].RW[j].FIS[k]) {
+											for (l = 0; l < response.RWS[i].RW[j].FIS[k].FI.length; l++) {
+												var FI = response.RWS[i].RW[j].FIS[k].FI[l], shp, JF, point;
+												if (FI.SHP && FI.CF) {
+													//! TODO why is CF an Array, might this should be changed
+													JF = FI.CF[0].JF;
+													for (m = 0; m < FI.SHP.length; m++) {
+														shp = FI.SHP[m].value[0].trim().split(" ");
+														for (n = 0; n < shp.length; n++) {
+															point = shp[n].split(',');
+															var p = H.geo.mercator.geoToPoint(new H.geo.Point(point[0], point[1]));
+															var z2 = 1 << z; // 2^z
+															var tx = Math.floor((p.x * z2 - x) * tileSize);
+															var ty = Math.floor((p.y * z2 - y) * tileSize);
+
+															// Only use points on the current tile
+															if (tx >= 0 && tx < tileSize && ty >= 0 && ty < tileSize) {
+																dataPoints.push({
+																	'tx': tx,
+																	'ty': ty,
+																	'value': JF
+																})
+															}
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+				return dataPoints;
+			},
+
+			rowToTilePoint: function(row) {
+				return {
+					x: row.tx,
+					y: row.ty,
+					count: 1,
+					value: row.value
+				};
+			}
+		}
+	);
+
+	map.addLayer(layer);
+
+/*	
+	map.addEventListener("mapviewchangeend", function() 
+		{ 
+			requestTraffic(map.getViewBounds());
+		}
+	);
+	
+	requestTraffic = function(bbox)
+	{
+		var url = 'http' + (secure ? 's' : '') + '://traffic.api.here.com/traffic/6.1/flow.json?app_id=' + app_id + '&app_code=' + app_code + 
+				  '&bbox=' + bbox.getTop() + ',' + bbox.getLeft() + ';' + 
+				  bbox.getBottom() + ',' + bbox.getRight() + 
+				  '&i18n=true&responseattributes=simplifiedShape&units=metric&jsoncallback=updateTraffic';
+	  
+		script = document.createElement("script");
+		script.src = url;
+		document.body.appendChild(script);
+	}
+	
+	updateTraffic = function(response)
+	{
+	
+		dataPoints = new Array(), 
+			i = 0,
+			j = 0,
+			k = 0,
+			l = 0, 
+			m = 0,
+			n = 0;
+		// heatmapProvider.clear();
+		
+		if(response.RWS)
+		{
+			for(i = 0; i < response.RWS.length; i++)
+			{
+				if(response.RWS[i].RW)
+				{
+					for(j = 0; j < response.RWS[i].RW.length; j++)
+					{
+						if(response.RWS[i].RW[j].FIS)
+						{
+							for(k = 0; k < response.RWS[i].RW[j].FIS.length; k++)
+							{
+								if(response.RWS[i].RW[j].FIS[k])
+								{
+									for(l = 0; l < response.RWS[i].RW[j].FIS[k].FI.length; l++)
+									{
+										var FI = response.RWS[i].RW[j].FIS[k].FI[l],
+											shp, 
+											JF,
+											point;
+									
+										if(FI.SHP && FI.CF)
+										{
+											//! TODO why is CF an Array, might this should be changed
+											JF = FI.CF[0].JF;
+											for(m = 0; m < FI.SHP.length; m++)
+											{
+												var debugpoints = new Array(); 
+												shp = FI.SHP[m].value[0].trim().split(" ");
+												for(n = 0; n < shp.length; n++)
+												{
+													point = shp[n].split(',');
+													dataPoints.push({'lat': point[0], 'lng': point[1], 'value': JF})
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		// heatmapProvider.clear();
+		// Add specified data to the heat map
+		// heatmapProvider.addData(dataPoints);
+	}
+	*/
+</script>

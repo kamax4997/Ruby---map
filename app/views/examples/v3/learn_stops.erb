@@ -1,0 +1,702 @@
+<%= javascript_include_tag "jszip.min.js" %>
+<%= javascript_include_tag "Chart.bundle.js" %>
+<%= javascript_include_tag "wellknown.js" %>
+<% content_for :title, "Learn Stops" %>
+	<style>
+	table, th, td  {
+		border: 1px solid black;
+		white-space: nowrap;
+		border-spacing:0;
+		border-collapse:collapse;
+        text-align: left;
+        padding: 3px;
+        width:100%;
+	}
+
+    #table-wrapper {
+        position:relative;
+        display:none;
+        overflow:auto;
+    }
+    #table-scroll {
+      height:300px;
+      overflow:auto;  
+      margin-top:20px;
+      width:100%;
+    }
+    #table-wrapper table {
+         width:100%;
+    }
+
+	</style>
+	
+    <div class="ctrl-panel">	
+	  <span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	  <p>
+			Route Match detects and learns where drivers typically stop along a given route.<br/>
+			In the background it distills clusters of frequently occurring stops, separately for each of customer's business routes.<br/>
+			Routing can use this to plan legal driver rest times and other vehicle stops like logistics hubs.<br/>
+	  </p>
+      <div class="form-group">
+		<hr class="separator">
+        <div class="form-horizontal">
+            <div id="tracetextareadiv" class="form-group">
+                <label class="control-label col-sm-3">1. Provide a trace:</label>
+                <div class="col-sm-9">
+                    <textarea id="tracetextarea" class="form-control" rows="5" placeholder="Drag &amp; drop trace file here (GPX, KML, NMEA or CSV)"></textarea>
+				</div>				
+			
+                <label class="control-label col-sm-3">Or choose from these samples:</label>
+                <div class="col-sm-9">
+				<div>
+                    <input class="btn btn-default btn-sm" type="button" id="samplebutton1" style="width:49%" value="Le Mans-Cuvilly" onclick="loadFromFile('sample_france_trace_file.gpx')">
+					<input class="btn btn-default btn-sm" type="button" id="samplebutton2" style="width:49%" value="Frankfurt-Stuttgart I" onclick="loadFromFile('Frankfurt_Stuttgart_1.txt')">
+				</div>
+				<div>
+					<input class="btn btn-default btn-sm" type="button" id="samplebutton3" style="width:49%" value="Frankfurt-Stuttgart II" onclick="loadFromFile('Frankfurt_Stuttgart_2.txt')">
+					<input class="btn btn-default btn-sm" type="button" id="samplebutton4" style="width:49%" value="Frankfurt-Stuttgart III" onclick="loadFromFile('Frankfurt_Stuttgart_3.txt')">
+				</div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="control-label col-sm-3">2. Learn:<br/>Set your learn id (=route id) and add your &amp;app_id=...</label>
+                <div class="col-sm-9">
+                    <textarea id="match_endpoint" class="form-control" rows="5" cols="42" wrap="virtual">https://fleet.api.here.com/2/calculateroute.json?routeMatch=1&amp;mode=car&amp;restTimes=eu&amp;learnStopsId=MyRouteLeMansCuvilly</textarea>
+					<input class="btn btn-default btn-sm" type="button" id="actionbutton" value="Match Route & Learn" onclick="sendRequest(document.getElementById('match_endpoint').value, 0)">				
+
+                </div>
+            </div>
+			
+            <div class="form-group">
+                <label class="control-label col-sm-3">3. Get Results:<br/>Set your learn id (=route id) and add your &amp;app_id=...</label>
+                <div class="col-sm-9">
+                    <textarea id="search_endpoint" class="form-control" rows="5" cols="42" wrap="virtual">https://fleet.api.here.com/2/search/all.json?layer_id=LEARNEDSTOPS&filter=LEARNSTOPSID=="MyRouteLeMansCuvilly"</textarea>
+					<input class="btn btn-default btn-sm" type="button" id="actionbutton" value="See Learnings" onclick="sendRequest(document.getElementById('search_endpoint').value, 0)">				
+                </div>
+            </div>			
+        </div>
+        <div id="filterArea" class = "form-group" style="display:none">
+			<b>Explanation</b>
+			<table>
+			<tr><th></th><th></th><th>Show</th></tr>
+			<tr><td><img src="/assets/learndemo/learn_route.png" alt="blue marker"></td><td>Route</td><td><input type="checkbox" id="showroute" value="on" checked="checked" onchange="showHideGroups(groupRME);"></td></tr>
+			<tr><td><img src="/assets/learndemo/marker_s.png" alt="blue marker"></td><td>Stops in the current route</td><td><input type="checkbox" id="showstops" value="on" checked="checked" onchange="showHideGroups(groupAllBreaks);"></td></tr>
+			<tr><td><img src="/assets/learndemo/learned_stop_marker.png" alt="stop marker"></td><td>Positions of previously learned stops</td><td><input type="checkbox" id="showlearnings" value="on" checked="checked" onchange="showHideGroups(groupRouteStops);"></td></tr>
+			<tr><td><img src="/assets/learndemo/affected_area.png" alt="area"></td><td>Circular areas in which learned stops are combined</td><td></td></tr>
+			</table>
+        </div>
+        <div class="form-group">
+            <div class="col-sm-10" id="feedbackTxt"></div>
+        </div>
+        </div>
+            <div id="dvTable">
+        </div>
+       <!--  <div class="form-group" style="overflow-x:auto;">
+            <table id="TABLE" border="1" > </table>
+        </div>  -->
+
+        <div id="table-wrapper" class = "form-group" >
+            <div id="table-scroll">
+                <table id="TABLE" border="1" > </table>
+            </div>
+        </div>
+
+    
+    </div>    
+
+    <div id="mapContainer"></div>
+    <div id="spinner"></div>
+    <div id="pageblock"></div>
+
+    <script type="text/javascript">
+        /**
+         * @author Wolfgang Becker, Muhammad Faheem
+         * (C) HERE 2017 - 2018
+         */
+    
+       $(document).ready(function() {});
+        var feedbackTxt = document.getElementById("feedbackTxt");
+        var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+        var mapContainer = document.getElementById('mapContainer');
+        var platform = new H.service.Platform({ app_code: app_code, app_id: app_id, useHTTPS: true }),
+            maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+            labels = new H.map.Group(),
+            basemaptileService = platform.getMapTileService({ 'type': 'base' }),
+            greyTileLayer = basemaptileService.createTileLayer("maptile", "normal.day.grey", hidpi ? 512 : 256, "png8", null);
+        
+        map = new H.Map(mapContainer,  maptypes.normal.map, { center: {lat: 50.11035, lng: 8.68217}, zoom: 17 });
+
+        map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());        // Do not draw under control panel
+        map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());        // set padding for control panel
+        map.addObject(labels);        											// add labels (waypoint markers) to map
+        new H.mapevents.Behavior(new H.mapevents.MapEvents(map));   		    // add behavior control, e.g. for mouse
+        var ui = H.ui.UI.createDefault(map, maptypes);                          // enable UI components and remove the unnecessary
+        ui.removeControl('panorama');
+        ui.removeControl('mapsettings');
+
+        window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+		var htmlPageUrlParameters = [];
+		location.search.replace("?","").split("&").forEach( function(nameValue) { nv = nameValue.split("="); htmlPageUrlParameters[nv[0]] = nv[1]; } );
+		if (htmlPageUrlParameters.app_id) {
+			document.getElementById('match_endpoint' ).value += '&app_id=' + htmlPageUrlParameters.app_id + '&app_code=' + htmlPageUrlParameters.app_code;
+			document.getElementById('search_endpoint').value += '&app_id=' + htmlPageUrlParameters.app_id + '&app_code=' + htmlPageUrlParameters.app_code;
+		}
+
+        function showHideGroups(group){
+            group.setVisibility(!group.getVisibility());
+        }
+        
+        var groupRME        = new H.map.Group();
+        var groupAllBreaks  = new H.map.Group();
+        var groupLearnedStops  =  [];
+        var groupRouteStops = new H.map.Group();
+        viewBoundsGroup = new H.map.Group();
+        map.addObject(viewBoundsGroup);
+        map.addObject(groupRouteStops);
+        map.addObject(groupRME);
+        map.addObject(groupAllBreaks);
+        var groupDiffMarker = new H.map.Group();
+		var routeLinkInfos; // key = linkId, value = drivingTime[Hls/Fleet/Rme], drivingDistance[Hls/Fleet/Rme], speedKmh[Hls/Fleet/Rme], fc, coord, linkId
+		var initialRemainTimeHLSRouter  = 0;
+        var initialRemoaTimeFleetRouter = 0;
+		var downloadedLearnedStopsCSV = "";
+		var markerOnRoute;
+		var colorHls = "blue", colorFleet = "green", colorRme = "#ff0080";
+		var breakHotspotOptions = {
+            style: {
+                fillColor: 'rgba(120, 120, 0, 0.25)',
+                lineWidth: 2,
+                strokeColor: 'red'
+        }};
+        
+        var samplesObj = {
+            "blank": 				new RouteSample("Choose a pre-defined example here", "", "", "", "", "", ""),
+										
+            "france_route":			new RouteSample("1. Route in France and see previously learned stops", "", "", 
+                                        "https://fleet.api.here.com/2/calculateroute.json?waypoint0=48.05488,0.25229&waypoint1=49.52442,2.72180&mode=car;fastest;traffic:disabled&learnIdStops=MyRouteLeMansCuvilly", "Route & See Stops"),
+
+			"justcheck":			new RouteSample("2. Check out previously learned stops", "", "", 
+										"https://fleet.api.here.com/2/search/all.json?layer_id=LEARNEDSTOPS&filter=PROFILEID==\"MyRouteLeMansCuvilly\"", "See Stops"),
+		    
+		    "firstRoute":			new RouteSample("3.1. Learn on the trace with two stops", "", "Frankfurt_Stuttgart_1.txt", 
+										"https://fleet.api.here.com/2/calculateroute.json?routeMatch=1&mode=car&learnIdStops=Frankfurt_Stuttgart", "France"),
+										 
+		    "secondRoute":			new RouteSample("3.2. Learn on the trace with two stops, inside the 1 km radius from stops in example 3.1.", "", "Frankfurt_Stuttgart_2.txt", 
+										"https://fleet.api.here.com/2/calculateroute.json?routeMatch=1&mode=car&learnIdStops=Frankfurt_Stuttgart", "France"),
+										
+			"thirdRoute":			new RouteSample("3.3. Learn on the trace with two stops, outside the 1 km radius from stops in example 3.1.", "", "Frankfurt_Stuttgart_3.txt", 
+										"https://fleet.api.here.com/2/calculateroute.json?routeMatch=1&mode=car&learnIdStops=Frankfurt_Stuttgart", "France")		
+
+		};    
+
+        //if an example contains no trace file then an empty ("") value must be passed to traceFileName argument
+        function RouteSample(label, content, traceFileName, rmeRequestUrl, buttonInscription) {
+            this.label = label;
+            this.content = content;
+            this.traceFileName =  traceFileName;
+			this.buttonInscription = buttonInscription;
+           
+            this.rmeRequestUrl = rmeRequestUrl;
+
+            this.getLabel = function() {
+                return label;
+            };
+            this.getContent = function() {
+                return content;
+            };
+
+            this.getTraceFileName = function(){
+                return traceFileName;
+            };
+
+            this.getRmeRequestUrl = function(){
+                return rmeRequestUrl;
+            };
+			
+            this.getButtonInscription = function(){
+                return buttonInscription;
+            }
+
+        }
+
+        //adding the event to input trace file text area
+        document.getElementById('tracetextarea').addEventListener(
+			'dragover', function handleDragOver(evt) {
+				evt.stopPropagation();
+				evt.preventDefault();
+				evt.dataTransfer.dropEffect = 'copy';
+			},
+			false
+        );
+        
+        document.getElementById('tracetextarea').addEventListener(
+		    'drop', function(evt) {
+			    evt.stopPropagation();
+			    evt.preventDefault();
+			    var files = evt.dataTransfer.files;
+			    var file = files[0];
+			    var r = new FileReader();
+			    r.onload = function(e) { 
+				    document.getElementById('tracetextarea').value = r.result;
+			    }
+			    r.readAsText(file);
+		    },
+		    false
+	    );
+		
+
+        function sendRequest(endpoint, nextStartGeometryId) {
+            feedbackTxt.innerHTML            = "";
+			routeLinkInfos                   = new Object();
+
+			Spinner.showSpinner();
+			// selective urlencoding
+			endpoint= endpoint.replace("==", "%3D%3D")
+			if (endpoint.includes("/2/calculateroute.json?") && endpoint.includes("routeMatch=1")) {
+				clearAllGroups();
+				calculateRMEMapMatching(endpoint, colorRme, colorRme, groupRME, -2);
+			} else if (endpoint.includes("/2/search/all.json?")) {
+				displaySearchResult(endpoint, colorRme, colorRme, groupRME, -2, nextStartGeometryId);
+			} else {
+				alert("Request \"" + endpoint + "\" does not work with this demo page." );
+			}
+		}
+		
+		 // get a bunch of learned stops from the service
+        function displaySearchResult(endpoint, routeStrokeColor, routeFillColor, group, timeDiffSign, nextStartGeometryId) {
+            if (nextStartGeometryId == 0) group.removeAll();
+            // if there is an app_id specified in the URL then use it, otherwise use the default
+            var url = endpoint; 
+            var finalUrl = checkAndAddAppIdAndCode(url, 'Service Request');
+			finalUrl += "&start_geometry_id=" + nextStartGeometryId + "&no_of_records=500";
+			if (nextStartGeometryId == 0) {
+				var table = document.getElementById("TABLE");
+				clearAllGroups();
+				table.innerHTML = "";
+				feedbackTxt.innerHTML = "";
+				downloadedLearnedStopsCSV = "LEARNSTOPSID,ALTERNATIVEID,OCCURENCECOUNT,SEQNUMONROUTE,DURATIONMS,RELTIMEONROUTEMS,GEOMETRY_ID,GEOMETRY";
+			}
+            if (finalUrl) makeAjaxCall (finalUrl, routeStrokeColor, routeFillColor, group, timeDiffSign, "", 'get');
+        }
+		
+			
+        // route and get a bunch of learned stops from the service
+        function calculateRouteAndShowStops(endpoint, routeStrokeColor, routeFillColor, group, timeDiffSign) {
+            group.removeAll();
+            // if there is an app_id specified in the URL then use it, otherwise use the default
+            var url = endpoint; 
+            var finalUrl = checkAndAddAppIdAndCode(url, 'Service Request');
+			clearAllGroups();
+            if (finalUrl) makeAjaxCall (finalUrl, routeStrokeColor, routeFillColor, group, timeDiffSign, "", 'get');
+        }
+		
+        // route match the GPS trace
+        function calculateRMEMapMatching(endpoint, routeStrokeColor, routeFillColor, group, timeDiffSign) {
+            group.removeAll();
+			if (!document.getElementById('tracetextarea').value){ // if there is no trace file then do not call RME.
+                return;
+            }
+            var content = document.getElementById('tracetextarea').value;
+            // if there is an app_id specified in the URL then use it, otherwise use the default
+            var url = endpoint;
+            var finalUrl = checkAndAddAppIdAndCode(url, 'Service Request');
+			clearAllGroups();
+            if (finalUrl) makeAjaxCall (finalUrl, routeStrokeColor, routeFillColor, group, timeDiffSign, content, 'post');
+        }
+
+        //function to make an ajax call to the backend server
+        function makeAjaxCall(url, routeStrokeColor, routeFillColor, group, timeDiffSign, content, callType ){
+            if (!("TextEncoder" in window)) {
+                alert("Sorry, this browser does not support Octet Stream conversion...");
+            }else{
+                var enc = new TextEncoder(); // always utf-8
+                octetStream = enc.encode(content);
+                
+
+                $.ajax({ url: url, dataType: "json", async: true, type: callType,
+                    data: octetStream,
+                    success: function(data) {
+                        if( data.hasOwnProperty('response' ) && data.response.hasOwnProperty('route') )
+							parseRoutingResponse(data, routeStrokeColor, routeFillColor, group, timeDiffSign, Date.now());
+						else
+							parseSearchAllResponse(data, routeStrokeColor, routeFillColor, group );
+                    },
+                    contentType: 'application/octet-stream',
+                    processData: false,
+                    error: function(xhr, status, e) {
+                        Spinner.hideSpinner();
+                        if (xhr.responseJSON == undefined){ //in case of an error like GATEWAY_TIMEOUT
+                            feedbackTxt.innerHTML += '<font color="' + routeStrokeColor + '">An error occurred while calling the service</font>';
+                            feedbackTxt.innerHTML += "<br/>";
+                        }else{ //when the application returns back an error message
+                            if (xhr.responseJSON.issues && xhr.responseJSON.issues[0]) feedbackTxt.innerHTML += '<font color="' + routeStrokeColor + '">' + xhr.responseJSON.issues[0].message + "</font>";
+                            if (xhr.responseJSON.details                             ) feedbackTxt.innerHTML += '<font color="' + routeStrokeColor + '">' + xhr.responseJSON.details           + "</font>";
+                            feedbackTxt.innerHTML += "<br/>";
+                        }
+                    }
+                });
+            } 
+        }
+        function clearAllGroups(){
+            groupRouteStops.removeAll();
+            viewBoundsGroup.removeAll();
+            groupRME.removeAll();
+            groupAllBreaks.removeAll();
+            groupLearnedStops.forEach(function(group) {
+                group.removeAll();
+            }); 
+            groupLearnedStops = [];
+        }
+
+        var learnedStopsColumns = [];
+        var learnedStopSequences = [];
+
+		function parseSearchAllResponse(resp, routeStrokeColor, routeFillColor, group) {
+            var table = document.getElementById("TABLE");
+            // table.innerHTML = "";
+            // feedbackTxt.innerHTML = "";
+            if (resp.geometries.length > 0){
+				var lastGeometryId = -1;
+                learnedStopsColumns = [];
+                learnedStopSequences = [];
+                
+
+                var attributes = resp.geometries[0].attributes;
+                for (var p in attributes) {
+                    if(attributes.hasOwnProperty(p) && p !== "GEOMETRY_ID"){
+                        learnedStopsColumns.push(p);
+                    }
+                }
+                var row = table.insertRow(-1);
+                var headerCell = document.createElement("th");
+                headerCell.innerHTML = "";
+                row.appendChild(headerCell);
+                for (var i = 0; i < learnedStopsColumns.length; i++){
+                    var headerCell = document.createElement("th");
+                    headerCell.innerHTML = learnedStopsColumns[i];
+                    row.appendChild(headerCell);
+                }
+                row = table.insertRow(-1);
+                var checkBoxCell;
+                var rowSpanNum = 1; 
+                resp.geometries.forEach(function(val, idx){
+                    row = table.insertRow(-1);
+                    var learnSeqId = val.attributes["LEARNSTOPSID"] + val.attributes["ALTERNATIVEID"];
+                    var color = '';
+                    if (learnedStopSequences[learnSeqId] == null || learnedStopSequences[learnSeqId] == undefined){
+                        color = getRandomColor();
+                        var sequences = [];
+                        sequences.push(val);
+                        learnedStopSequences[learnSeqId] = {"color": color, "sequences" : sequences};
+                    }
+                    else {
+                        color = learnedStopSequences[learnSeqId].color;
+                        learnedStopSequences[learnSeqId].sequences.push(val);
+
+                    }
+                 
+                    for (var j = 0; j < learnedStopsColumns.length; j++){
+                    if (!groupLearnedStops[val.attributes["ALTERNATIVEID"]]) {
+                            groupLearnedStops[val.attributes["ALTERNATIVEID"]] = new H.map.Group();
+                            groupLearnedStops[val.attributes["ALTERNATIVEID"]].setVisibility(true);
+                            map.addObject(groupLearnedStops[val.attributes["ALTERNATIVEID"]]);
+                            checkBoxCell = row.insertCell(-1);
+                            rowSpanNum = 1; 
+                            checkBoxCell.innerHTML = '<input type="checkbox" id="'+val.attributes["ALTERNATIVEID"]+'-radio" onchange="showOrHideRoute(this)" value = "'+val.attributes["ALTERNATIVEID"]+'"  checked/>&nbsp;';
+                        } else if (learnedStopsColumns[j] == 'LEARNSTOPSID' && checkBoxCell){
+                             rowSpanNum++;
+                             checkBoxCell.rowSpan = rowSpanNum.toString();
+                        }
+                        var cell = row.insertCell(-1);
+
+                        if (learnedStopsColumns[j] == "OCCURENCECOUNT" && val.attributes[learnedStopsColumns[j]] == 1) cell.style.color = 'red';
+                        cell.innerHTML = val.attributes[learnedStopsColumns[j]];
+                        
+                    }
+                    row.style.backgroundColor = color;
+                    row.style.color = 'white';
+
+                    // console.log(color);
+                    var geom= parseWKT( val.geometry );
+                    var point = new H.geo.Point(geom.coordinates[1], geom.coordinates[0]);
+                    var circle = new H.map.Circle(point, 200, breakHotspotOptions);
+                    groupLearnedStops[val.attributes["ALTERNATIVEID"]].addObject(circle);
+                    // var marker = new H.map.Marker(point, { icon: createWarningIconMarker(idx + ": Learned Stop", "", 'Default') });
+                    var marker = new H.map.Marker(point, { icon: createWarningIconMarker("#" + val.attributes["ALTERNATIVEID"] + "." + val.attributes["SEQNUMONROUTE"] + " after " + (val.attributes["RELTIMEONROUTEMS"]/3600000).toFixed(2) + "h", 
+                                                                                        "duration: " + gettime(val.attributes["DURATIONMS"]),
+                                                                                        color, '#ffffff', val.attributes["DURATIONMS"]) });
+                    groupLearnedStops[val.attributes["ALTERNATIVEID"]].addObject(marker);
+
+                    //copy of the circle in unvisible group to keep view bound of all markers
+                    viewBoundCircle = new H.map.Circle(point, 200, breakHotspotOptions);
+                    viewBoundsGroup.addObject(viewBoundCircle);
+					if (lastGeometryId < parseInt(val.attributes["GEOMETRY_ID"])) lastGeometryId = parseInt(val.attributes["GEOMETRY_ID"]);
+					
+					downloadedLearnedStopsCSV += "\r\n" + val.attributes["LEARNSTOPSID"] + "," + val.attributes["ALTERNATIVEID"] + "," +val.attributes["OCCURENCECOUNT"] + "," +val.attributes["SEQNUMONROUTE"] + "," +val.attributes["DURATIONMS"] + "," +val.attributes["RELTIMEONROUTEMS"] + "," +val.attributes["GEOMETRY_ID"] + "," +val.geometry;
+                });
+
+                // var dvTable = document.getElementById("dvTable");
+                // dvTable.innerHTML = "";
+                // dvTable.appendChild(table);
+                document.getElementById("table-wrapper").style.display = 'block';
+
+                viewBoundsGroup.setVisibility(false);    
+                map.setViewBounds(viewBoundsGroup.getBounds());
+
+                document.getElementById('showroute').style.display =     groupRME.getObjects().length == 0 ? 'none' : 'block';
+                document.getElementById('showstops').style.display =     groupAllBreaks.getObjects().length == 0 ? 'none' : 'block';
+                document.getElementById('showlearnings').style.display = groupRouteStops.getObjects().length == 0 ? 'none' : 'block';
+                
+                // Spinner.hideSpinner();
+				
+				sendRequest(document.getElementById('search_endpoint').value, lastGeometryId + 1);
+        }
+	   else {
+            // table.innerHTML = "";
+            // document.getElementById("table-wrapper").style.display = 'none';
+            // feedbackTxt.innerHTML += '<font color="' + routeStrokeColor + '">' + "No Learned Stops found" + "</font><br/>";
+			navigator.clipboard.writeText(downloadedLearnedStopsCSV);
+			feedbackTxt.innerHTML = "<font color='0BCF79'><b>Learned stops are copied into the clipboard.</b></font><br/>";
+            Spinner.hideSpinner();
+        }
+    }
+
+        function parseRoutingResponse(resp, routeStrokeColor, routeFillColor, group, timeDiffSign, startTimeStamp) {
+            //draw the route returned by the RME, as RME response differes than the normal routing response we draw it differntly than the normal router path
+            
+            var routeLinks = resp.response.route[0].leg[0].link;
+			var routetraveltime = resp.response.route[0].summary.travelTime;
+            var traceLengthMeters = 0;
+            var linkFCs = new Object(); // key = linkId with direction sign, value = fc
+            for (var l = 0; l < routeLinks.length; l++) {
+                var coords1 = routeLinks[l].shape;
+                var coords2 = new H.geo.Strip();
+                for (var c = 0; c < coords1.length; c += 2) {
+                    coords2.pushLatLngAlt(parseFloat(coords1[c]), parseFloat(coords1[c + 1]), null);
+                }
+                var polyline = new H.map.Polyline(coords2, {style: {lineWidth: 5, strokeColor: routeStrokeColor, fillColor: routeFillColor}});
+                polyline.setArrows(true);
+                groupRME.addObject(polyline);
+                traceLengthMeters += routeLinks[l].length;
+                linkFCs[Math.abs(routeLinks[l].linkId)] = routeLinks[l].functionalClass;
+            }
+            // Compute the remaining driving time for each trace point
+            var tracePoints = resp.response.route[0].waypoint;
+            var timeStampInMSecAtFirstTracePoint = new Date(tracePoints[0                     ].timestamp).getTime();
+            var timeStampInMSecAtLastTracePoint  = new Date(tracePoints[tracePoints.length - 1].timestamp).getTime();
+            var drivenDistanceMetersUntilCurrentLink = 0;
+            var currentLinkIndex = 0;
+            for (var m = 0; m < tracePoints.length; m++) {
+                var tp = tracePoints[m];
+                var linkId = tp.linkId;
+                var drivingTimeFromStartInSec = (new Date(tp.timestamp).getTime() - timeStampInMSecAtFirstTracePoint) / 1000;
+                var drivingTimeFromStart = drivingTimeFromStartInSec / 60.0; // in minutes
+                drivingTimeFromStart = roundTo2DecimalPlaces(drivingTimeFromStart);
+                var linkSeqNum = tp.routeLinkSeqNrMatched;
+                while (currentLinkIndex < linkSeqNum) {
+                    drivenDistanceMetersUntilCurrentLink += routeLinks[currentLinkIndex].length;
+                    currentLinkIndex++;
+                }
+                var drivenMetersOnCurrentLink = routeLinks[currentLinkIndex].length * ((tp.linkId > 0) ? tp.spot : (1.0 - tp.spot));
+                if (routeLinkInfos[linkId] == null) routeLinkInfos[linkId] = new Object();
+                routeLinkInfos[linkId].drivingTimeRme     = drivingTimeFromStartInSec;
+                routeLinkInfos[linkId].drivingDistanceRme = drivenDistanceMetersUntilCurrentLink + drivenMetersOnCurrentLink;
+                routeLinkInfos[linkId].speedKmhRme        = tp.speedMps * 3.6;
+                routeLinkInfos[linkId].fc                 = linkFCs[tp.linkId];
+                routeLinkInfos[linkId].coord              = new H.geo.Point(tp.mappedPosition.latitude, tp.mappedPosition.longitude);
+                routeLinkInfos[linkId].linkId             = linkId;
+
+            }
+            if(resp.response.learnedStops){
+                resp.response.learnedStops.forEach(function(val, idx){
+                    var point = new H.geo.Point(parseFloat(val.avgLat), parseFloat(val.avgLon));
+                    var circle = new H.map.Circle(point, 1000, breakHotspotOptions);
+                    groupRouteStops.addObject(circle);
+                    var marker = new H.map.Marker(point, { icon: createWarningIconMarker(idx + ": Learned Stop") });
+                    groupRouteStops.addObject(marker);
+                });
+            }
+
+			resp.response.route[0].waypoint.forEach(function (val, idx){
+               if(val.breakDetected && val.breakDuration){
+                    var point = new H.geo.Point(parseFloat(val.mappedPosition.latitude), parseFloat(val.mappedPosition.longitude));
+                    var breakMarker = new H.map.Marker(point);
+
+                    groupAllBreaks.addObject(breakMarker);
+               }
+			});
+            var firstPoint = new H.geo.Point(tracePoints[0                     ].mappedPosition.latitude, tracePoints[0                     ].mappedPosition.longitude);
+            var  lastPoint = new H.geo.Point(tracePoints[tracePoints.length - 1].mappedPosition.latitude, tracePoints[tracePoints.length - 1].mappedPosition.longitude);
+            var airlineDistance = firstPoint.distance(lastPoint);
+			
+			routeMinutes= ( ! isNaN(timeStampInMSecAtLastTracePoint) && ! isNaN(timeStampInMSecAtFirstTracePoint) 
+							? Math.trunc((timeStampInMSecAtLastTracePoint - timeStampInMSecAtFirstTracePoint) / 60000.0) : Math.trunc(routetraveltime / 60) ) + " min, ";
+			
+            feedbackTxt.innerHTML += '<font color="' + routeStrokeColor + '">' + routeMinutes + Math.round(traceLengthMeters / 1000.0) + " km" +
+                                        ", airline " + Math.round(airlineDistance/1000.0) + " km</font><br/>";			
+            
+                
+			map.setViewBounds(groupRME.getBounds());
+
+			document.getElementById('filterArea').style.display = 'block';
+			document.getElementById('showroute').style.display =     groupRME.getObjects().length == 0 ? 'none' : 'block';
+			document.getElementById('showstops').style.display =     groupAllBreaks.getObjects().length == 0 ? 'none' : 'block';
+			document.getElementById('showlearnings').style.display = groupRouteStops.getObjects().length == 0 ? 'none' : 'block';
+
+			Spinner.hideSpinner();
+        }
+
+        // if user put app_id/app_code into the request, we use it. Otherwise we use the TCS default app_id.
+        function checkAndAddAppIdAndCode(url, requestFieldName){
+            var appIdRegEx= /[\?&]app_id=/i;
+            var appCodeRegEx= /[\?&]app_code=/i;
+            if( url.search( appIdRegEx ) === -1 && url.search( appCodeRegEx ) === -1 ) {
+                if( ! url.endsWith( "&" ) ) url= url.concat( "&" );
+                url= url.concat( "app_id=" + app_id_cors + "&app_code=" + app_code_cors );
+            }
+            if( ( url.search( appIdRegEx ) >= 0 && url.search( appCodeRegEx ) < 0 ) || ( url.search( appIdRegEx ) < 0 && url.search( appCodeRegEx ) >= 0 ) ) {
+                alert('If you provide credentials in the '+ requestFieldName +' field, please provide both app_id AND app_code.');                
+                return;
+            }
+            return url;
+        }
+
+        function loadFromFile(filename) {
+			Spinner.showSpinner();
+            $.ajax({ url: '/sample_data/' + filename, dataType: "text", async: true, type: 'get',
+                    data: {},
+                    success: function(data) {
+                        document.getElementById('tracetextarea').value = data;
+                        sendRequest(document.getElementById("match_endpoint").value, 0); 
+						Spinner.hideSpinner();
+                    },                    
+                    processData: false,
+            });
+        }
+        
+        function extractStartPoint(){
+            var startPoint;
+            if (document.getElementById('destinations').value.trim() != "") {
+                var rawDestArray = document.getElementById('destinations').value.trim().split(/\r*\n/);
+                var coord = rawDestArray[0].split(",");
+                startPoint = new H.geo.Point(coord[1], coord[2]);
+            }
+            return startPoint;
+        }
+        
+        //--- Create marker with text line
+        var createWarningIconMarker = function (line1, line2, fillColor, strokeColor, duration) {
+            if (duration && duration >= 39600000){
+            var svgMarker = svgMarkerImage_DriverLongRestTime;
+            }else {
+            var svgMarker = svgMarkerImage_DriverShortRestTime;
+            }
+            var widthAll = 10 * Math.max(line1.length, line2.length);
+            durationWidth = widthAll/15 * duration/3600000;
+            svgMarker = svgMarker.replace(/__line1__/g, line1);
+            svgMarker = svgMarker.replace(/__line2__/g, line2);
+            svgMarker = svgMarker.replace(/__width__/g, durationWidth);
+            svgMarker = svgMarker.replace(/__widthAll__/g, widthAll + durationWidth);
+            svgMarker = svgMarker.replace(/__fillColor__/g, fillColor);
+
+
+            svgMarker = svgMarker.replace(/__strokeColor__/g, "black");
+            svgMarker = svgMarker.replace(/font-size=\"8\"/g, 10);
+           //return new H.map.Icon(svgMarker, { anchor: new H.math.Point(24, 57)	});
+            return new H.map.Icon(svgMarker, { anchor: {x : 15, y : 50}});
+        };
+
+        //This method will round the value to 2 decimal places
+        function roundTo2DecimalPlaces(value){
+            return(Math.round(value * 100) / 100);
+        }
+
+        function getRandomColor(){
+            var color = '#'+(0x1000000+(Math.random())*0xff6688).toString(16).substr(1,6); // get a random color
+            var R = parseInt("0x" + color.substr(1,2));
+            var G = parseInt("0x" + color.substr(3,2));
+            var B = parseInt("0x" + color.substr(5,2));
+            if (R>185 || G >185 || B>185) color = getRandomColor();
+            return color;
+        }
+
+        function gettime(time)
+        {
+            time = time/1000;
+            var negative = time < 0;
+            if (negative) time = -time;
+            var h = Math.floor( time / 3600)      ; if (h < 10) h = "0" + h;
+            var m = Math.floor((time % 3600) / 60); if (m < 10) m = "0" + m;
+            return (negative ? "-" : "") + h + ":" + m;
+        };
+
+        var createWaypointIcon = function(waypointId) {
+            return '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="36px">' +
+			  '<path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 28 13 28 C 16.3 28 19' +
+			  ' 29.3 19 31 Z" fill="#000" fill-opacity=".2"/>' +
+			  '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 19.5 3.8 21.9 L 13 31 L 22.2' +
+			  ' 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="#fff"/>' +
+			  '<path d="M 13 2.2 C 6 2.2 2.3 7.2 2.1 12.8 C 2.1 16.1 3.1 18.4 5.2 20.5 L 13 28.2 L 20.8 20.5 C' +
+			  ' 22.9 18.4 23.8 16.2 23.8 12.8 C 23.6 7.07 20 2.2 13 2.2 Z" fill="#1188DD"/>' +
+			  '<text font-size="11" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" text-anchor="middle" x="45%" y="50%">' + waypointId + '</text>' +
+			  '</svg>';
+        };
+        var createDiffIcon = function(speeds) {
+            return '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="36px">' +
+			  '<path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 28 13 28 C 16.3 28 19' +
+			  ' 29.3 19 31 Z" fill="#000" fill-opacity=".2"/>' +
+			  '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 19.5 3.8 21.9 L 13 31 L 22.2' +
+			  ' 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="orange" fill-opacity="1.0"/>' +
+			  '<text font-size="11" font-weight="bold" fill="black" font-family="Nimbus Sans L,sans-serif" text-anchor="middle" x="45%" y="50%">' + speeds + '</text>' +
+			  '</svg>';
+        };
+        
+    	var svgMarkerImage_DriverShortRestTime = '<svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="svg3721" version="1.1" height="60" width="__widthAll__">'+ 
+            '<metadata id="metadata3727"><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage" /><dc:title></dc:title></cc:Work></rdf:RDF></metadata><defs id="defs3725" />'+
+            ' <g transform="translate(-8.5,-9.5)" id="g3719">'+
+            '<rect style="fill:__fillColor__;stroke:__strokeColor__" x="45" y="11" width="__width__" height="27" rx="3" ry="3" id="label-box" />'+ 
+            '<text style="font-weight:bold;font-size:12px;font-family:Sans-serif;text-anchor:start;fill:__strokeColor__;stroke-width:0" x="55" y="24" font-weight="bold" font-size="12" xml:space="preserve" id="label-text">__line1__</text>'+
+            '<text style="font-size:11px;font-family:Sans-serif;text-anchor:start;fill:__strokeColor__;stroke-width:0" x="55" y="35" font-size="11" xml:space="preserve" id="label-desc">__line2__</text>'+
+            '<image id="image3717" xlink:href="data:image/png;base64,R0lGODlhfQDCAPQdAAELHgEMHgIMHw8LHRALHR8KGyAKGxEbLCEqOzE5SUBIVkFIV2Fnc3B1gHF2gYCFjoCFj4+UnJCVnZ+jqqCkq6+yuLCzuc/R1NDS1d/g4uDh4+/v8PDw8f///wAAAAAAACH5BAEAAB4ALAAAAAB9AMIAAAX+oCeOJCmcaKqubOu+cCyvZW2XxKzvfO+vhNvN8Csaj0eD0IRsOp+vpQdKrUKF1qy2aNt6v7MSEUwup5Qjs9o8yq3f3uAUTteK6vjqPc9v7vuAP3OBhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnCkICwoMEA4KCwidWgsSGB2trq+uFxEKqEcHHhUcsLu8HRsTHge1OwgTvcfIE6fDLwcQyNDIEMLMKs4b0dm9G9PVJwkZ2uK9GQnVDOPpvQzDEervuxGdBxXw9q8V1JgHF/f+rRf0VeL3r2DAS/UKFqxgSYLChxIooXv4kF2kBBQzmnt0IFzGhxkELnr2kSIERwf+sJV8uEEkIpIrH55chCDmx2WJKNjMSEHRgZ0fXQaaCLRiIgtFKfZEpDJpwQ2IFjiluOCQw6kKIxrqh9Xgoa4Pv4ItaKjm2H84AUk9668qobVs7bkNBDPuOweF6tpNN5PuXnh43/59N1ftYHWF+2A8PC4tIMbjxELOdojVZGgYrF6GprUQ3M28EgfSBXoXh6Oldy09RDR1K4uHfrp2JTSQztmrEZl17fiQ3st9fZLezKG2od+Mgy86oGGzhoubN0JqPRh2pKuDO09C+tfCpQOW42IwzjH82PGaDnAHa4H8JOxTtXOiDtQ6qgTNgWqQzszZ8I8cKOeNMyV14w0LCNz+VhAFvR1oDQMU/CcOBxQw4J6DKqhi3jGyiIZhD58s4MAoC5jy4Ykopqjiiiy26OKLMMYo44w01mgjIIPcqMMfOoaRY48x8AgkDCIMMGQMA6RxZBQjFLBkCwWU8CQLXUyJAhZWShEJAAIE0GUAYIYp5phenkAmmCpw2YIUIjjZiJpbwKlClGyOYOQiclYBQJ4nJFknloXwCcWeKfxp6KGIJiplFn4q6uijkNagRaORVmrpoYxeqummS2TK6aeg/ugEpaGWGqkVpJqqaqJjXLHqq47qAeush7bqBK24/klFrrwuYSsSvQZb5a3CFiuCG34Ya+wTyhqL7BHNLptstMHTEktttcBeiy202m7LRbe9Zgsur9yOm2u55uJqRLrkfsuuuoK8C68P8uL664710upDqvmaei+S/erLA78Bh/qsDAQXDOrACsN6MAwJN8zpDhFLrOnDLlRs8aX4bqxqxx6b6mPIIstA8qomn1wykSqv7ELLLq8Jc6ksz7wwkzbfLHPOn+LM86b/nvCzzjQMzWnQRvdMZdKbYsz0xEU/fenDUm8addWVHoy1pipszTEKGnuta59iWwp22WYLEDbaWqrNdqVuvw1p3HI/unbdeOetN6whAAA7"       y="9.5"       x="8.5"       height="50"       width="50" />  </g>  <rect     y="4.5"     x="13.412357"     height="25"     width="23.5"     id="rect3861" />  <g     style="fill:#ffffff"     transform="matrix(0.09990754,0,0,0.08348614,11.03459,3.066264)"     id="g3859">    <g       style="fill:#ffffff"       id="g3802">      <path         style="fill:#ffffff"         d="m 212.481,159.416 v -9.055 c 0,-5.523 -4.477,-10 -10,-10 H 41.191 c -5.523,0 -10,4.477 -10,10 v 37.355 c 0,31.348 15.997,59.028 40.255,75.312 h -7.01 c -5.523,0 -10,4.477 -10,10 0,5.523 4.477,10 10,10 h 114.799 c 5.523,0 10,-4.477 10,-10 0,-5.523 -4.477,-10 -10,-10 h -7.01 c 8.39,-5.632 15.789,-12.628 21.882,-20.667 h 16.228 c 22.883,0 41.5,-18.617 41.5,-41.5 0.001,-22.164 -17.463,-40.325 -39.354,-41.445 z m -161.29,28.3 v -27.355 h 141.29 v 27.355 c 0,38.954 -31.691,70.645 -70.645,70.645 -38.954,0 -70.645,-31.692 -70.645,-70.645 z m 159.145,34.645 h -4.742 c 4.434,-10.679 6.887,-22.38 6.887,-34.645 v -8.246 c 10.851,1.08 19.355,10.26 19.355,21.391 0,11.855 -9.645,21.5 -21.5,21.5 z"         id="path3798" />      <path         style="fill:#ffffff"         d="m 93.674,118.512 c 5.523,0 10,-4.477 10,-10 0,-0.075 -0.01,-0.148 -0.011,-0.223 5.822,6.282 14.135,10.223 23.354,10.223 5.523,0 10,-4.477 10,-10 0,-0.075 -0.01,-0.148 -0.011,-0.222 5.822,6.281 14.135,10.222 23.354,10.222 5.523,0 10,-4.477 10,-10 0,-5.523 -4.477,-10 -10,-10 -6.536,0 -11.853,-5.317 -11.853,-11.853 0,-2.138 0.573,-4.23 1.656,-6.049 L 178.83,32.478 c 1.976,-3.317 3.02,-7.117 3.02,-10.989 C 181.851,9.641 172.21,0 160.36,0 c -5.523,0 -10,4.477 -10,10 0,5.523 4.477,10 10,10 0.822,0 1.491,0.668 1.491,1.49 0,0.278 -0.066,0.525 -0.203,0.754 L 132.98,70.378 c -2.926,4.913 -4.472,10.543 -4.472,16.282 0,4.541 0.962,8.86 2.682,12.773 -1.271,-0.585 -2.681,-0.921 -4.172,-0.921 -6.536,0 -11.853,-5.317 -11.853,-11.853 0,-2.139 0.572,-4.23 1.656,-6.049 l 28.667,-48.132 c 1.976,-3.317 3.02,-7.117 3.02,-10.989 0,-11.85 -9.641,-21.49 -21.49,-21.49 -5.523,0 -10,4.477 -10,10 0,5.523 4.477,10 10,10 0.822,0 1.49,0.668 1.49,1.49 0,0.278 -0.066,0.525 -0.203,0.754 L 99.637,70.377 c -2.926,4.912 -4.473,10.542 -4.473,16.283 0,4.541 0.962,8.86 2.682,12.773 -1.271,-0.585 -2.682,-0.921 -4.173,-0.921 -6.536,0 -11.853,-5.317 -11.853,-11.853 0,-2.138 0.573,-4.23 1.656,-6.049 l 28.667,-48.132 c 1.976,-3.317 3.02,-7.117 3.02,-10.989 0,-11.85 -9.641,-21.49 -21.491,-21.49 -5.523,0 -10,4.477 -10,10 0,5.523 4.477,10 10,10 0.822,0 1.491,0.668 1.491,1.49 0,0.278 -0.066,0.525 -0.203,0.754 L 66.295,70.377 c -2.926,4.913 -4.473,10.543 -4.473,16.283 0,17.563 14.289,31.852 31.852,31.852 z"         id="path3800" />    </g><g style="fill:#ffffff" id="g3804" /><g style="fill:#ffffff" id="g3806" /><g  style="fill:#ffffff"  id="g3808" /><g style="fill:#ffffff" id="g3810" /><g style="fill:#ffffff" id="g3812"/><g style="fill:#ffffff" id="g3814" /><g  style="fill:#ffffff" id="g3816"/><g style="fill:#ffffff" id="g3818"/><g style="fill:#ffffff" id="g3820" /><g  style="fill:#ffffff"  id="g3822" /><g  style="fill:#ffffff"  id="g3824" /><g  style="fill:#ffffff" id="g3826" /><g style="fill:#ffffff" id="g3828" /><g  style="fill:#ffffff"  id="g3830" /><g style="fill:#ffffff" id="g3832" /></g></svg>';
+
+
+            var  svgMarkerImage_DriverLongRestTime = '<svg   xmlns:dc="http://purl.org/dc/elements/1.1/"   xmlns:cc="http://creativecommons.org/ns#"   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"   xmlns:svg="http://www.w3.org/2000/svg"   xmlns="http://www.w3.org/2000/svg"   xmlns:xlink="http://www.w3.org/1999/xlink"   id="svg928"   version="1.1"   height="60"   width="__widthAll__">'+
+            '<metadata     id="metadata934">    <rdf:RDF>      <cc:Work         rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />        <dc:title></dc:title>      </cc:Work>    </rdf:RDF>  </metadata>'+
+            '<defs     id="defs932" />  <g     transform="translate(-8.5,-9.5)"     id="g926">'+
+            '<rect       style="fill:__fillColor__;stroke:__strokeColor__"       x="45"       y="11"       width="__width__"       height="27"       rx="3"       ry="3"       id="label-box" />'+
+            '<text       style="font-weight:bold;font-size:12px;font-family:Sans-serif;text-anchor:start;fill:__strokeColor__;stroke-width:0"       x="55"       y="24"       font-weight="bold"       font-size="12"       xml:space="preserve"       id="label-text">__line1__</text>'+
+            '<text       style="font-size:11px;font-family:Sans-serif;text-anchor:start;fill:__strokeColor__;stroke-width:0"       x="57"       y="35"       font-size="11"       xml:space="preserve"       id="label-desc">__line2__</text>'+
+            '<image       id="image924"       xlink:href="data:image/png;base64,R0lGODlhfQDCAPQdAAELHgEMHgIMHw8LHRALHR8KGyAKGxEbLCEqOzE5SUBIVkFIV2Fnc3B1gHF2gYCFjoCFj4+UnJCVnZ+jqqCkq6+yuLCzuc/R1NDS1d/g4uDh4+/v8PDw8f///wAAAAAAACH5BAEAAB4ALAAAAAB9AMIAAAX+oCeOJCmcaKqubOu+cCyvZW2XxKzvfO+vhNvN8Csaj0eD0IRsOp+vpQdKrUKF1qy2aNt6v7MSEUwup5Qjs9o8yq3f3uAUTteK6vjqPc9v7vuAP3OBhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnCkICwoMEA4KCwidWgsSGB2trq+uFxEKqEcHHhUcsLu8HRsTHge1OwgTvcfIE6fDLwcQyNDIEMLMKs4b0dm9G9PVJwkZ2uK9GQnVDOPpvQzDEervuxGdBxXw9q8V1JgHF/f+rRf0VeL3r2DAS/UKFqxgSYLChxIooXv4kF2kBBQzmnt0IFzGhxkELnr2kSIERwf+sJV8uEEkIpIrH55chCDmx2WJKNjMSEHRgZ0fXQaaCLRiIgtFKfZEpDJpwQ2IFjiluOCQw6kKIxrqh9Xgoa4Pv4ItaKjm2H84AUk9668qobVs7bkNBDPuOweF6tpNN5PuXnh43/59N1ftYHWF+2A8PC4tIMbjxELOdojVZGgYrF6GprUQ3M28EgfSBXoXh6Oldy09RDR1K4uHfrp2JTSQztmrEZl17fiQ3st9fZLezKG2od+Mgy86oGGzhoubN0JqPRh2pKuDO09C+tfCpQOW42IwzjH82PGaDnAHa4H8JOxTtXOiDtQ6qgTNgWqQzszZ8I8cKOeNMyV14w0LCNz+VhAFvR1oDQMU/CcOBxQw4J6DKqhi3jGyiIZhD58s4MAoC5jy4Ykopqjiiiy26OKLMMYo44w01mgjIIPcqMMfOoaRY48x8AgkDCIMMGQMA6RxZBQjFLBkCwWU8CQLXUyJAhZWShEJAAIE0GUAYIYp5phenkAmmCpw2YIUIjjZiJpbwKlClGyOYOQiclYBQJ4nJFknloXwCcWeKfxp6KGIJiplFn4q6uijkNagRaORVmrpoYxeqummS2TK6aeg/ugEpaGWGqkVpJqqaqJjXLHqq47qAeush7bqBK24/klFrrwuYSsSvQZb5a3CFiuCG34Ya+wTyhqL7BHNLptstMHTEktttcBeiy202m7LRbe9Zgsur9yOm2u55uJqRLrkfsuuuoK8C68P8uL664710upDqvmaei+S/erLA78Bh/qsDAQXDOrACsN6MAwJN8zpDhFLrOnDLlRs8aX4bqxqxx6b6mPIIstA8qomn1wykSqv7ELLLq8Jc6ksz7wwkzbfLHPOn+LM86b/nvCzzjQMzWnQRvdMZdKbYsz0xEU/fenDUm8addWVHoy1pipszTEKGnuta59iWwp22WYLEDbaWqrNdqVuvw1p3HI/unbdeOetN6whAAA7"       y="9.5"       x="8.5"       height="50"       width="50" />  </g>'+
+            '<g     transform="matrix(0.04859273,0,0,0.04684151,9.642689,3.950041)"     style="display:inline"     display="inline"     id="g948">'+
+            '<title       id="title938">sgfdg</title>    <rect       style="fill:#7f0000;stroke:__strokeColor__;stroke-dasharray:none"       stroke-width="null"       stroke-linejoin="null"       stroke-linecap="null"       x="16"       y="22.000013"       width="596"       height="431"       id="svg_8"       rx="50"       ry="50" />    <g       id="svg_10">      <g         id="svg_11">        <path           style="fill:#ffffff"           d="m 173.20467,206.54814 c 24.68321,0 44.69123,-19.57927 44.69123,-43.73029 0,-24.15438 -20.00802,-43.73701 -44.69123,-43.73701 -24.67988,0 -44.68902,19.58263 -44.68902,43.73701 0,24.15102 20.00914,43.73029 44.68902,43.73029 z"           id="svg_12" />        <path           style="fill:#ffffff"           d="M 173.20467,162.81786"           id="svg_13" />      </g>      <path         style="fill:#ffffff"         d="m 269.70474,150.41617 h 178.63474 c 26.20739,0 41.64526,16.50683 41.64526,38.60583 v 63.2749 h -220.28 z"         id="svg_14" />      <path         style="fill:#ffffff"         d="m 221.08136,173.05673 v 37.95017 h -68.68161 c -33.15801,0.11636 -33.21181,41.82595 0,41.82595 h 90.04114 c 13.14886,0 21.38113,-10.38546 21.38113,-22.13369 v -57.64243 c 0,-31.57706 -42.74066,-31.57706 -42.74066,0 z"         id="svg_15" />      <path         style="fill:#ffffff"         d="m 119.98259,113.953 c 0,-34.437993 -48.824753,-34.437993 -48.824753,0 v 276.15302 h 49.908673 v -71.31748 h 379.73802 v 70.78153 h 48.82346 v -213.291 c 0,-36.34345 -49.36536,-36.34345 -49.36536,0 v 85.13335 H 119.98256 V 113.953 Z"         id="svg_16" />'+
+            '</g> <path       transform="matrix(20.57921,0,0,21.348586,-373.36221,-287.13936)"       id="path973"       d="m 19.845432,33.762349 c -0.806126,-0.806127 -0.8658,-1.443002 -0.8658,-9.240265 0,-7.563265 0.07669,-8.443864 0.791662,-9.09091 0.699583,-0.633113 2.300758,-0.716444 13.766234,-0.716444 9.514133,0 13.113121,0.13855 13.494052,0.51948 0.369799,0.3698 0.51948,3.042672 0.51948,9.276438 0,7.38367 -0.106682,8.863639 -0.680272,9.437229 -0.587608,0.587608 -2.415622,0.680273 -13.419914,0.680273 -12.16244,0 -12.778868,-0.03923 -13.605442,-0.865801 z m 4.329005,-3.463204 v -1.731602 h 9.090909 9.090909 v 1.731602 c 0,1.639089 0.07006,1.731602 1.311266,1.731602 h 1.311266 l -0.12079,-5.735931 c -0.118592,-5.631562 -0.139087,-5.738523 -1.126388,-5.878402 -0.727992,-0.10314 -1.071848,0.110869 -1.245581,0.775226 l -0.239983,0.917696 -0.626746,-0.894805 c -0.586127,-0.836813 -1.021944,-0.891608 -6.724622,-0.845485 -5.154105,0.04168 -6.157407,-0.05706 -6.482517,-0.637997 -0.537668,-0.960759 -3.198516,-0.911171 -3.770148,0.07026 -0.380773,0.653747 -0.443051,0.601681 -0.454411,-0.379894 -0.01529,-1.321464 -1.011456,-2.317193 -1.955703,-1.954851 -0.548008,0.21029 -0.654864,1.419026 -0.654864,7.407738 v 7.156444 h 1.298702 c 1.226551,0 1.298701,-0.0962 1.298701,-1.731602 z"       style="fill:#000000;fill-opacity:1;stroke-width:0.43290043" />    <path       transform="matrix(20.57921,0,0,21.348586,-373.36221,-287.13936)"       id="path975"       d="m 20.86095,14.606505 c -0.110448,-0.178572 5.589904,-0.324676 12.667448,-0.324676 7.077544,0 12.756342,0.11192 12.619551,0.24871 -0.375741,0.375741 -25.05573,0.449883 -25.286999,0.07597 z"       style="fill:#000000;fill-opacity:1;stroke-width:0.43290043" />'+
+            '<path       transform="matrix(20.57921,0,0,21.348586,-373.36221,-287.13936)"       id="path977"       d="m 20.170108,14.860928 c 0.297619,-0.120091 0.784632,-0.120091 1.082251,0 0.297619,0.120092 0.05411,0.218349 -0.541126,0.218349 -0.595238,0 -0.838744,-0.09826 -0.541125,-0.218349 z"       style="fill:#000000;fill-opacity:1;stroke-width:0.43290043" />    <path       transform="matrix(20.57921,0,0,21.348586,-373.36221,-287.13936)"       id="path979"       d="m 28.070541,57.034002 c 0,-0.249203 3.602842,-7.324962 7.00014,-13.747844 L 35.8721,41.771007 27.892751,41.554556 C 20.187602,41.345544 19.875042,41.302042 18.797165,40.28862 L 17.68093,39.239133 V 25.866221 c 0,-8.751565 0.161642,-13.674942 0.467746,-14.246902 1.002255,-1.8727325 2.657703,-2.0993945 15.33312,-2.0993945 12.675417,0 14.330865,0.226662 15.333121,2.0993945 0.306104,0.57196 0.467745,5.495337 0.467745,14.246902 0,13.314561 -0.0042,13.376815 -0.974026,14.267436 -0.535714,0.491988 -1.655844,1.031207 -2.489178,1.198264 -1.129476,0.226423 -2.672177,1.423336 -6.060606,4.702151 -2.5,2.419127 -6.152597,5.951503 -8.116883,7.849727 -1.964285,1.898221 -3.571428,3.315814 -3.571428,3.150203 z M 41.134857,34.632914 c 4.407851,-0.0038 5.622506,-0.138711 6.168831,-0.685037 0.573906,-0.573905 0.680273,-2.059198 0.680273,-9.499262 0,-8.622551 -0.02143,-8.834001 -0.962124,-9.492888 -0.817921,-0.572893 -2.87286,-0.673898 -13.710502,-0.673898 -11.255,0 -12.841115,0.08393 -13.540041,0.716445 -0.718432,0.650173 -0.791662,1.54626 -0.791662,9.687253 0,6.895521 0.131997,9.080357 0.570581,9.444349 0.549739,0.456243 11.326079,0.930862 14.580934,0.642184 0.833333,-0.07391 3.985003,-0.136526 7.00371,-0.139146 z"       style="fill:#000000;fill-opacity:1;stroke-width:0.43290043" />'+
+            '<path       transform="matrix(20.57921,0,0,21.348586,-373.36221,-287.13936)"       id="path981"       d="m 44.837194,14.863675 c 0.293087,-0.118582 0.877503,-0.1258 1.298701,-0.01604 0.421198,0.109759 0.181399,0.20678 -0.532887,0.215603 -0.714285,0.0088 -1.058902,-0.08098 -0.765814,-0.199563 z"       style="fill:#000000;fill-opacity:1;stroke-width:0.43290043" />    <path       transform="matrix(20.57921,0,0,21.348586,-373.36221,-287.13936)"       id="path983"       d="m 47.585237,16.193806 c 0.02077,-0.504304 0.12335,-0.606883 0.261544,-0.261544 0.125052,0.3125 0.109672,0.685877 -0.03418,0.829726 -0.143849,0.143849 -0.246164,-0.111833 -0.227367,-0.568182 z"       style="fill:#000000;fill-opacity:1;stroke-width:0.43290043" />    <path       transform="matrix(20.57921,0,0,21.348586,-373.36221,-287.13936)"       id="path985"       d="m 29.369242,55.230219 c 0,-0.171238 1.461039,-3.195806 3.246753,-6.721265 1.785715,-3.525459 3.246754,-6.532433 3.246754,-6.682162 0,-0.149729 -1.704546,-0.291758 -3.787879,-0.315618 -2.083334,-0.02386 -5.671918,-0.169964 -7.974633,-0.324675 -3.648491,-0.245129 -4.337606,-0.420431 -5.360126,-1.363544 l -1.173374,-1.082251 0.276412,-13.410753 c 0.261298,-12.677504 0.324204,-13.458546 1.150515,-14.284857 0.777639,-0.777639 1.625322,-0.901995 7.681118,-1.1268262 3.743858,-0.1389969 9.871825,-0.137342 13.617706,0.00368 6.174401,0.2324452 6.896527,0.3422352 7.729456,1.1751632 0.894282,0.894282 0.920437,1.278709 0.981516,14.426493 l 0.06275,13.507727 -1.214617,1.045163 c -0.668039,0.574839 -1.526274,1.045162 -1.90719,1.045162 -1.069019,0 -3.327486,1.851339 -9.215856,7.554539 -5.964755,5.777184 -7.359307,7.019141 -7.359307,6.554024 z m 4.87013,-20.490601 c -1.726191,-0.08217 -4.550866,-0.08217 -6.277056,0 -1.726191,0.08217 -0.313853,0.1494 3.138528,0.1494 3.452381,0 4.864718,-0.06723 3.138528,-0.1494 z M 20.278333,34.004347 c 0,-0.104996 -0.194805,-0.311297 -0.432901,-0.458449 -0.238095,-0.147151 -0.4329,-0.06124 -0.4329,0.190902 0,0.252147 0.194805,0.458449 0.4329,0.458449 0.238096,0 0.432901,-0.08591 0.432901,-0.190902 z M 47.55106,33.329448 c 0,-0.47619 -0.07468,-0.865801 -0.16596,-0.865801 -0.09128,0 -0.267846,0.389611 -0.392373,0.865801 -0.124526,0.476191 -0.04984,0.865801 0.165961,0.865801 0.215805,0 0.392372,-0.38961 0.392372,-0.865801 z M 24.174437,30.299145 v -1.731602 h 9.090909 9.090909 v 1.731602 c 0,1.635402 0.07215,1.731602 1.298701,1.731602 h 1.298702 v -5.1594 c 0,-2.837669 -0.118245,-5.467539 -0.262766,-5.844155 -0.337856,-0.880437 -1.74637,-0.885506 -2.237418,-0.0081 -0.343429,0.613672 -0.431015,0.613672 -0.940318,0 -0.459493,-0.553655 -1.644376,-0.676705 -6.516208,-0.676705 -4.764855,0 -6.06227,-0.129741 -6.493507,-0.64935 -0.644912,-0.777072 -3.079331,-0.860064 -3.809524,-0.129871 -0.40404,0.404041 -0.51948,0.31962 -0.51948,-0.379893 0,-1.112663 -1.064702,-2.053613 -1.942539,-1.716756 -0.548008,0.210291 -0.654864,1.419026 -0.654864,7.407738 v 7.156444 h 1.298702 c 1.226551,0 1.298701,-0.0962 1.298701,-1.731602 z m 23.374357,-13.896444 -0.455057,-1.038621 0.22275,1.082251 c 0.122513,0.595238 0.269199,4.39394 0.325969,8.441559 l 0.103218,7.359307 0.129088,-7.402938 c 0.07887,-4.522987 -0.04794,-7.80699 -0.325968,-8.441558 z M 20.061883,15.14763 c 0.147151,-0.238095 0.06124,-0.4329 -0.190902,-0.4329 -0.252147,0 -0.458449,0.194805 -0.458449,0.4329 0,0.238095 0.08591,0.432901 0.190902,0.432901 0.104996,0 0.311298,-0.194806 0.458449,-0.432901 z"       style="fill:#000000;fill-opacity:1;stroke-width:0.43290043" /> '+
+            '<path       transform="matrix(20.57921,0,0,21.348586,-373.36221,-287.13936)"       id="path987"       d="m 28.070541,57.036266 c 0,-0.257502 1.274564,-2.760229 6.782064,-13.317207 l 1.016284,-1.948052 -7.977744,-0.216451 C 20.1877,41.345549 19.875021,41.302022 18.797165,40.28862 L 17.68093,39.239133 V 26.139312 c 0,-7.246482 0.184172,-13.58423 0.412179,-14.183932 0.809068,-2.1280098 1.440117,-2.2190053 15.388687,-2.2190053 13.948571,0 14.57962,0.090996 15.388688,2.2190053 0.227398,0.598103 0.412178,6.850392 0.412178,13.946619 0,14.487708 0.02596,14.361811 -3.154191,15.298926 -1.8051,0.531921 -3.444513,1.968287 -14.702952,12.881948 -1.845238,1.788731 -3.354978,3.117757 -3.354978,2.953393 z M 20.278333,34.004347 c 0,-0.104996 -0.194805,-0.311297 -0.432901,-0.458449 -0.238095,-0.147151 -0.4329,-0.06124 -0.4329,0.190902 0,0.252147 0.194805,0.458449 0.4329,0.458449 0.238096,0 0.432901,-0.08591 0.432901,-0.190902 z M 47.41388,32.815379 c -0.138193,-0.345339 -0.240772,-0.24276 -0.261544,0.261544 -0.0188,0.456349 0.08352,0.712031 0.227368,0.568182 0.143849,-0.143849 0.159228,-0.517226 0.03418,-0.829726 z M 24.174437,30.299145 v -1.731602 h 9.090909 9.090909 v 1.731602 c 0,1.635402 0.07215,1.731602 1.298701,1.731602 h 1.298702 v -5.1594 c 0,-2.837669 -0.118245,-5.467539 -0.262766,-5.844155 -0.337856,-0.880437 -1.74637,-0.885506 -2.237418,-0.0081 -0.343429,0.613672 -0.431015,0.613672 -0.940318,0 -0.457345,-0.551067 -1.621445,-0.676705 -6.270024,-0.676705 -4.349021,0 -5.908521,-0.151356 -6.548725,-0.635583 -1.030568,-0.779482 -3.482493,-0.858219 -3.934809,-0.126357 -0.225475,0.364827 -0.410146,0.204618 -0.57652,-0.500155 -0.334675,-1.417707 -1.622989,-2.207254 -2.178838,-1.335307 -0.227671,0.357143 -0.416931,3.717532 -0.420577,7.467532 l -0.0066,6.818182 h 1.298702 c 1.226551,0 1.298701,-0.0962 1.298701,-1.731602 z M 47.871578,19.80131 c -0.08453,-1.488096 -0.153696,-0.270563 -0.153696,2.705627 0,2.976191 0.06916,4.193723 0.153696,2.705628 0.08453,-1.488095 0.08453,-3.92316 0,-5.411255 z"       style="fill:#000000;fill-opacity:1;stroke-width:0.43290043" />'+
+            '</g></svg>';
+
+            
+
+		/**
+		 *  Show and description details
+		 */
+		var detailsSelect = function()
+		{
+			var detaildesc = document.getElementById("detaildesc");
+			var moreText = document.getElementById("more");
+			moreText.value = (detaildesc.style.display == 'block') ? "more" : "less";
+			detaildesc.style.display = (detaildesc.style.display == 'block') ? 'none' : 'block';
+        };
+        
+        function showOrHideRoute(element){
+		 if (element.checked) {
+            groupLearnedStops[element.value].setVisibility(true);
+        }
+		 else {
+            groupLearnedStops[element.value].setVisibility(false);
+		 }
+		
+	}
+
+		</script>

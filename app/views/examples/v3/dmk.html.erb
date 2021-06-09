@@ -1,0 +1,815 @@
+<% content_for :title, "DMK Demo" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>DMK Demo</p>
+	<div id="geoInputs" ondragstart="drag(event)" >
+		<textarea id="addresses" rows="12" cols="75">
+DOC Kaas, Alteveerstraat 70, 7907 AB Hoogeveen, Nederland
+DOC Kaas, Buitenvaart 4001, 7905 TC Hoogeveen, Nederland
+DMK Deutsches Milchkontor GmbH, Molkereistraße 18, 26909 Neubörger, Deutschland
+DMK Deutsches Milchkontor GmbH, Industriestraße 17, 26188 Edewecht, Deutschland
+DMK Deutsches Milchkontor GmbH, Industriestraße 27, 27404 Zeven, Deutschland
+DMK Deutsches Milchkontor GmbH, Strückhauser Straße 64-68, 26939 Strückhausen, Deutschland
+DMK BABY GmbH, Henrich-Focke-Str. 4, 28199 Bremen, Deutschland
+DMK Deutsches Milchkontor GmbH, Flughafenallee 17, 28199 Bremen, Deutschland
+DMK Deutsches Milchkontor GmbH, Delmenhorster Str. 22, 28816 Seckenhausen, Deutschland
+DP Supply GmbH, Hauptstr. 2, 49832 Beesten, Deutschland
+DMK Deutsches Milchkontor GmbH, Raiffeisenstr. 1, 49124 Georgsmarienhütte, Deutschland
+</textarea>
+	</div>
+	<hr class="separator">
+	<div class="col-sm-4">
+		<input class="btn btn-default btn-sm" type="button" id="start" value="Calculate Matrix" onclick="calculateMtxRoute();">
+	</div>
+	<hr class="separator">
+    <div id="dvTable"></div>	
+	<table id="TABLE" border="1" style="border-collapse: collapse;" cellpadding="8"> </table>
+	<hr class="separator">
+	<div class="form-group">
+		<label for="day">Day:</label>
+		<select id="day_selector" class="form-control input-sm input-wide" onchange="updateIsolines()">
+			<option value="0">Sunday</option>
+			<option value="1">Monday</option>
+			<option value="2">Tuesday</option>
+			<option value="3" selected>Wednesday</option>
+			<option value="4">Thursday</option>
+			<option value="5">Friday</option>
+			<option value="6">Saturday</option>
+		</select>
+	</div>
+	
+	<div class="form-group">
+		<div id="time_output">Time of Day: 00:00</div>
+		<input type="range" id="time_slider" min="0" value="0" max="240" step="1" onchange="updateTimeOfDay()" onmousemove="updateTimeOfDay()">
+	</div>
+	
+	<div id="bar1" style="position:relative">
+		<div id="text1">travel time: 5 min</div>
+		<input type="range" id="travel_time_slider" min="0" value="100" max="400" step="1" onchange="updateTravelTimeValue(this.value)" onmousemove="updateTravelTimeValue(this.value)">
+	</div>
+	<hr class="separator">
+	<div class="col-sm-4">
+		<input class="btn btn-default btn-sm" type="button" id="start" value="Update Isolines" onclick="updateIsolines();">
+	</div>	
+</div>
+
+<style>
+.ctrl-panel 
+{
+	max-width: 650px;
+}
+</style>
+
+<div id="mapContainer" ondrop="drop(event)" ondragover="allowDrop(event)" ></div>
+
+<script type="text/javascript">
+	/*
+		author domschuette
+		(C) HERE 2017
+	*/
+
+	$("#addresses").focus(function() {
+		var $this = $(this);
+		$this.select();
+	});
+	
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	geocoder = platform.getGeocodingService(),
+	router = platform.getRoutingService(),
+    tableData = new Array(),
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	map = new H.Map(document.getElementById('mapContainer'), maptypes.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// to store the returned locations
+	var group = new H.map.Group();
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	// if the window is resized, we need to resize the viewport
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+
+	function geocode(addr) {
+		geocodingParameters = {
+			searchText : addr,
+			maxresults : 1
+		};
+
+		geocoder.geocode(
+			geocodingParameters,
+			onSuccess,
+			onError
+		);
+	}
+
+	function onSuccess(result) {
+		var position,
+		i = 0,
+		mapview,
+		topLeft,
+		bottomRight;
+
+		if(result && result.Response && result.Response.View && result.Response.View[0] && result.Response.View[0].Result)
+		{
+			var locations = result.Response.View[0].Result;
+			// Add a marker for each location found
+			for (;i < locations.length; i += 1) {
+				position = {
+					lat : locations[i].Location.DisplayPosition.Latitude,
+					lng : locations[i].Location.DisplayPosition.Longitude
+				};
+				topLeft = locations[0].Location.MapView.TopLeft;
+				bottomRight = locations[0].Location.MapView.BottomRight;
+				mapview = new H.geo.Rect(topLeft.Latitude, topLeft.Longitude, bottomRight.Latitude, bottomRight.Longitude);
+				marker = new H.map.Marker(position);
+				marker.label = i;
+				group.addObject(marker);
+			}
+			// Add the locations group to the map
+			map.addObject(group);
+			if(group.getChildCount() > 1)
+				map.setViewBounds(group.getBounds());
+			else
+				map.setViewBounds(mapview);
+		}
+	}
+
+	function onError(error) {
+		alert('Ooops!');
+	}
+	
+	function allowDrop(ev) {
+		ev.preventDefault();
+	}
+
+	function drag(ev) {
+		ev.dataTransfer.setData("text", ev.target.innerHTML);
+	}
+
+	function drop(ev) {
+		ev.preventDefault();
+		var data = ev.dataTransfer.getData("text").split("\n");
+		
+		for(var i = 0; i < data.length; i++)
+		{
+			var cur = data[i].substring(data[i].indexOf(",") + 1, data[i].length).trim()
+			geocode(cur);
+		}
+	}
+	
+    var allPolylines = new H.map.Group();
+    map.addObject(allPolylines);
+
+
+    var startWps = [
+        "52.95503,7.45509",
+		"52.7136799,6.5218299",
+		"53.2787099,9.30728",
+		"52.71723,6.47703",
+		"53.11675,7.99303",
+		"53.3217799,8.37838",
+		"53.05425,8.78308",
+		"53.05424,8.78177",
+		"52.43746,7.49689",
+		"52.99423,8.76921",
+		"52.21838,8.0713899"
+	];
+	var destinationWps = [
+        "52.95503,7.45509",
+		"52.7136799,6.5218299",
+		"53.2787099,9.30728",
+		"52.71723,6.47703",
+		"53.11675,7.99303",
+		"53.3217799,8.37838",
+		"53.05425,8.78308",
+		"53.05424,8.78177",
+		"52.43746,7.49689",
+		"52.99423,8.76921",
+		"52.21838,8.0713899"
+	];
+
+	pois = [
+		new H.geo.Point(52.95503,7.45509),
+		new H.geo.Point(52.7136799,6.5218299),
+		new H.geo.Point(53.2787099,9.30728),
+		new H.geo.Point(52.71723,6.47703),
+		new H.geo.Point(53.11675,7.99303),
+		new H.geo.Point(53.3217799,8.37838),
+		new H.geo.Point(53.05425,8.78308),
+		new H.geo.Point(53.05424,8.78177),
+		new H.geo.Point(52.43746,7.49689),
+		new H.geo.Point(52.99423,8.76921),
+		new H.geo.Point(52.21838,8.0713899)
+	];
+
+	function addColumOnClick(tableId){
+		var tableCols="#"+tableId+" td";
+		
+		 $(tableCols).hover(function() {
+        $(this).css('cursor','pointer');
+    });
+
+		
+		$(tableCols).click(function() {     
+
+			var column_num = parseInt( $(this).index() ) + 1;
+			var row_num = parseInt( $(this).parent().index() )+1;
+			console.log(column_num + ","+ row_num);
+			
+			$("#result").html( "Row_num =" + row_num + "  ,  Column_num ="+ column_num );
+            group.removeAll();
+            
+            var start = new H.geo.Point(startWps[row_num - 2].split(",")[0], startWps[row_num - 2].split(",")[1]),
+                dest = new H.geo.Point(destinationWps[column_num - 2].split(",")[0], destinationWps[column_num - 2].split(",")[1]);
+			calculateRouteDirect(start, dest);
+		});
+		
+	}
+  
+  var createSvgMarkerIconWithImg = function (line1, txtColor) {
+	var textColor = txtColor ? txtColor : "#000000";
+	var ua = navigator.userAgent.toLowerCase();
+	var svg =
+	'<svg style="margin-left: -21px;margin-top: -48px;" width="220" height="150" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"  >' +
+		'<g>' +
+		'<rect id="label-box" ry="3" rx="3" stroke="#000000" height="40" width="170" x="40" fill="#ffffff"/>' +
+		'<text id="label-text" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="10" font-weight="bold" stroke-width="0" fill="__textColor__" x="45" y="3">__line1__</text>'+
+		'<image width="50" height="50"   overflow="visible" xlink:href="data:image/png;base64,R0lGODlhfQDCAPQdAAELHgEMHgIMHw8LHRALHR8KGyAKGxEbLCEqOzE5SUBIVkFIV2Fnc3B1gHF2gYCFjoCFj4+UnJCVnZ+jqqCkq6+yuLCzuc/R1NDS1d/g4uDh4+/v8PDw8f///wAAAAAAACH5BAEAAB4ALAAAAAB9AMIAAAX+oCeOJCmcaKqubOu+cCyvZW2XxKzvfO+vhNvN8Csaj0eD0IRsOp+vpQdKrUKF1qy2aNt6v7MSEUwup5Qjs9o8yq3f3uAUTteK6vjqPc9v7vuAP3OBhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnCkICwoMEA4KCwidWgsSGB2trq+uFxEKqEcHHhUcsLu8HRsTHge1OwgTvcfIE6fDLwcQyNDIEMLMKs4b0dm9G9PVJwkZ2uK9GQnVDOPpvQzDEervuxGdBxXw9q8V1JgHF/f+rRf0VeL3r2DAS/UKFqxgSYLChxIooXv4kF2kBBQzmnt0IFzGhxkELnr2kSIERwf+sJV8uEEkIpIrH55chCDmx2WJKNjMSEHRgZ0fXQaaCLRiIgtFKfZEpDJpwQ2IFjiluOCQw6kKIxrqh9Xgoa4Pv4ItaKjm2H84AUk9668qobVs7bkNBDPuOweF6tpNN5PuXnh43/59N1ftYHWF+2A8PC4tIMbjxELOdojVZGgYrF6GprUQ3M28EgfSBXoXh6Oldy09RDR1K4uHfrp2JTSQztmrEZl17fiQ3st9fZLezKG2od+Mgy86oGGzhoubN0JqPRh2pKuDO09C+tfCpQOW42IwzjH82PGaDnAHa4H8JOxTtXOiDtQ6qgTNgWqQzszZ8I8cKOeNMyV14w0LCNz+VhAFvR1oDQMU/CcOBxQw4J6DKqhi3jGyiIZhD58s4MAoC5jy4Ykopqjiiiy26OKLMMYo44w01mgjIIPcqMMfOoaRY48x8AgkDCIMMGQMA6RxZBQjFLBkCwWU8CQLXUyJAhZWShEJAAIE0GUAYIYp5phenkAmmCpw2YIUIjjZiJpbwKlClGyOYOQiclYBQJ4nJFknloXwCcWeKfxp6KGIJiplFn4q6uijkNagRaORVmrpoYxeqummS2TK6aeg/ugEpaGWGqkVpJqqaqJjXLHqq47qAeush7bqBK24/klFrrwuYSsSvQZb5a3CFiuCG34Ya+wTyhqL7BHNLptstMHTEktttcBeiy202m7LRbe9Zgsur9yOm2u55uJqRLrkfsuuuoK8C68P8uL664710upDqvmaei+S/erLA78Bh/qsDAQXDOrACsN6MAwJN8zpDhFLrOnDLlRs8aX4bqxqxx6b6mPIIstA8qomn1wykSqv7ELLLq8Jc6ksz7wwkzbfLHPOn+LM86b/nvCzzjQMzWnQRvdMZdKbYsz0xEU/fenDUm8addWVHoy1pipszTEKGnuta59iWwp22WYLEDbaWqrNdqVuvw1p3HI/unbdeOetN6whAAA7" />'+
+		'</g>' +
+		'</svg>';
+
+
+	svg = svg.replace(/__line1__/g, line1);
+	svg = svg.replace(/__textColor__/g, textColor);
+
+	return new H.map.DomIcon(svg);
+};
+
+  
+  
+  var point = {
+	  lat: destinationWps[0].split(",")[0],
+	  lng: destinationWps[0].split(",")[1]
+	};
+	
+  var marker = new H.map.DomMarker(point);			
+	allPolylines.addObject(marker);
+
+
+	var Requests = {};
+
+	function calculateMtxRoute()
+	{
+		var urlRoutingReq = 
+					["https://matrix.route.api.here.com",
+					"/routing/7.2/calculatematrix.json",
+					"?app_id=",
+					app_id,
+					"&app_code=",
+					app_code,
+					"&start0=" + startWps[0],
+					"&start1=" + startWps[1],
+					"&start2=" + startWps[2],
+					"&start3=" + startWps[3],
+					"&start4=" + startWps[4],
+                    "&start5=" + startWps[5],
+                    "&start6=" + startWps[6],
+                    "&start7=" + startWps[7],
+					"&start8=" + startWps[8],
+					"&start9=" + startWps[9],
+					"&start10=" + startWps[10],
+					"&destination0=" + destinationWps[0],
+					"&destination1=" + destinationWps[1],
+					"&destination2=" + destinationWps[2],
+					"&destination3=" + destinationWps[3],
+					"&destination4=" + destinationWps[4],
+                    "&destination5=" + destinationWps[5],
+                    "&destination6=" + destinationWps[6],
+                    "&destination7=" + destinationWps[7],
+                    "&destination8=" + destinationWps[8],
+                    "&destination9=" + destinationWps[9],
+                    "&destination10=" + destinationWps[10],
+					"&mode=fastest;car;traffic:enabled",
+					"&matrixAttributes=ix,su",
+					"&summaryattributes=all",
+					"&jsoncallback=onMatrixCalculated"
+					].join("");
+
+			script = document.createElement("script");
+			script.src = urlRoutingReq;
+			document.body.appendChild(script);
+	}
+
+
+	var calculateRouteDirect = function(start, destination)
+	{
+		console.log(destination);
+		var urlRoutingReq = "https://route.api.here.com/routing/7.2/calculateroute.json?jsonAttributes=1&waypoint0="+
+			start.lat + "," + start.lng + "&waypoint1="+destination.lat+","+ destination.lng +"&departure=now&routeattributes=sh,lg&legattributes=li&linkattributes=nl,fc&mode=fastest;" +
+			"car;traffic:enabled&app_id=" + app_id + "&app_code=" + app_code+ "&jsoncallback=gotRoutingResponse";
+
+			line1 = start.lat + " " + start.lng;
+			line2="";
+		marker = new H.map.Marker(start,
+					{
+						icon: createIconMarker(line1, line2)
+					});
+
+					group.addObject(marker);
+					
+		line1 = destination.lat + " " + destination.lng;
+		line2="";
+		marker = new H.map.Marker(destination,
+					{
+						icon: createIconMarker(line1, line2)
+					});
+
+					group.addObject(marker);
+		
+		
+		script = document.createElement("script");
+		script.src = urlRoutingReq;
+		document.body.appendChild(script);
+	}
+    
+  function travelTimeToHMMSS(time)
+  {
+    var hours = Math.floor(time / 3600);
+    time -= hours * 3600;   
+
+    var minutes = Math.floor(time / 60);
+    time -= minutes * 60;
+
+    var seconds = parseInt(time % 60, 10);
+
+    return "" + (hours + ':' + (minutes < 10 ? '0' + minutes : minutes) + ':' + (seconds < 10 ? '0' + seconds : seconds));
+  }
+
+  function onMatrixCalculated(r){
+	if (r && r.response) {
+            	var table = document.getElementById("TABLE");
+                
+    
+	tableData.push(["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]);
+	
+    tableData.push(["1",r.response.matrixEntry[0].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[0].summary.travelTime),
+                        r.response.matrixEntry[1].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[1].summary.travelTime),
+                        r.response.matrixEntry[2].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[2].summary.travelTime),
+                        r.response.matrixEntry[3].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[3].summary.travelTime),
+                        r.response.matrixEntry[4].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[4].summary.travelTime),
+                        r.response.matrixEntry[5].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[5].summary.travelTime),
+                        r.response.matrixEntry[6].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[6].summary.travelTime),
+                        r.response.matrixEntry[7].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[7].summary.travelTime),
+						r.response.matrixEntry[8].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[8].summary.travelTime),
+						r.response.matrixEntry[9].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[9].summary.travelTime),
+						r.response.matrixEntry[10].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[10].summary.travelTime)
+                        ]);
+    tableData.push(["2",r.response.matrixEntry[11].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[11].summary.travelTime),
+                        r.response.matrixEntry[12].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[12].summary.travelTime),
+                        r.response.matrixEntry[13].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[13].summary.travelTime),
+                        r.response.matrixEntry[14].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[14].summary.travelTime),
+                        r.response.matrixEntry[15].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[15].summary.travelTime),
+                        r.response.matrixEntry[16].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[16].summary.travelTime),
+                        r.response.matrixEntry[17].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[17].summary.travelTime),
+                        r.response.matrixEntry[18].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[18].summary.travelTime),
+						r.response.matrixEntry[19].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[19].summary.travelTime),						
+                        r.response.matrixEntry[20].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[20].summary.travelTime),
+                        r.response.matrixEntry[21].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[21].summary.travelTime),
+                        ]);
+	tableData.push(["3",r.response.matrixEntry[22].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[22].summary.travelTime),
+                        r.response.matrixEntry[23].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[23].summary.travelTime),
+                        r.response.matrixEntry[24].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[24].summary.travelTime),
+                        r.response.matrixEntry[25].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[25].summary.travelTime),
+                        r.response.matrixEntry[26].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[26].summary.travelTime),
+                        r.response.matrixEntry[27].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[27].summary.travelTime),
+                        r.response.matrixEntry[28].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[28].summary.travelTime),
+                        r.response.matrixEntry[29].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[29].summary.travelTime),
+						r.response.matrixEntry[30].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[30].summary.travelTime),						
+                        r.response.matrixEntry[31].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[31].summary.travelTime),
+                        r.response.matrixEntry[32].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[32].summary.travelTime),
+                        ]);                      
+    tableData.push(["4",r.response.matrixEntry[33].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[33].summary.travelTime),
+                        r.response.matrixEntry[34].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[34].summary.travelTime),
+                        r.response.matrixEntry[35].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[35].summary.travelTime),
+                        r.response.matrixEntry[36].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[36].summary.travelTime),
+                        r.response.matrixEntry[37].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[37].summary.travelTime),
+                        r.response.matrixEntry[38].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[38].summary.travelTime),
+                        r.response.matrixEntry[39].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[39].summary.travelTime),
+                        r.response.matrixEntry[40].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[40].summary.travelTime),
+						r.response.matrixEntry[41].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[41].summary.travelTime),						
+                        r.response.matrixEntry[42].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[42].summary.travelTime),
+                        r.response.matrixEntry[43].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[43].summary.travelTime),
+                        ]);                        
+    tableData.push(["5",r.response.matrixEntry[44].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[44].summary.travelTime),
+                        r.response.matrixEntry[45].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[45].summary.travelTime),
+                        r.response.matrixEntry[46].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[46].summary.travelTime),
+                        r.response.matrixEntry[47].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[47].summary.travelTime),
+                        r.response.matrixEntry[48].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[48].summary.travelTime),
+                        r.response.matrixEntry[49].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[49].summary.travelTime),
+                        r.response.matrixEntry[50].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[50].summary.travelTime),
+                        r.response.matrixEntry[51].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[51].summary.travelTime),
+						r.response.matrixEntry[52].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[52].summary.travelTime),						
+                        r.response.matrixEntry[53].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[53].summary.travelTime),
+                        r.response.matrixEntry[54].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[54].summary.travelTime),
+                        ]);     	
+    tableData.push(["6",r.response.matrixEntry[55].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[55].summary.travelTime),
+                        r.response.matrixEntry[56].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[56].summary.travelTime),
+                        r.response.matrixEntry[57].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[57].summary.travelTime),
+                        r.response.matrixEntry[58].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[58].summary.travelTime),
+                        r.response.matrixEntry[59].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[59].summary.travelTime),
+                        r.response.matrixEntry[60].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[60].summary.travelTime),
+                        r.response.matrixEntry[61].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[61].summary.travelTime),
+                        r.response.matrixEntry[62].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[62].summary.travelTime),
+						r.response.matrixEntry[63].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[63].summary.travelTime),	
+                        r.response.matrixEntry[64].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[64].summary.travelTime),
+                        r.response.matrixEntry[65].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[65].summary.travelTime)
+                        ]);     	
+    tableData.push(["7",r.response.matrixEntry[66].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[66].summary.travelTime),
+                        r.response.matrixEntry[67].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[67].summary.travelTime),
+                        r.response.matrixEntry[68].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[68].summary.travelTime),
+                        r.response.matrixEntry[69].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[69].summary.travelTime),
+                        r.response.matrixEntry[70].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[70].summary.travelTime),
+                        r.response.matrixEntry[71].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[71].summary.travelTime),
+                        r.response.matrixEntry[72].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[72].summary.travelTime),
+                        r.response.matrixEntry[73].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[73].summary.travelTime),
+						r.response.matrixEntry[74].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[74].summary.travelTime),	
+                        r.response.matrixEntry[75].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[75].summary.travelTime),
+                        r.response.matrixEntry[76].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[76].summary.travelTime)
+                        ]);     	
+    tableData.push(["8",r.response.matrixEntry[77].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[77].summary.travelTime),
+                        r.response.matrixEntry[78].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[78].summary.travelTime),
+                        r.response.matrixEntry[79].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[79].summary.travelTime),
+                        r.response.matrixEntry[80].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[80].summary.travelTime),
+                        r.response.matrixEntry[81].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[81].summary.travelTime),
+                        r.response.matrixEntry[82].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[82].summary.travelTime),
+                        r.response.matrixEntry[83].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[83].summary.travelTime),
+                        r.response.matrixEntry[84].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[84].summary.travelTime),
+						r.response.matrixEntry[85].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[85].summary.travelTime),	
+                        r.response.matrixEntry[86].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[86].summary.travelTime),
+                        r.response.matrixEntry[87].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[87].summary.travelTime)
+                        ]);   
+					
+    tableData.push(["9",r.response.matrixEntry[88].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[88].summary.travelTime),
+                        r.response.matrixEntry[89].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[89].summary.travelTime),
+                        r.response.matrixEntry[90].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[90].summary.travelTime),
+                        r.response.matrixEntry[91].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[91].summary.travelTime),
+                        r.response.matrixEntry[92].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[92].summary.travelTime),
+                        r.response.matrixEntry[93].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[93].summary.travelTime),
+                        r.response.matrixEntry[94].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[94].summary.travelTime),
+                        r.response.matrixEntry[95].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[95].summary.travelTime),
+						r.response.matrixEntry[96].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[96].summary.travelTime),	
+                        r.response.matrixEntry[97].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[97].summary.travelTime),
+                        r.response.matrixEntry[98].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[98].summary.travelTime)
+                        ]);     
+    tableData.push(["10",r.response.matrixEntry[99].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[99].summary.travelTime),
+                        r.response.matrixEntry[100].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[100].summary.travelTime),
+                        r.response.matrixEntry[101].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[101].summary.travelTime),
+                        r.response.matrixEntry[102].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[102].summary.travelTime),
+                        r.response.matrixEntry[103].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[103].summary.travelTime),
+                        r.response.matrixEntry[104].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[104].summary.travelTime),
+                        r.response.matrixEntry[105].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[105].summary.travelTime),
+                        r.response.matrixEntry[106].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[106].summary.travelTime),
+						r.response.matrixEntry[107].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[107].summary.travelTime),	
+                        r.response.matrixEntry[108].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[108].summary.travelTime),
+                        r.response.matrixEntry[109].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[109].summary.travelTime)
+                        ]);     	
+    tableData.push(["11",r.response.matrixEntry[110].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[110].summary.travelTime),
+                        r.response.matrixEntry[111].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[111].summary.travelTime),
+                        r.response.matrixEntry[112].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[112].summary.travelTime),
+                        r.response.matrixEntry[113].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[113].summary.travelTime),
+                        r.response.matrixEntry[114].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[114].summary.travelTime),
+                        r.response.matrixEntry[115].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[115].summary.travelTime),
+                        r.response.matrixEntry[116].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[116].summary.travelTime),
+                        r.response.matrixEntry[117].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[117].summary.travelTime),
+						r.response.matrixEntry[118].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[118].summary.travelTime),	
+                        r.response.matrixEntry[119].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[119].summary.travelTime),
+                        r.response.matrixEntry[120].summary.distance + "m" + "</br>" + travelTimeToHMMSS(r.response.matrixEntry[120].summary.travelTime)
+                        ]);     	
+
+						
+	table.innerHTML = "";
+	var columnCount = tableData[0].length;
+	
+	var row = table.insertRow(-1);
+    for (var i = 0; i < columnCount; i++) {
+        var headerCell = document.createElement("TH");
+        headerCell.innerHTML = tableData[0][i];
+        row.appendChild(headerCell);
+    }
+ 
+    //Add the data rows.
+    for (var i = 1; i < tableData.length; i++) {
+        row = table.insertRow(-1);
+        for (var j = 0; j < columnCount; j++) {
+            var cell = row.insertCell(-1);
+            cell.innerHTML = tableData[i][j];
+       		
+        }
+    }
+
+	var dvTable = document.getElementById("dvTable");
+    dvTable.innerHTML = "";
+    dvTable.appendChild(table);
+	
+	addColumOnClick("TABLE");
+	tableData = [];
+	
+		  var that = this,
+			l = 0,
+			results = {},
+			response = r.response.matrixEntry,
+			request = r.request,
+			metric = "km",
+			params = {
+			};
+	
+	
+		  response.sort(function(a1,a2){
+			var
+			  summary1 = a1.summary,
+			  summary2 = a2.summary,
+			  dTravelTime = summary1.travelTime - summary2.travelTime,
+			  dCostFactor = summary1.costFactor - summary2.costFactor;
+			  
+			  if(dTravelTime == 0){
+				return dCostFactor;
+			  }else{
+				return dTravelTime;
+			  }
+		  });
+		  
+		  for(var i=0,lR=response.length; i<lR; i++){
+			  var item = response[i],
+	
+				summary = item.summary,
+				t = r.response.matrixEntry[0].summary.travelTime,
+				d = summary.distance/1000,
+				c = summary.costFactor,
+				//s = " " + Math.floor(t /60) + " min" + " <br /> " + d + " " + metric + " <br /> " + c + " cost factor";
+				s = "<tspan x='50' dy='1.0em'>" + Math.floor(t /60) + " min" + "</tspan><tspan x='50' dy='1.0em'>" + d + " " + metric + "</tspan><tspan x='50' dy='1.0em'>" + c + " cost factor</tspan>";
+		
+			  if(t==0 && d==0){s = "";}
+			  
+			  
+			  if(s !== ""){
+				var currStart = startWps[item.startIndex];
+				var point = new H.geo.Point(currStart.split(",")[0], currStart.split(",")[1]);
+				
+				var nameFunc = "onRouteCalculated"+i;
+				Requests[nameFunc] = parseRoute.bind({
+				  text: s,
+				  rIdx:i
+				});
+				calculateSimpleRoute(currStart, destinationWps[item.destinationIndex], nameFunc);
+			  }
+		  }
+	
+	    }
+	
+	}
+
+	// parse the routing response
+	var gotRoutingResponse = function (respJsonRouteObj)
+	{
+		if (respJsonRouteObj.error != undefined)
+		{
+			alert (respJsonRouteObj.error);
+			feedbackTxt.innerHTML = respJsonRouteObj.error;
+			return;
+		}
+
+		var strip = new H.geo.Strip(),
+		shape = respJsonRouteObj.response.route[0].shape,
+		i,
+		l = shape.length;
+
+		for(i = 0; i < l; i++)
+		{
+			strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+		}
+
+		var polyline = new H.map.Polyline(strip,
+			{
+				style:
+				{
+					lineWidth: 5,
+					strokeColor: "rgb(255,0,0)",
+					lineJoin: "round"
+				}
+			});
+           
+           group.setZIndex(10);
+
+			group.addObject(polyline);
+
+			
+	}
+
+	function parseRoute(result){
+	  //console.log("onRouteCalculated:: ", this, result);
+
+	  var strip = new H.geo.Strip(),
+		route = result.response.route[0],
+	  shape = route.shape,
+	  i,
+	  l = shape.length;
+
+	  for(i = 0; i < l; i++)
+	  {
+		  strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+	  }
+	  var polyline = new H.map.Polyline(strip,
+		  {
+			  style:
+			  {
+				  lineWidth: 1,
+				  strokeColor: "rgba(0, 0, 255, 0.3)"
+			  }
+		  });
+          
+	  
+		  
+	var point = {
+	  lat: route.waypoint[0].mappedPosition.latitude,
+	  lng: route.waypoint[0].mappedPosition.longitude
+	};
+	
+  var marker = new H.map.Marker(point);			
+	allPolylines.addObject(marker);
+		  allPolylines.addObject(polyline);
+		   map.setViewBounds(allPolylines.getBounds(), true);
+			  
+	}
+
+	function calculateSimpleRoute(wp0, wp1, nameFunc)
+	{
+		var urlRoutingReq = 
+					["https://route.api.here.com",
+					"/routing/7.2/calculateroute.json",
+					"?",
+					  [
+						["app_id",app_id].join("="),
+						["app_code",app_code].join("="),
+						["waypoint0",wp0].join("="),
+						["waypoint1",wp1].join("="),
+						["mode","fastest;car;traffic:enabled"].join("="),
+						["representation","display"].join("="),
+						["jsoncallback","Requests."+nameFunc].join("=")
+					  ].join("&")
+					].join("");
+
+			script = document.createElement("script");
+			script.src = urlRoutingReq;
+			document.body.appendChild(script);
+	}
+
+	//--- Helper - Create Start / Destination marker
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_Line;
+
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line1);
+		svgMarker = svgMarker.replace(/__width__/g, line1.length * 5 + 20);
+		svgMarker = svgMarker.replace(/__widthAll__/g, line1.length * 4 + 200);
+
+		return new H.map.Icon(svgMarker, {
+			anchor: new H.math.Point(24, 57)
+		});
+	}
+
+	var getIsoline = function(coord, index)
+	{
+		var day_selector = document.getElementById("day_selector"),
+			td = new Date(),
+			t = (Math.ceil(time_slider.value / 240 * 96) / 4),
+			traveltime = document.getElementById("travel_time_slider").value * 60,
+			hour = Math.floor(t),
+			h = t.toFixed(2),
+			minutes = (h % 1) * 60,
+			date = new Date(td.getFullYear(),td.getMonth(),td.getDate()+(parseInt(day_selector.selectedIndex)-td.getDay() + 7));
+		date.setHours(hour);
+		date.setMinutes(minutes);
+		
+		var departure = date.toISOString();
+
+		
+		var worker = new Worker('/assets/isoline_worker.js');
+		worker.addEventListener('message', receiveMessage);
+
+		// set the init parameters
+		var params = new Object();
+		params.coord = coord;
+		params.traveltime = traveltime;
+		params.app_id = app_id;
+		params.app_code = app_code;
+		params.departure = departure;
+		params.index = index;
+
+		worker.postMessage(params);
+		
+	}
+
+	var receiveMessage = function(response)
+	{
+		if(response && response.data && response.data.response && response.data.response.isoline)
+		{
+			var id = response.data.response.metaInfo.requestId
+			shape = response.data.response.isoline[0].component[0].shape,
+			strip = new H.geo.Strip();
+
+			for (var i = 0; i < shape.length; i++)
+			{
+				var split = shape[i].trim().split(",");
+				if(split.length === 2){
+					var lat = parseFloat(split[0]);
+					var lon = parseFloat(split[1]);
+					strip.pushLatLngAlt( lat, lon, 0);
+				}
+			}
+
+			shp = new H.map.Polygon(strip,
+			{
+				style: { lineWidth: 5, strokeColor: getRandomColor()},
+			}
+			);
+			group.addObject(shp);
+		}
+		map.addObject(group);
+	}
+
+	var updateTravelTimeValue = function (value)
+	{
+		var text = document.getElementById("text1");
+		sliderPosition = 0;
+		text.innerHTML = "travel time: " + value +" min";
+	};
+	
+	var updateTimeOfDay = function ()
+	{
+		var i = day_selector.options[day_selector.selectedIndex].value;
+		var weekday = parseInt(i) * 24 * 60 * 60;
+
+		var t = (Math.ceil(time_slider.value / 240 * 96) / 4);
+		var hour = Math.floor(t);
+		var h = t.toFixed(2);
+		var minutes = (h % 1) * 60;
+
+		// add leading zero to minutes string
+		if(hour < 10)
+			hour = "0" + hour;
+
+		// format minutes from 0 to 00
+		if(minutes === 0)
+			minutes = "00";
+
+		time = hour + ":" + minutes + ":00";
+		time_output.innerHTML = "Time of Day: " + hour + ":" + minutes;
+	}
+	
+	function getRandomColor() {
+		var letters = '0123456789ABCDEF'.split('');
+		var color = '#';
+		for (var i = 0; i < 6; i++) {
+			color += letters[Math.floor(Math.random() * 16)];
+		}
+		return color;
+	}
+	
+	var updateIsolines = function()
+	{
+		group.removeAll();
+		for(var i = 0; i < pois.length; i++)
+		{
+			getIsoline(pois[i], i);
+		}
+	}
+
+</script>

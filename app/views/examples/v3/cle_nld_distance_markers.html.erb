@@ -1,0 +1,266 @@
+<% content_for :title, "Dutch Distance Markers via CLE" %>		
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<h5>Dutch Distance Markers via CLE</h5>
+	<div id="notecontent">
+		<table>
+			<tr>
+				<td>
+					<input type='text' id='searchTerm' style="width:230px;" value='' onkeyup="search(document.getElementById('searchTerm').value);"></input>
+				</td>
+			</tr>
+			<tr>
+				<table id="results" style="display: none">
+				</table>
+			</tr>
+		</table>
+		<table border="0">
+			<tr>
+				<td><input type="checkbox" id="showAll" disabled onchange='getAllPointsInView();'>show all addresses in current view (available at Level 15)</td>
+			</tr>
+		</table>
+	</div>
+</div>
+
+<div id="mapContainer"></div>
+		
+<script type="text/javascript">
+	/* 
+		author domschuette
+		(C) HERE 2016
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	var mapContainer = document.getElementById('mapContainer');
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+
+	layerId = 934,
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	map = new H.Map(mapContainer, defaultLayers.normal.map, {
+		center: new H.geo.Point(52, 11),
+		zoom: 6,
+		pixelRatio: hidpi ? 2 : 1
+	}),
+
+	// Enable the map event system
+	mapevents = new H.mapevents.MapEvents(map),
+			
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	behavior = new H.mapevents.Behavior(mapevents),
+
+	// Enable the default UI
+	ui = H.ui.UI.createDefault(map, defaultLayers),
+
+	matchgroup = new H.map.Group(),
+	allgroup = new H.map.Group(),
+	currentBubble;
+
+	map.addObject(matchgroup);
+	map.addObject(allgroup);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// add event listener to mapviewchangeend to get the new zoom
+	map.addEventListener('mapviewchangeend', function()
+	{
+		if(map.getZoom() >= 15)
+		{
+			document.getElementById('showAll').disabled = false;
+		}
+		else
+		{
+			document.getElementById('showAll').disabled = true;
+		}
+	});
+
+	function checkInput(term)
+	{
+		return (term.length >= 4)
+	};
+
+	function search(term)
+	{
+		if(checkInput(term))
+		{
+			matchgroup.removeAll();
+			var regexp = /^(\d{3,4})\s?(\D{0,2})\s?[,.]?\s?(\d*\D*)/gi;
+			var match = regexp.exec(term);
+			var query = term, 
+				searchQuery = "like*";
+			if(match)
+			{
+				var zip = match[1];
+				var ext = match[2];
+				var hNo = match[3];
+				
+				if(hNo)
+					searchQuery = "X";
+				
+				query = zip + (ext != "" ? ext : "") + (hNo != "" ? ("%20" + hNo) : "");
+			}
+
+			var url = ["https://customlocation.api.here.com/",
+					   "v1/",
+					   "search/",
+					   "attribute?",
+					   "layerId=",
+					   layerId,
+					   "&",
+					   "query=",
+					   "[" + searchQuery + "]" + "/name1/",
+					   query,
+					   "&",
+					   "app_id=",
+					   "vIbeJ0XTnW9tAbZS9Y3F", 
+					   "&",
+					   "app_code=",
+					   "jL4Jz34Y7yy6bs_GnxDw8w",
+					   // "&limit=2500",
+					   "&jsoncallback=matchcallback"].join("");
+				
+			script = document.createElement("script");
+			script.src = url;
+			document.body.appendChild(script);
+		}
+	}
+
+	var matchcallback = function(data)
+	{
+		clecallback(data, '#ffffff', matchgroup);
+	}
+
+	var clecallback = function(data, color, group)
+	{
+		if(matchgroup.getChildCount() > 0)
+			map.removeObject(matchgroup);
+		var locations = null;
+		if(data && data.locations || data && data.bblocations)
+		{
+			locations = data.locations ? data.locations : data.bblocations;
+		}
+			
+		if(locations)
+		{
+			var i = 0,
+				l = locations.length;
+					
+			for(;i < l; i++)
+			{
+				var html = "";
+				var coordinate = new H.geo.Point(locations[i].routeCoordinate.latitude, locations[i].routeCoordinate.longitude);
+				
+				var m = 0,
+					n = locations[i].customAttributes.length,
+					base_name,
+					name1 = locations[i].name1;
+				
+				html = '<table>';
+				
+				for(;m < n; m++)
+				{
+					html += '<tr>';
+					html += '<td>';
+					html += locations[i].customAttributes[m].name;
+					html += '</td>';
+					html += '<td>';
+					html += locations[i].customAttributes[m].value;
+					html += '</td>';
+					html += '</tr>';
+					// html += locations[i].customAttributes[m].name + " " + locations[i].customAttributes[m].value + '</br>';
+					if(locations[i].customAttributes[m].name === 'BASE_NAME')
+						base_name = locations[i].customAttributes[m].value;
+				}
+				html += '</table>'
+
+				var marker = new H.map.Marker(coordinate, 
+				{
+					icon: createIcon(name1, base_name, color)
+				});
+				marker.$html = html;
+
+				marker.addEventListener("pointerdown", function(e)
+				{
+					if(currentBubble)
+					{
+						ui.removeBubble(currentBubble);
+						currentBubble = null;
+					}
+					currentBubble = new H.ui.InfoBubble(e.target.getPosition(), { content: e.target.$html });
+					ui.addBubble(currentBubble);
+				});
+				group.addObject(marker);
+			}
+			if(group.getChildCount() > 0)
+				map.setViewBounds(group.getBounds());
+			if(matchgroup.getChildCount() > 0)
+				map.addObject(matchgroup);
+		}
+	}
+
+		createIcon = function (line1, line2, color) {
+			var div = document.createElement("div");
+			var svgMarker = svgMarkerImage_Line;
+
+			svgMarker = svgMarker.replace('#ffffff', color);
+			svgMarker = svgMarker.replace(/__line1__/g, line1);
+			svgMarker = svgMarker.replace(/__line2__/g, line2);
+			svgMarker = svgMarker.replace(/__width__/g, line1.length  * 4 + 57);
+			svgMarker = svgMarker.replace(/__widthAll__/g, line1.length  * 4 + 120);
+			div.innerHTML = svgMarker;
+
+			return new H.map.Icon(svgMarker, {
+				anchor: new H.math.Point(24, 57)
+			});;
+		};
+
+		getAllPointsInView = function()
+		{
+			allgroup.removeAll();
+			if(document.getElementById('showAll').checked)
+			{
+				var bounds = map.getViewBounds();
+				
+				var bbox = bounds.getTop() + "," + bounds.getLeft() + ";" + bounds.getBottom() + "," + bounds.getRight();
+				
+				var url = ["https://customlocation.api.here.com/",
+						   "v1/",
+						   "search/",
+						   "bbox?",
+						   "layerId=",
+						   layerId,
+						   "&bbox=",
+						   bbox,
+						   "&",
+						   "app_id=",
+						   "vIbeJ0XTnW9tAbZS9Y3F", 
+						   "&",
+						   "app_code=",
+						   "jL4Jz34Y7yy6bs_GnxDw8w",
+						   "&jsoncallback=allcallback"].join("");
+					
+					script = document.createElement("script");
+					script.src = url;
+					document.body.appendChild(script);
+			}
+			else
+			{
+				allgroup.removeAll();
+			}
+		}
+		</script>
+	</body>
+</html>

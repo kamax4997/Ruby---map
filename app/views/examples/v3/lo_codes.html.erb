@@ -1,0 +1,243 @@
+<% content_for :title, "UN Location Codes Demo from CLE" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>UN Location Codes Demo from CLE</p>
+	<table>
+		<tr>
+			<td><h3>Search</h3></td>
+			<td>
+				<input type='text' id='searchTerm' style="width:230px;" value='' onkeyup="if (event.keyCode == 13) search(document.getElementById('searchTerm').value.toUpperCase());"></input>
+			</td>
+		</tr>
+		<tr>
+			<table id="results" style="display: none">
+			</table>
+		</tr>
+	</table>
+	<table border="0">
+		<tr>
+			<td><input type="checkbox" id="showAll" onchange='getAllPointsInView();'>show all Location Codes in current view</td>
+		</tr>
+	</table>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+		/* 
+			author domschuette
+			(C) HERE 2018
+		*/
+
+		// Check whether the environment should use hi-res maps
+		var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		var mapContainer = document.getElementById('mapContainer');
+		
+		var secure = (location.protocol === 'https:') ? true : false;
+		
+		// Create a platform object to communicate with the HERE REST APIs
+		var platform = new H.service.Platform({
+				useHTTPS: secure,
+				app_id: app_id,
+				app_code: app_code
+			}),
+			maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+			
+			layerId_cle2 = "LOCODES",
+
+			// Instantiate a map in the 'map' div, set the base map to normal
+			map = new H.Map(mapContainer, maptypes.normal.map, {
+				center: center,
+				zoom: zoom,
+				pixelRatio: hidpi ? 2 : 1
+			}),
+			
+			// Enable the map event system
+			mapevents = new H.mapevents.MapEvents(map),
+			
+			// Enable map interaction (pan, zoom, pinch-to-zoom)
+			behavior = new H.mapevents.Behavior(mapevents),
+
+			// Enable the default UI
+			ui = H.ui.UI.createDefault(map, maptypes),
+			
+			matchgroup = new H.map.Group(),
+			allgroup = new H.map.Group(),
+			currentBubble;
+			
+		map.addObject(matchgroup);
+		map.addObject(allgroup);
+					
+		window.addEventListener('resize', function() { map.getViewPort().resize(); });
+		
+		map.addEventListener('mapviewchangeend', function()
+		{
+			getAllPointsInView();
+		});
+		
+		function search(term)
+		{
+			matchgroup.removeAll();
+			var regexp = /^(\D{0,2})\s?(\D{0,3})/gi;
+			var match = regexp.exec(term);
+			var query = term;
+			
+			if(match)
+			{
+				var country = match[1];
+				var name = match[2];
+				
+				query = 'COUNTRY1.startsWith("' + country + '")' + '%26%26' + 'LOCATION.startsWith("' + name + '")';
+			}
+			else
+			{
+				query = 'LOCATION.startsWith("' + term + '")';
+			}
+			
+			var url = ["https://cle.api.here.com/",
+					   "2/",
+					   "search/",
+					   "all.json?",
+					   "layer_id=",
+					   layerId_cle2,
+					   "&",
+					   "filter=",
+					   query,
+					   "&",
+					   "app_id=",
+					   app_id,
+					   "&",
+					   "app_code=",
+					   app_code,
+					   "&callback=matchcallback"].join("")
+			
+			script = document.createElement("script");
+			script.src = url;
+			document.body.appendChild(script);
+		}
+		
+		var matchcallback = function(data)
+		{
+			clecallback(data, '#ffffff', matchgroup);
+		}
+		
+		var allcallback = function(data)
+		{
+			clecallback(data, '#E0E0E0', allgroup);
+		}
+		
+		var clecallback = function(data, color, group)
+		{
+			if(matchgroup.getChildCount() > 0)
+				map.removeObject(matchgroup);
+			
+			if(data && data.geometries)
+			{
+				var i = 0,
+					l = data.geometries.length;
+					
+				for(;i < l; i++)
+				{
+					var html = "",
+						coordinate = new H.geo.Point(parseFloat(data.geometries[i].geometry.split(" ")[1].match(/[+-]?\d+(\.\d+)?/)), parseFloat(data.geometries[i].geometry.split(" ")[0].match(/[+-]?\d+(\.\d+)?/))),
+						country = "", 
+						code = "",
+						name = "",
+						wkt = data.geometries[i].geometry;
+					
+					if(data.geometries[i].attributes)
+					{
+						if(data.geometries[i].attributes['COUNTRY1'] !== undefined)
+							country = data.geometries[i].attributes['COUNTRY1'];
+							
+						if(data.geometries[i].attributes['LOCATION'] !== undefined)
+							code = data.geometries[i].attributes['LOCATION'];
+							
+						if(data.geometries[i].attributes['NAME1'] !== undefined)
+							name = data.geometries[i].attributes['NAME1'];
+					}
+
+					var marker = new H.map.Marker(coordinate, 
+					{
+						icon: createIcon(country + " " + code , name, color)
+					});
+					marker.$html = wkt;
+					
+					marker.addEventListener("pointerdown", function(e)
+					{
+						if(currentBubble)
+						{
+							ui.removeBubble(currentBubble);
+							currentBubble = null;
+						}
+						currentBubble = new H.ui.InfoBubble(e.target.getPosition(), { content: e.target.$html });
+						ui.addBubble(currentBubble);
+					});
+					group.addObject(marker);
+				}
+				if(group.getChildCount() > 0 && group != allgroup)
+				{
+					map.setViewBounds(group.getBounds());
+					map.setZoom(map.getZoom() - 4)
+				}
+				if(matchgroup.getChildCount() > 0)
+				{
+					map.addObject(matchgroup);
+				}
+			}
+		}
+		
+		createIcon = function (line1, line2, color) {
+			var div = document.createElement("div");
+			var svgMarker = svgMarkerImage_Line;
+			if(line2.length > 17)
+				line2 = line2.substring(0, 14) + "..."
+
+			svgMarker = svgMarker.replace('#ffffff', color);
+			svgMarker = svgMarker.replace(/__line1__/g, line1);
+			svgMarker = svgMarker.replace(/__line2__/g, line2);
+			svgMarker = svgMarker.replace(/__width__/g, line1.length  * 4 + 57);
+			svgMarker = svgMarker.replace(/__widthAll__/g, line1.length  * 4 + 120);
+			div.innerHTML = svgMarker;
+
+			return new H.map.Icon(svgMarker, {
+				anchor: new H.math.Point(30, 57)
+			});;
+		};
+		
+		getAllPointsInView = function()
+		{
+			allgroup.removeAll();
+			if(document.getElementById('showAll').checked)
+			{
+				var bounds = map.getViewBounds();
+				
+				var bbox = bounds.getTop() + "," + bounds.getLeft() + ";" + bounds.getBottom() + "," + bounds.getRight();
+				
+				var url = ["https://cle.api.here.com/",
+						   "2/",
+						   "search/",
+						   "bbox.json?",
+						   "layer_id=",
+						   layerId_cle2,
+						   "&bbox=",
+						   bbox,
+						   "&",
+						   "app_id=",
+						   app_id, 
+						   "&",
+						   "app_code=",
+						   app_code,
+						   "&callback=allcallback"].join("")
+				script = document.createElement("script");
+				script.src = url;
+				document.body.appendChild(script);
+			}
+			else
+			{
+				allgroup.removeAll();
+			}
+		}
+</script>

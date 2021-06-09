@@ -1,0 +1,16 @@
+<%= javascript_include_tag "jszip.min.js" %>
+<% content_for :title, "Hamburg Traffic" %>
+ 
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="0; url=https://tcs.ext.here.com/demo/traffic_hamburg">
+    <script type="text/javascript">
+		window.location.href = "https://tcs.ext.here.com/demo/traffic_hamburg"
+	</script>
+    <title>Page Redirection</title>
+</head>
+<div class="panel" style="height: 90px;">
+	<p style="color: black;position: absolute;left: 40px;top: 110px;">If you are not redirected automatically, please follow this link 
+		<a style="font-weight: bold;" href='https://tcs.ext.here.com/demo/traffic_hamburg'>https://tcs.ext.here.com/demo/traffic_hamburg</a>.
+	</p>
+</div>

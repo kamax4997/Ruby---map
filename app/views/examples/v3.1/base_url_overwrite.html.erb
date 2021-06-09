@@ -1,0 +1,62 @@
+<% content_for :title, "Using Proxy Urls" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+      /**
+       * (C) HERE 2020
+       */
+
+      // Check whether the environment should use hi-res maps.
+      var hidpi = ("devicePixelRatio" in window && devicePixelRatio > 1);
+
+      // check if the site was loaded via secure connection
+      var secure = (location.protocol === 'https:') ? true : false;
+
+	 // the proxy just forwards to the url being passed as the param 'url='
+ 	 var proxy = "https://tcs.ext.here.com/proxy?";
+
+		const domainConfig = {};
+		const getoptions = {
+		  apikey: api_key
+		};
+
+		// Vectore Tile service
+		domainConfig[H.service.omv.Service.CONFIG_KEY] = {
+		  baseUrl: new H.service.Url(
+			'https', 'tcs.ext.here.com/proxy?url=https://vector.hereapi.com', 'v2/vectortiles/base/mc', getoptions
+		  ),
+		  subdomain: null // optional, if subdomain is not needed null must be passed
+		};
+		
+		// Create an instamce of the platform
+		var platform = new H.service.Platform({
+		  apikey: api_key,
+		  servicesConfig: domainConfig
+		});
+		maptypes = platform.createDefaultLayers();
+		
+		// Instantiate a map in the 'map' div, set the base map to normal
+		var map = new H.Map(document.getElementById('mapContainer'), maptypes.vector.normal.map, {
+			center: new H.geo.Point(41.88449, -87.6387699),
+			zoom: zoom,
+			pixelRatio: hidpi ? 2 : 1
+		});
+
+		// Enable the map event system
+		var mapevents = new H.mapevents.MapEvents(map);
+
+		// Enable map interaction (pan, zoom, pinch-to-zoom)
+		var behavior = new H.mapevents.Behavior(mapevents);
+
+		// Enable the default UI
+		var ui = H.ui.UI.createDefault(map, maptypes);
+
+		window.addEventListener('resize', function() { map.getViewPort().resize(); });
+			
+</script>

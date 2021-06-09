@@ -1,0 +1,500 @@
+<% content_for :title, "Full NLD postal code / point-address demo CLE" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>Full postal code / point-address demo CLE</p>
+	<table>
+		<tr>
+			<td><h3>Search</h3></td>
+			<td>
+				<input type='text' id='searchTerm' style="width:230px;" value='' onkeyup="search(document.getElementById('searchTerm').value);"> only returns the first 200 while entering 4 digits...</input>
+			</td>
+		</tr>
+		<tr>
+			<table id="results" style="display: none">
+			</table>
+		</tr>
+	</table>
+	<table border="0">
+		<tr>
+			<td><input type="checkbox" id="showAll" disabled onchange='getAllPointsInView();'>show all addresses in current view (available at Level 15)</td>
+		</tr>
+		<!--tr>
+			<td><input type="checkbox" id="showPostalBoundaries" disabled onchange='showPostalBoundaries();'>show Postal Boundaries</td>
+		</tr-->	
+		<!--tr>
+			<td>
+				<input id="cle1" type="radio" name="service" value="CLE1" onchange='onChangeService();' checked> <label for="cle1">CLE1</label><br/>
+				<input  id="cle2" type="radio" name="service" value="CLE2" onchange='onChangeService();'> <label for="cle2">CLE2</label>
+			</td>
+		</tr-->
+	</table>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+		/* 
+			author domschuette
+			(C) HERE 2016
+		*/
+
+
+		// check if the site was loaded via secure connection
+		var secure = (location.protocol === 'https:') ? true : false;
+		
+		// Create a platform object to communicate with the HERE REST APIs
+		var platform = new H.service.Platform({
+			apikey: api_key,
+			useHTTPS: secure
+		}),
+		defaultLayers = platform.createDefaultLayers();
+
+		// Instantiate a map in the 'map' div, set the base map to normal
+		var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.vector.normal.map, {
+			center: new H.geo.Point(52, 11),
+			zoom: 6,
+			pixelRatio: window.devicePixelRatio || 1
+		});
+
+		// Enable the map event system
+		var mapevents = new H.mapevents.MapEvents(map);
+
+		// Enable map interaction (pan, zoom, pinch-to-zoom)
+		var behavior = new H.mapevents.Behavior(mapevents);
+
+		// Enable the default UI
+		var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+		window.addEventListener('resize', function() { map.getViewPort().resize(); });
+					
+		var layerId_cle1 = 885,
+			layerId_cle2 = "ORTEC_NLD",
+
+			geocoder = platform.getGeocodingService(),
+			
+			matchgroup = new H.map.Group(),
+			allgroup = new H.map.Group(),
+			polygongroup = new H.map.Group(),
+			currentBubble;
+			
+		map.addObject(matchgroup);
+		map.addObject(allgroup);
+		map.addObject(polygongroup);
+			
+		var wasSearch = false;
+		
+		// add event listener to mapviewchangeend to get the new zoom
+		map.addEventListener('mapviewchangeend', function()
+		{
+			if(map.getZoom() >= 15)
+			{
+				document.getElementById('showAll').disabled = false;
+			}
+			else
+			{
+				document.getElementById('showAll').disabled = true;
+			}
+			/*
+			if(map.getZoom() >= 13)
+			{
+				document.getElementById('showPostalBoundaries').disabled = false;
+			}
+			else
+			{
+				document.getElementById('showPostalBoundaries').disabled = true;
+			}
+			*/
+		});
+			
+		function checkInput(term)
+		{
+			return (term.length >= 4)				
+		};
+		
+		function search(term)
+		{
+			if(checkInput(term))
+			{
+				wasSearch = true;
+				matchgroup.removeAll();
+				var regexp = /^(\d{3,4})\s?(\D{0,2})\s?[,.]?\s?(\d*\D*\d*)/gi;
+				var match = regexp.exec(term);
+				var query = term, 
+					searchQuery = "like*";
+				if(match)
+				{
+					var zip = match[1];
+					var ext = match[2];
+					var hNo = match[3];
+					
+					if(hNo)
+						searchQuery = "X";
+					
+					query = zip + (ext != "" ? ext : "") + (hNo != "" ? ("%20" + hNo) : "");
+				}
+				
+				geocoder.geocode(
+					{ 
+						searchText: term
+					},
+					function(result) {
+						
+						if(result && result.Response && result.Response.View && result.Response.View[0])
+						{
+							var i = 0, 
+								l = result.Response.View[0].Result.length;
+								
+							for(; i < l; i++)
+							{
+								var pos = result.Response.View[0].Result[i].Location.DisplayPosition,
+									point = new H.geo.Point(pos.Latitude, pos.Longitude);
+								
+								var line1 = result.Response.View[0].Result[i].Location.Address.Label ? result.Response.View[0].Result[i].Location.Address.Label: pos.Latitude + " " + pos.Longitude;
+								var line2 = result.Response.View[0].Result[i].MatchLevel;
+								
+								var marker = new H.map.Marker(point, 
+								{
+									icon: createIcon(line1, line2, "#90EE90")
+								});
+								matchgroup.addObject(marker);
+							}
+						}
+					},
+					function(error) {
+						alert(error);
+					}
+				);
+				
+				var url = {
+					"CLE1": ["https://customlocation.api.here.com/",
+						   "v1/",
+						   "search/",
+						   "attribute?",
+						   "layerId=",
+						   layerId_cle1,
+						   "&",
+						   "query=",
+						   "[" + searchQuery + "]" + "/name1/",
+						   // "query=[X]/name1/",
+						   query,
+						   "&",
+						   "app_id=",
+						   "sJ144gmf7ZZQnBrsUGlF", 
+						   "&",
+						   "app_code=",
+						   "FLvpeHcGwrntfYPYq41qcA",
+						   // "&limit=2500",
+						   "&jsoncallback=matchcallback"].join(""),
+				  "CLE2": ["https://cle.api.here.com/",
+						   "2/",
+						   "search/",
+						   "all.json?",
+						   "layer_id=",
+						   layerId_cle2,
+						   "&",
+						   "filter=",
+						   "NAME1.startsWith('"+query+"')",
+						   "&",
+						   "app_id=",
+						   "sJ144gmf7ZZQnBrsUGlF", 
+						   "&",
+						   "app_code=",
+						   "FLvpeHcGwrntfYPYq41qcA",
+						   // "&limit=2500",
+						   "&callback=matchcallback"].join("")
+					};
+				
+				script = document.createElement("script");
+				script.src = /*$("#cle1").prop("checked") ? url.CLE1 :*/ url.CLE2;
+				document.body.appendChild(script);
+			}
+		}
+		
+		var matchcallback = function(data)
+		{
+			clecallback(data, '#ffffff', matchgroup);
+		}
+		
+		var allcallback = function(data)
+		{
+			clecallback(data, '#E0E0E0', allgroup);
+		}
+		
+		var translateAttr = function(g){
+			var mapAttrs = {
+				"CITY": "city",
+				"POSTALCODE": "postalCode",
+				"ID": "customerLocationId",
+				"COUNTRY": "country",
+				"HOUSENUMBER": "houseNumber",
+				"NAME1": "name1",
+				"NAME2": "name2",
+				"NAME3": "name3",
+				"STREET": "street"
+			};
+			var loc = {customAttributes: []};
+			for (var attr in g.attributes){
+			  if(mapAttrs[attr]){
+				loc[mapAttrs[attr]] = g.attributes[attr];
+			  }else{
+				loc[attr] = g.attributes[attr];
+				loc.customAttributes.push({
+				  name: attr,
+				  value: g.attributes[attr]
+				});
+			  }
+			}
+			loc.routeCoordinate = {
+				longitude: parseFloat(g.geometry.split(" ")[0].match(/[+-]?\d+(\.\d+)?/)),
+				latitude: parseFloat(g.geometry.split(" ")[1].match(/[+-]?\d+(\.\d+)?/))
+			};
+			return loc;
+		};
+		
+		var clecallback = function(data, color, group)
+		{
+			if(data && data.geometries){
+			  var dataTmp = {locations: []};
+			  dataTmp.locations = data.geometries.map(translateAttr);
+			  data = dataTmp;
+			}
+			  
+			if(matchgroup.getChildCount() > 0)
+				map.removeObject(matchgroup);
+			var locations = null;
+			if(data && data.locations || data && data.bblocations)
+			{
+				locations = data.locations ? data.locations : data.bblocations;
+			}
+			
+			if(locations)
+			{
+				var i = 0,
+					l = locations.length;
+					
+				for(;i < l; i++)
+				{
+					var html = "";
+					var coordinate = new H.geo.Point(locations[i].routeCoordinate.latitude, locations[i].routeCoordinate.longitude);
+					var city = "",
+						street = "",
+						postalCode = "",
+						name1 = "",
+						builtup = "";
+					
+					if(locations[i].city)
+					{
+						city = locations[i].city;
+						html += city + "</br>";
+					}
+					
+					if(locations[i].customAttributes && locations[i].customAttributes)
+					{
+						for(var iCA=0,lCA=locations[i].customAttributes.length; iCA<lCA; iCA++ ){
+						  if(locations[i].customAttributes[iCA].name == "BUILTUP"){
+							builtup = locations[i].customAttributes[iCA].value;
+							html += builtup != city ? builtup + "</br>" : "";
+						  }
+						}
+					}					
+					if(locations[i].street)
+					{
+						street = locations[i].street;
+						html += street + "</br>";
+					}
+					if(locations[i].postalCode && !locations[i].name1)
+					{
+						postalCode = locations[i].postalCode;
+						html += postalCode + "</br>";
+					}
+					else if(locations[i].name1)
+					{
+						name1 = locations[i].name1;
+						html += name1 + "</br>";
+					}
+
+					var marker = new H.map.Marker(coordinate, 
+					{
+						icon: createIcon(city + " " + builtup != city ? builtup : "" , street + " " + name1, color)
+					});
+					marker.$html = html;
+
+					marker.addEventListener("pointerdown", function(e)
+					{
+						if(currentBubble)
+						{
+							ui.removeBubble(currentBubble);
+							currentBubble = null;
+						}
+						currentBubble = new H.ui.InfoBubble(e.target.getPosition(), { content: e.target.$html });
+						ui.addBubble(currentBubble);
+					});
+					group.addObject(marker);
+				}
+				if(group.getChildCount() > 0)
+					map.getViewModel().setLookAtData({
+						bounds: group.getBoundingBox(),
+					});
+				if(matchgroup.getChildCount() > 0)
+					map.addObject(matchgroup);
+			}
+		}
+		
+		createIcon = function (line1, line2, color) {
+			var div = document.createElement("div");
+			var svgMarker = svgMarkerImage_Line;
+
+			svgMarker = svgMarker.replace('#ffffff', color);
+			svgMarker = svgMarker.replace(/__line1__/g, line1);
+			svgMarker = svgMarker.replace(/__line2__/g, line2);
+			svgMarker = svgMarker.replace(/__width__/g, line1.length  * 4 + 57);
+			svgMarker = svgMarker.replace(/__widthAll__/g, line1.length  * 4 + 120);
+			div.innerHTML = svgMarker;
+
+			return new H.map.Icon(svgMarker, {
+				anchor: new H.math.Point(24, 57)
+			});;
+		};
+		
+		getAllPointsInView = function()
+		{
+			wasSearch = false;
+			allgroup.removeAll();
+			if(document.getElementById('showAll').checked)
+			{
+				var bounds = map.getViewModel().getLookAtData().bounds.getBoundingBox();;
+				
+				var bbox = bounds.getTop() + "," + bounds.getLeft() + ";" + bounds.getBottom() + "," + bounds.getRight();
+				
+				var url = {
+					"CLE1":	["https://customlocation.api.here.com/",
+						   "v1/",
+						   "search/",
+						   "bbox?",
+						   "layerId=",
+						   layerId_cle1,
+						   "&bbox=",
+						   bbox,
+						   "&",
+						   "app_id=",
+						   "sJ144gmf7ZZQnBrsUGlF", 
+						   "&",
+						   "app_code=",
+						   "FLvpeHcGwrntfYPYq41qcA",
+						   "&jsoncallback=allcallback"].join(""),
+
+				"CLE2":	["https://cle.api.here.com/",
+						   "2/",
+						   "search/",
+						   "bbox.json?",
+						   "layer_id=",
+						   layerId_cle2,
+						   "&bbox=",
+						   bbox,
+						   "&",
+						   "app_id=",
+						   "sJ144gmf7ZZQnBrsUGlF", 
+						   "&",
+						   "app_code=",
+						   "FLvpeHcGwrntfYPYq41qcA",
+						   "&callback=allcallback"].join("")
+				};
+
+					script = document.createElement("script");
+					script.src = /*$("#cle1").prop("checked") ? url.CLE1 : */url.CLE2;
+					document.body.appendChild(script);
+			}
+			else
+			{
+				allgroup.removeAll();
+			}
+		}
+		
+		var showPostalBoundaries = function() {
+		
+			if(document.getElementById('showPostalBoundaries').checked)
+			{
+				geocoder.reverseGeocode({
+					prox:  map.getCenter().lat + "," + map.getCenter().lng + "," + "100",
+					mode: 'retrieveAddresses',
+					'additionalData': 'IncludeShapeLevel,postalCode'
+				},
+				function(result) {
+					createPolygon(result);
+				},
+				function(error) {
+					alert(error);
+				});
+			}
+			else
+			{
+				polygongroup.removeAll();
+			}
+		}		
+
+		var createPolygon = function(result)
+		{
+			polygongroup.removeAll();
+					
+			var shapes = new Array();
+			var i = 0, 
+				l = result.Response.View[0].Result.length,
+				respShape;
+				
+			for(; i < l; i++)
+			{
+				if(respShape = result.Response.View[0].Result[i].Location.Shape)
+				{
+					respShape = result.Response.View[0].Result[i].Location.Shape.Value;
+					break;
+				}
+			}
+
+			if(respShape)
+			{
+				if(respShape.indexOf("MULTIPOLYGON") != -1)
+				{
+					shapes = respShape.replace("MULTIPOLYGON", "").trim().split("), (");
+				}
+				else
+				{
+					shapes[0] = respShape.replace("POLYGON", "").replace("((", "").replace("))", "").trim();
+				}
+							
+				for (var j = 0; j < shapes.length; j++)
+				{
+					var strip = new H.geo.LineString();
+					var newCoords = shapes[j].replace("(((", "").replace(")))", "").replace("((", "").replace("))", "").replace("(", "").replace(")", "").trim().split(",");
+					for (var i = 0; i < newCoords.length; i++)
+					{
+						var split = newCoords[i].trim().split(" ");
+						if(split.length === 2){
+							var lat = parseFloat(split[1]);
+							var lon = parseFloat(split[0]);
+							strip.pushLatLngAlt( lat, lon, 0);									
+						}
+					}
+								
+					var shp = new H.map.Polygon(strip,
+					{
+						style: 
+						{
+							lineWidth: 5,
+							strokeColor: "rgba(50, 128, 128, 0.5)"
+						}	
+					});		
+					polygongroup.addObject(shp);
+				}
+			}
+		}
+		
+		var onChangeService = function(){
+		  if(wasSearch){
+			search(document.getElementById('searchTerm').value);
+		  }else{
+			getAllPointsInView();
+		  }
+		};
+
+</script>

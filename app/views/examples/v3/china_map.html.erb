@@ -1,0 +1,158 @@
+<% content_for :title, "Simple China Map Display" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+</div>
+
+<div id="mapContainer"></div>
+
+  <script type="text/javascript">
+      /**
+       * author domschuette
+       * (C) HERE 2016
+       */
+
+      // Check whether the environment should use hi-res maps.
+      var hidpi = ("devicePixelRatio" in window && devicePixelRatio > 1);
+
+      // check if the site was loaded via secure connection
+      var secure = (location.protocol === 'https:') ? true : false;
+
+      // Create a platform object to communicate with the HERE REST APIs.
+      var platform = new H.service.Platform({
+        useHTTPS: secure,
+        app_id: app_id,
+        app_code: app_code
+      });
+
+      var geocoder = platform.getGeocodingService();
+
+      var maptypes = platform.createDefaultLayers(hidpi ? 512 : 256,
+          hidpi ? 320 : null);
+
+      // Instantiate a map in the 'map' div, set the base map to normal.
+      var map = new H.Map(document.getElementById("mapContainer"),
+          maptypes.normal.map, {
+            center: new H.geo.Point(39.872319692276015, 116.42163440463315),
+            zoom: 14,
+            pixelRatio: hidpi ? 2 : 1
+          });
+
+      // Enable the map event system
+      var mapevents = new H.mapevents.MapEvents(map);
+
+      // Enable map interaction (pan, zoom, pinch-to-zoom)
+      var behavior = new H.mapevents.Behavior(mapevents);
+
+      // Enable the default UI.
+      var ui = H.ui.UI.createDefault(map, maptypes);
+
+      // Setup the Streetlevel imagery.
+      platform.configure(H.map.render.panorama.RenderEngine);
+
+      // Listen to the window resize event to resize the map accordingly. 
+      window.addEventListener("resize", function() {
+        map.getViewPort().resize();
+      });
+
+      var chinaTileProvider = new H.map.provider.ImageTileProvider({
+
+        label: "Map Provider",
+        descr: "",
+        min: 0,
+        max: 20,
+        getURL: function(col, row, level) {
+          return [
+              "http" + (secure ? "s" : "") + "://" + getTileServerInstance(row, col) + ".base.maps.api.heremaps.cn/maptile/2.1/maptile/newest/normal.day/",
+              level, "/", col, "/", row, "/256/png8?style=fleet&" , "app_id=", app_id, "&app_code=", app_code, hidpi ? "&ppi=300" : ""].join("");
+        }
+
+      });
+
+      var chinaTileLayer = new H.map.layer.TileLayer(chinaTileProvider);
+      
+      var chinaSatelliteTileProvider = new H.map.provider.ImageTileProvider({
+
+        label: "Satellite Provider",
+        descr: "",
+        min: 0,
+        max: 20,
+        getURL: function(col, row, level) {
+          
+          return [
+              "http" + (secure ? "s" : "") + "://" + getTileServerInstance(row, col) + ".aerial.maps.api.heremaps.cn/maptile/2.1/maptile/newest/satellite.day/",
+              level, "/", col, "/", row, "/256/png8?" , "app_id=", app_id, "&app_code=", app_code, hidpi ? "&ppi=300" : ""].join("");
+        }
+
+      });
+
+      var chinaSatelliteTileLayer = new H.map.layer.TileLayer(chinaSatelliteTileProvider);
+      
+      var chinaTerrainTileProvider = new H.map.provider.ImageTileProvider({
+
+        label: "Terrain Provider",
+        descr: "",
+        min: 0,
+        max: 20,
+        getURL: function(col, row, level) {
+
+          return [
+              "http" + (secure ? "s" : "") + "://" + getTileServerInstance(row, col) + ".aerial.maps.api.heremaps.cn/maptile/2.1/maptile/newest/terrain.day/",
+              level, "/", col, "/", row, "/256/png8?" , "app_id=", app_id, "&app_code=", app_code, hidpi ? "&ppi=300" : ""].join("");
+        }
+
+      });
+
+      var chinaTerrainTileLayer = new H.map.layer.TileLayer(chinaTerrainTileProvider);
+
+      // Create the community map types.
+      var chinaMapType = {
+        map: chinaTileLayer
+      };
+      
+      var chinaSatelliteType = {
+        map: chinaSatelliteTileLayer
+      };
+      
+      var chinaTerrainType = {
+        map: chinaTerrainTileLayer
+      };
+
+      // Add a map entry for the community map.
+      var mapSettings = new H.ui.MapSettingsControl({
+        entries: [{
+          name: "Map View",
+          mapType: chinaMapType
+        }, {
+          name: "Satellite",
+          mapType: chinaSatelliteType
+        }, {
+          name: "Terrain",
+          mapType: chinaTerrainType
+        }, {
+          name: "Std. Map view",
+          mapType: maptypes.normal
+        }, {
+          name: "Std. Satellite",
+          mapType: maptypes.satellite
+        }, {
+          name: "Std. Terrain",
+          mapType: maptypes.terrain
+        }]
+      });
+      var oldMapSettings = ui.removeControl("mapsettings");
+      ui.addControl("mapsettings", mapSettings);
+
+      // Default to china map.
+      map.setBaseLayer(chinaTileLayer);
+
+      /**
+       * Gets the tile server instance from the given row and column.
+       */
+      function getTileServerInstance(row, col) {
+        return 1 + ((row + col) % 4);
+      };
+    </script>
+</body>
+</html>

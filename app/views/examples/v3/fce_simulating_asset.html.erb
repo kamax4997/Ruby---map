@@ -1,0 +1,993 @@
+<%= javascript_include_tag "fleet-connectivity-extension" %>
+<%= javascript_include_tag "jszip.min.js" %>
+
+<% content_for :title, "FleetConnectivity Demo: Asset" %>
+
+<style>
+  #jobs-dashboard thead td,#assets-dashboard thead td {
+    background-color: #274190;
+    color: #F8F8F8;
+    text-align: center;
+  }
+
+  #jobs-dashboard tr td,#assets-dashboard tr td {
+    text-align: center;
+  }
+
+  #jobs-dashboard tr,#assets-dashboard tr {
+      border-bottom: 0.1em solid #274190;
+  }
+    a{
+      text-decoration: underline;
+    }
+</style>
+
+<div class="ctrl-panel bigger" style="max-width: 900px">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p id="infoTxt">This demo checks the FCE service for new messages that are available from the dispatcher (see <a href="fce_simulating_dispatcher">FCE dispatcher demo</a>). The messages can be accepted or declined. If a message gets accepted an ETA update is send to the dispatcher using FCE. Please use the same asset ID in both demos.</p>
+	<table border="0">
+		<tr>
+			<td>Asset ID:</td>
+			<td><input id="assetID" size='35' value="973828eb-7ae8-4067-ac25-8bf12d86bb80" type="text" onkeyup="assetIdChanged();" onClick="removeDefaultAssetIdTxt();"/></td>
+		</tr>
+		<tr>
+			<td>Dispatcher ID:</td>
+			<td><input id="dispatcherID" size='35' value="fb78eef5-ebee-899c-9a3d-78a4a773e17e" type="text" onkeyup="dispatcherIdChanged();" onClick="removeDefaultDispatcherIdTxt();"/></td>
+		</tr>
+		<tr>
+			<td>Check for messages since: </td>
+			<td><input id="lastUpdateTimestamp" size='35' value="" type="text" onkeyup="dispatcherIdChanged();" onfocus="if(this.value  == 'Specify the last update time') { this.value = ''; } " onblur="if(this.value == '') { this.value = 'Specify the last update time'; } "/></td>
+		</tr>
+		<tr>
+			<td></td>
+			<td><input id="pollForMessagesButton" type="button" value="Poll for messages" onClick="this.value='Polling...';  this.disabled=true; longPollfceMessage(document.getElementById('lastUpdateTimestamp').value);  "/></td>
+		</tr>
+		
+		
+		
+		 <h4>Jobs Dashboard</h4>
+		  <div class="form-horizontal">
+			<div class="form-group">
+
+			  <div class="col-sm-12">
+				<table id="jobs-dashboard">
+				  <thead>
+				  <td>Destination</td>
+				  <td>Dispatcher Id</td>
+				  <td>Job-Id</td>
+				  <td>Type</td>
+				  <td>Message</td>
+				  <td>Created</td>
+				  <td>Action</td>
+				  </thead>
+				</table>
+			  </div>
+
+			</div>
+		  </div>
+		
+
+	</table>
+	<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"><br/></div>
+	<tr>
+		<td>HLP Service releases which are used in this demo:</td>
+		<td>
+			<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+		</td>
+	</tr>
+</div>
+
+<div id="mapContainer"/>
+<style>
+		input[type=range] {
+			/*removes default webkit styles*/
+			-webkit-appearance: none;
+		}
+		input[type=range]::-webkit-slider-runnable-track {
+			width: 200px;
+			height: 2px;
+			background: #ccc;
+			border: none;
+			border-radius: 3px;
+		}
+		input[type=range]::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			border: none;
+			height: 16px;
+			width: 16px;
+			border-radius: 50%;
+			background: #ccc;
+			margin-top: -6px;
+		}
+		input[type=range]:focus {
+			outline: none;
+		}
+
+
+</style>
+<script type="text/javascript">
+	/*
+		author ez
+		(C) HERE 2015
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+  // Must be done before platform init to apply app_id and app_code globally.
+  var fce_custom_endpoint;
+  (function setValuesFromUrl() {
+    var indexOf = window.location.href.indexOf('?');
+    if (indexOf < 0) return;
+    var vars = window.location.href.slice(indexOf + 1).split('&');
+
+    for (var i = 0; i < vars.length; i++) {
+      nameVal = vars[i].split('=');
+      if (!nameVal[0]) continue;
+      if (nameVal[0] === 'custom_endpoint') {
+        fce_custom_endpoint = nameVal[1];
+      } else if (nameVal[0] === 'app_id') {
+        app_id = nameVal[1];
+      } else if (nameVal[0] === 'app_code') {
+        app_code = nameVal[1];
+      } else if (nameVal[0] === 'timestamp') {
+        document.getElementById('lastUpdateTimestamp').value = nameVal[1];
+      } else {
+        document.getElementById(nameVal[0]).value = decodeURIComponent(nameVal[1]);
+      }
+    }
+
+  })();
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+			useHTTPS: secure,
+			app_id: app_id,
+			app_code: app_code
+		}),
+		maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+		group = new H.map.Group();
+
+	// route mode
+	var requestMode = "truck";
+	// FCE variables
+  var assetIdElement = document.getElementById("assetID");
+	var dispatcherId = '\'' + document.getElementById("dispatcherID").value + '\'';
+  var dispatcherIdElement = document.getElementById("dispatcherID");
+  var lastUpdateTimestampElement = document.getElementById("lastUpdateTimestamp");
+	var fceEventVersion = '1.0';
+	var currPosDefaultLat = 50.16143;
+	var currPosDefaultLon = 8.53324;
+	var currPosLat = currPosDefaultLat;
+	var currPosLon = currPosDefaultLon;
+	var destLat = null;
+	var destLon = null;
+	var bDispatcherMessageAvailable = false;
+	var bDispatcherMessagePending = false;
+	var currJobId = null;
+	var currDispatcherId = null;
+	var lastUpdateTimestamp = null;
+
+	// FCE Extension
+	var fce = platform.ext.getFleetConnectivityService();
+  if (fce_custom_endpoint) {
+    fce.endpoint = fce_custom_endpoint;
+  }
+
+	// SIMULATION OBJECTS
+	// simulation running or not
+	var bSimulationRunning = false;
+	// object with all route points
+	var currentRouteStrip = new H.geo.Strip();
+	// truck icon
+	var truckIcon = new H.map.Icon('/assets/icons/markerTruck.png');
+	// truck marker
+	var truckMarker = new H.map.Marker({ lat: currPosDefaultLat, lng: currPosDefaultLon }, { icon: truckIcon });
+	truckMarker.$id = "truckMarker";
+
+	var iSimulationIsAtPosition = 0;
+	// simulation walker
+	var simulationWalker = null;
+	var simulationGroup = new H.map.Group();
+	var routeGroup = new H.map.Group();
+	var isolinePolygon = null;
+	// initializing
+	clearPreviousResults();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), maptypes.normal.map, {
+		center: new H.geo.Point(currPosDefaultLat, currPosDefaultLon),
+		zoom: 12,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+	// add truck icon
+	map.addObject(truckMarker);
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	//add JS API Release information
+	releaseInfoTxt.innerHTML+="JS API: 3."+ H.buildInfo().version;
+
+	//add MRS Release information
+	loadMRSVersionTxt();
+
+	//helper
+	var releaseGeocoderShown = false;
+	var releaseRoutingShown = false;
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+
+  /**
+		Clears the default asset id text
+	*/
+	function removeDefaultAssetIdTxt() {
+        if(assetIdElement.value != '' && assetIdElement.value.indexOf("Specify an ASSET ID here.") != -1) {   // default text of field.
+            assetIdElement.value = '';
+        }
+    }
+
+    /**
+		Clears the default dispatcher id text
+	*/
+	function removeDefaultDispatcherIdTxt() {
+        if(dispatcherIdElement.value != '' && dispatcherIdElement.value.indexOf("Specify an Dispatcher ID here.") != -1) {   // default text of field.
+            dispatcherIdElement.value = '';
+        }
+    }
+
+	/**
+		Is getting called if assed id changes
+	*/
+	function assetIdChanged()
+	{
+		clearPreviousResults();
+	}
+
+	/**
+		Is getting called if dispatcher id changes
+	*/
+	function dispatcherIdChanged()
+	{
+		clearPreviousResults();
+	}
+
+	/**
+		Check fce for new messages
+	*/
+	
+	
+	
+	function pollfceMessage(){
+    var assetId = assetIdElement.value;
+    var dispatcherId = dispatcherIdElement.value;
+
+		if(assetId.length == 0 || assetId.indexOf("Specify an ASSET ID here.") != -1) {   // default text of field.
+            alert("Please specify an asset ID.");
+            return;
+        }
+
+        if(dispatcherId.length == 0 || dispatcherId.indexOf("Specify an Dispatcher ID here.") != -1) {   // default text of field.
+            alert("Please specify an dispatcher ID.");
+            return;
+        }
+
+		feedbackTxt.innerHTML = "Check for asset update...";
+		sendfceMessage(fceEventVersion, 'READY', '', dispatcherId, null, null, null, null, null, pollForNewMessagesCallback)
+	}
+	
+	var XHR = [];
+
+	function longPollfceMessage(lastUpdateTime){
+		var time = lastUpdateTime
+		var assetId = assetIdElement.value;	
+		var callbackfn = '_jsonp_'+(Math.random().toString(36)+'00000000000000000').slice(2, 5+2);
+		var url = fce.endpoint  + '/check_messages.json' + '?last_update_timestamp_ms=' + time + '&app_code=' + app_code + '&app_id=' + app_id +'&recipient_id=' + assetId;
+		if(assetId.length == 0 || assetId.indexOf("Specify an ASSET ID here.") != -1) {   // default text of field.
+			   alert("Please specify an asset ID.");
+			   return;
+		}
+		feedbackTxt.innerHTML = "Waiting for updates...";
+
+
+
+			var req = $.ajax({ url: url,
+				dataType: "jsonp",
+				jsonpCallback: callbackfn,
+				timeout: 60000 
+			});
+			
+			XHR.push({id: callbackfn, req: req});
+
+			req.success(function(resp){
+					if (resp.error_id != null) {
+						callback.call(that, resp, new Error(resp.issues));
+						return;
+					}else{
+						//update page based on data
+						sendfceMessage(fceEventVersion, 'READY', '', document.getElementById("dispatcherID").value, null, null, null, null, null, pollForNewMessagesCallbackHandler_lp)
+					}	
+				});
+
+			req.error(function(xhr, ajaxOptions, thrownError) {
+				destroy(callbackfn);
+				longPollfceMessage(time);
+			});
+
+
+		
+	}
+
+	function destroy(callbackId){
+		XHR.forEach(function(reqObj,index) {
+			if(reqObj.id == callbackId){
+				reqObj.req.abort();
+			}
+			
+		});
+	}
+
+	/**
+		Send fce message
+	*/
+	function sendfceMessage(version, eventType, jobId, dispatcherId, remainingTimeSeconds, remainingDistanceMeter, curLat, curLon, lastUpdateTimestamp, callback)
+	{
+		var assetId = document.getElementById("assetID").value;
+		var eventObj = null;
+		if(remainingTimeSeconds == null)
+		{
+			if(lastUpdateTimestamp == null) {
+				eventObj = {
+	            version: version
+	            ,event_id: fce.createId()
+	            ,message_id: fce.createId()
+	            ,job_id: jobId
+                ,asset_id: assetId
+	            ,dispatcher_id: dispatcherId
+	            ,type: eventType
+	            ,eta_update: {}
+	            };
+			}
+			else {
+				eventObj = {
+		            version: version
+		            ,event_id: fce.createId()
+		            ,message_id: fce.createId()
+		            ,job_id: jobId
+	                ,asset_id: assetId
+		            ,dispatcher_id: dispatcherId
+		            ,last_update_timestamp_ms: lastUpdateTimestamp
+		            ,type: eventType
+		            ,eta_update: {}
+		        };
+		    }
+    }
+    else {
+      if (lastUpdateTimestamp == null) {
+        eventObj = {
+          version: version, event_id: fce.createId(),
+          message_id: fce.createId(), job_id: jobId,
+          asset_id: assetId, dispatcher_id: dispatcherId,
+          type: eventType, eta_update: {
+            remaining_time_seconds: remainingTimeSeconds,
+            remaining_distance_meter: remainingDistanceMeter
+          },
+          location: {
+            lat: curLat,
+            lon: curLon
+          }
+        };
+      } else {
+        eventObj = {
+          version: version,
+          event_id: fce.createId(),
+          message_id: fce.createId(),
+          job_id: jobId,
+          asset_id: assetId,
+          dispatcher_id: dispatcherId,
+          last_update_timestamp_ms: lastUpdateTimestamp,
+          type: eventType,
+          eta_update: {
+            remaining_time_seconds: remainingTimeSeconds,
+            remaining_distance_meter: remainingDistanceMeter,
+          },
+          location: {
+            lat: curLat,
+            lon: curLon
+          }
+        };
+      }
+    }
+
+		fce.assetUpdate(eventObj, {incremental: true, last_update_timestamp_ms: 1}, callback);
+	}
+
+	// callback for new fce poll message
+	function pollForNewMessagesCallback (resp, err)
+	{
+		pollForNewMessagesCallbackHandler(resp, err, true);
+	}
+	
+	function pollForNewMessagesCallback_lp (resp, err)
+	{
+		sendfceMessage(fceEventVersion, 'READY', '', document.getElementById("dispatcherID").value, null, null, null, null, null, pollForNewMessagesCallbackHandler_lp)
+	}
+
+	// callback for new fce update ETA message
+	function updateEtaCallback (resp, err)
+	{
+		pollForNewMessagesCallbackHandler(resp, err, false);
+	}
+
+	// callback for new fce accept/decline message
+	function acceptDeclineCallback (resp, err)
+	{
+		pollForNewMessagesCallbackHandler(resp, err, false);
+	}
+
+	// handler for callback
+	function pollForNewMessagesCallbackHandler_lp (resp, err)
+	{
+		if (err!= undefined)
+		{
+			feedbackTxt.innerHTML = "Error during upload: " + resp.requestId + ': ' + resp.issues[0].type;
+			return;
+		}
+
+
+		if(!bDispatcherMessagePending)
+		{
+			// clear last text - which could be 'checking'
+			feedbackTxt.innerHTML = "";
+		}
+
+		var jobs = resp.jobs;
+		var i= 0;
+		var latestTime = 0;
+		// get last job
+		 var lastNewDestination = null;
+		 var dashboard = document.getElementById('jobs-dashboard');
+		if(jobs != undefined)
+		{
+			
+			for (var i = 0; i < jobs.length; i++)
+			{
+				if(jobs[i].type === 'NEW_DESTINATION' && jobs[i].asset_id == document.getElementById("assetID").value) {
+					var destination = jobs[i].content.destination;
+					var destinationSplit = destination.trim().split(",");
+					destLat = destinationSplit[0];
+					destLon = destinationSplit[1];
+					currJobId = jobs[i].job_id;
+					currDispatcherId = jobs[i].dispatcher_id;
+					bDispatcherMessageAvailable = true;
+					bDispatcherMessagePending = true;
+					if(jobs[i].creation_time_ms>latestTime){
+						latestTime = jobs[i].creation_time_ms;
+					}
+					//feedbackTxt.innerHTML = "<b>!! New Message From Dispatcher received !! Please accept or decline.</b>";
+					
+					var d = new Date(jobs[i].creation_time_ms);
+					var jobId = jobs[i].job_id
+					var jobLine = document.createElement('tr');
+
+					var jobDestCell = document.createElement('td');
+					jobDestCell.id = jobId + '-dest';
+					jobDestCell.innerHTML = decodeURIComponent(jobs[i].content.destination_description);
+					jobLine.appendChild(jobDestCell);
+
+					var dispatcherIdCell = document.createElement('td');
+					dispatcherIdCell.id = jobId + '-dispatcher-id';
+					dispatcherIdCell.innerHTML = jobs[i].dispatcher_id;
+					jobLine.appendChild(dispatcherIdCell);
+
+					var jobIdCell = document.createElement('td');
+					jobIdCell.id = jobId + '-display';
+					jobIdCell.innerHTML = jobId;
+					jobLine.appendChild(jobIdCell);
+
+					var typeCell = document.createElement('td');
+					typeCell.id = jobId + '-type';
+					typeCell.innerHTML = jobs[i].type;
+					jobLine.appendChild(typeCell);
+					
+					var messageCell = document.createElement('td');
+					messageCell.id = jobId + '-message';
+					messageCell.innerHTML = jobs[i].message.substring(0,20) + '...';
+					messageCell.title = jobs[i].message;
+					jobLine.appendChild(messageCell);
+
+					var timeCell = document.createElement('td');
+					timeCell.id = jobId + '-time';
+					timeCell.innerHTML = ("0" + d.getDate()).slice(-2) + "-" + ("0"+(d.getMonth()+1)).slice(-2) + "-" + d.getFullYear() + " " + ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+					jobLine.appendChild(timeCell);
+					
+					var actionsCell = document.createElement('td');
+					actionsCell.innerHTML = '<input class="btn btn-default btn-info" type="submit" id="accept-' + jobId + '" value="Accept" onclick="acceptJob(\'' + jobId + '\');" /> <input class="btn btn-default btn-info" type="submit" id="decline-' + jobId + '" value="Decline" onclick="declineJob(\'' + jobId + '\');" />';
+					jobLine.appendChild(actionsCell);
+					
+					var hiddenLat = document.createElement("input");
+					hiddenLat.setAttribute("type", "hidden");
+					hiddenLat.setAttribute("id", "lat-"+jobId);
+					hiddenLat.setAttribute("value", destLat);
+					jobLine.appendChild(hiddenLat);
+					
+					var hiddenLon = document.createElement("input");
+					hiddenLon.setAttribute("type", "hidden");
+					hiddenLon.setAttribute("id", "lon-"+jobId);
+					hiddenLon.setAttribute("value", destLon);
+					jobLine.appendChild(hiddenLon);
+					
+					dashboard.appendChild(jobLine);
+				}
+			}
+
+			
+		}
+		else
+		{
+			if(updateFeedbackTxtOnNoNewRoutes)
+			{
+				feedbackTxt.innerHTML = "No new job available.";
+			}
+			return;
+		}
+		if(latestTime>0){
+			longPollfceMessage(latestTime);
+		}
+		
+	}
+	
+	// handler for callback
+	function pollForNewMessagesCallbackHandler (resp, err, updateFeedbackTxtOnNoNewRoutes)
+	{
+	
+		
+		if (err!= undefined)
+		{
+			feedbackTxt.innerHTML = "Error during upload: " + resp.requestId + ': ' + resp.issues[0].type;
+			return;
+		}
+
+
+		if(!bDispatcherMessagePending)
+		{
+			// clear last text - which could be 'checking'
+			feedbackTxt.innerHTML = "";
+		}
+
+		var jobs = resp.jobs;
+		// get last job
+		var lastNewDestination = null;
+		if(jobs != undefined)
+		{
+			for (var i = 0; i < jobs.length; i++)
+			{
+				if(jobs[i].type === 'NEW_DESTINATION' && jobs[i].asset_id == document.getElementById("assetID").value) {
+					lastNewDestination = i;
+                    break;
+				}
+			}
+
+			if(lastNewDestination === null)
+			{
+				if(updateFeedbackTxtOnNoNewRoutes)
+				{
+					feedbackTxt.innerHTML = "No new job available.";
+				}
+				return;
+			}
+			else
+			{
+				var destination = jobs[lastNewDestination].content.destination;
+
+				var destinationSplit = destination.trim().split(",");
+				destLat = destinationSplit[0];
+				destLon = destinationSplit[1];
+				
+				currJobId = jobs[lastNewDestination].job_id;
+				currDispatcherId = jobs[lastNewDestination].dispatcher_id;
+				bDispatcherMessageAvailable = true;
+				bDispatcherMessagePending = true;
+				
+				feedbackTxt.innerHTML = "<b>!! New Message From Dispatcher received !! Please accept or decline.</b>";
+			}
+		}
+		else
+		{
+			if(updateFeedbackTxtOnNoNewRoutes)
+			{
+				feedbackTxt.innerHTML = "No new job available.";
+			}
+			return;
+		}
+	}
+
+	/**
+		Accept/Decline job
+	*/
+	function acceptJob(currJobId)
+	{	
+	
+		if(document.getElementById('accept-'+currJobId).value=='Simulate'){
+			//Job Accepted, Simulate.
+			startRouteSimulation();
+		}else{
+			document.getElementById('accept-'+currJobId).value = 'Simulate';
+			document.getElementById('decline-'+currJobId).disabled = true;
+			clearRoute();
+			sendfceMessage(fceEventVersion, 'ACCEPTED', currJobId, document.getElementById("dispatcherID").value, null, null, null, null, null, acceptDeclineCallback);
+			feedbackTxt.innerHTML = "Accepted new destination";
+			bDispatcherMessagePending = false;
+
+			calculateRoute(currJobId);
+		}
+		
+		
+	}
+
+	function declineJob(currJobId)
+	{
+		document.getElementById('decline-'+currJobId).value = 'Declined';
+		document.getElementById('accept-'+currJobId).disabled = true;
+		
+		sendfceMessage(fceEventVersion, 'REJECTED', currJobId, document.getElementById("dispatcherID").value, null, null,  null, null, null, acceptDeclineCallback);
+		feedbackTxt.innerHTML = "Message declined.";
+		bDispatcherMessagePending = false;
+	}
+
+	function finishedJob(currJobId)
+	{
+		document.getElementById('decline-'+currJobId).value = 'Declined';
+		document.getElementById('accept-'+currJobId).disabled = true;
+		document.getElementById('decline-'+currJobId).disabled = true;
+		lastUpdateTimestamp = getCurrentMilliseconds();
+		sendfceMessage(fceEventVersion, 'DESTINATION_REACHED', currJobId, document.getElementById("dispatcherID").value, null, null, currPosLat, currPosLon, lastUpdateTimestamp, updateEtaCallback);
+		feedbackTxt.innerHTML = "Destination Reached.";
+		bDispatcherMessagePending = false;
+	}
+
+
+
+	
+	/**
+		New message accepted
+	*/
+	function newMessageAccepted()
+	{
+		clearRoute();
+		sendfceMessage(fceEventVersion, 'ACCEPTED', currJobId, currDispatcherId, null, null, null, null, null, acceptDeclineCallback);
+		feedbackTxt.innerHTML = "Accepted new destination";
+		bDispatcherMessagePending = false;
+
+		calculateRoute();
+	}
+
+	/**
+		New message declined
+	*/
+	function newMessageDeclined()
+	{
+		sendfceMessage(fceEventVersion, 'REJECTED', currJobId, currDispatcherId, null, null,  null, null, null, acceptDeclineCallback);
+		feedbackTxt.innerHTML = "Message declined.";
+		bDispatcherMessagePending = false;
+	}
+
+	// Calculate the route
+	var calculateRoute = function(jobId)
+	{
+		destLat = document.getElementById('lat-'+jobId).value;
+		destLon = document.getElementById('lon-'+jobId).value;
+		var urlRoutingReq = "https://route.api.here.com/routing/7.2/calculateroute.json?jsonAttributes=1&waypoint0="+
+							currPosLat + "," + currPosLon + "&waypoint1="+ destLat +","+ destLon +
+						"&departure=now&routeAttributes=sh,lg&legAttributes=li&linkAttributes=length,fc,rt,rd&mode=fastest;" +
+						requestMode + ";traffic:disabled&app_id=" + app_id + "&app_code=" + app_code+ "&jsoncallback=gotRoutingResponse";
+
+		script = document.createElement("script");
+		script.src = urlRoutingReq;
+		document.body.appendChild(script);
+	}
+
+	// parse the routing response
+	var gotRoutingResponse = function (respJsonRouteObj)
+	{
+		if (respJsonRouteObj.error != undefined)
+		{
+			alert (respJsonRouteObj.error);
+			feedbackTxt.innerHTML = respJsonRouteObj.error;
+			return;
+		}
+
+		if (respJsonRouteObj.type != undefined && respJsonRouteObj.type =="ApplicationError")
+		{
+			alert (respJsonRouteObj.details);
+			feedbackTxt.innerHTML = respJsonRouteObj.details;
+			return;
+		}
+
+		// create link objects
+		for(var m = 0; m < respJsonRouteObj.response.route[0].leg[0].link.length; m++)
+		{
+			var strip = new H.geo.Strip(),
+				shape = respJsonRouteObj.response.route[0].leg[0].link[m].shape,
+				i,
+				l = shape.length;
+
+			for(i = 0; i < l; i++)
+			{
+				strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+				currentRouteStrip.pushLatLngAlt.apply(currentRouteStrip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+			}
+
+			var link = new H.map.Polyline(strip,
+			{
+				style:
+				{
+					lineWidth: 5,
+					strokeColor: "rgba(18, 65, 145, 1)",
+					lineJoin: "round"
+				}
+			});
+			link.setArrows({color:"#F00F",width:2,length:3,frequency: 4});
+			// we store some additional values to each link cause they get re-used for simulation
+			link.$linkId = respJsonRouteObj.response.route[0].leg[0].link[m].linkId;
+			link.$linkLength = respJsonRouteObj.response.route[0].leg[0].link[m].length;
+			link.$linkShape = shape;
+			link.$linkPositionOnRoute = m;
+			link.$remainTime = respJsonRouteObj.response.route[0].leg[0].link[m].remainTime;
+			link.$remainDistance = respJsonRouteObj.response.route[0].leg[0].link[m].remainDistance;
+			routeGroup.addObject(link);
+		}
+
+		// zoom to route
+		map.addObject(routeGroup);
+		map.setViewBounds(routeGroup.getBounds());
+
+	}
+
+	// Helper for clearing the current route
+	function clearRoute()
+	{
+		currentRouteStrip = new H.geo.Strip();
+		stopRouteSimulation();
+		iSimulationIsAtPosition = 0;
+		try
+		{
+			if(routeGroup)
+			{
+				map.removeObject(routeGroup);
+			}
+		}
+		catch (e)
+		{
+			// this can happen if the group contains elements but they did not got added to the map
+			// we do nothing.
+		}
+		try
+		{
+			if(simulationGroup)
+			{
+				map.removeObject(simulationGroup);
+			}
+		}
+		catch(e)
+		{
+			// nothing we can do
+		}
+
+		routeGroup = new H.map.Group()
+		simulationGroup = new H.map.Group();
+	}
+
+	// Helper for clearing map display
+	function clearPreviousResults()
+	{
+		clearRoute();
+		destLat = null;
+		destLon = null;
+		currPosLat = currPosDefaultLat;
+		currPosLon = currPosDefaultLon;
+		bDispatcherMessageAvailable = false;
+		bDispatcherMessagePending = false;
+
+		currJobId = null;
+		currDispatcherId = null;
+		lastUpdateTimestamp = null;
+
+	}
+
+
+
+	// start route simulation
+	function startStopRouteSimulation()
+	{;
+		if(!bSimulationRunning)
+		{
+			startRouteSimulation();
+		}
+		else
+		{
+			stopRouteSimulation();
+		}
+	}
+
+	// Helper for route simulation start
+	function startRouteSimulation()
+	{
+		// start simulation
+
+		// check if truck or simulation group is already part of the map - otherwise add them
+		var arrayMapObjects = map.getObjects();
+		var bTruckMarkerFound = false;
+		var bSimulationGroupFound = false;
+		for(var k = 0; k < arrayMapObjects.length; k++)
+		{
+			if(arrayMapObjects[k] == truckMarker)
+			{
+				bTruckMarkerFound = true;
+			}
+			if(arrayMapObjects[k] == simulationGroup)
+			{
+				bSimulationGroupFound = true;
+			}
+
+			if(bTruckMarkerFound && bSimulationGroupFound)
+			{
+				break;
+			}
+		}
+		if(!bTruckMarkerFound)
+		{
+			// set route start
+			var startCoord = currentRouteStrip.extractPoint(0);
+			truckMarker.setPosition(startCoord);
+			iSimulationIsAtPosition = 0;
+		}
+		if(!bSimulationGroupFound)
+		{
+			map.addObject(simulationGroup);
+		}
+		bSimulationRunning = true;
+		//start walker
+		simulationWalker = new Walker(truckMarker, currentRouteStrip);
+		simulationWalker.walk();
+	}
+
+	// Helper for route simulation stop
+	function stopRouteSimulation()
+	{
+		// stop simulation
+		bSimulationRunning = false;
+		if(simulationWalker)
+		{
+			simulationWalker.stop();
+		}
+	}
+
+	var Walker = function (marker, path)
+	{
+		this.path = path;
+		this.marker = marker;
+		this.dir = -1;
+		this.isWalking = false;
+		this.lastRemainDistance = null;
+		var that = this;
+		var done = false;
+		var reached = false;
+		this.walk = function ()
+		
+		{
+			// Get the next coordinate from the route and set the marker to this coordinate
+			if(iSimulationIsAtPosition > path.getPointCount() - 1){
+				var coord = path.extractPoint(path.getPointCount() - 1);
+				done = true;
+			}else{
+				var coord = path.extractPoint(iSimulationIsAtPosition);
+			}
+			
+
+			marker.setPosition(coord);
+
+			// If we get to the end of the route, stop
+			if (!iSimulationIsAtPosition || iSimulationIsAtPosition === path.getPointCount() - 1) {
+				iSimulationIsAtPosition === path.getPointCount() - 2;
+			}
+
+			iSimulationIsAtPosition += 1;
+
+			/* Recursively call this function with time that depends on the distance to the next point
+			 * which makes the marker move in similar random fashion
+			 */
+			if(!reached){
+				that.timeout = setTimeout(that.walk, 100);
+				that.isWalking = true;
+			}
+				
+			
+				
+			
+
+			
+
+			// remember current position
+			currPosLat = coord.lat;
+			currPosLon = coord.lng;
+
+			// get underlying link attribute for simulation remaining distance and time
+			var pixelcoord  = map.geoToScreen(coord);
+			var objects = map.getObjectsAt(pixelcoord.x, pixelcoord.y);
+			var remainingTimeSeconds = 0;
+			var remainingDistanceMeter = 0;
+			if(objects != undefined)
+			{
+				for(var object in objects)
+				{
+					if(objects[object].$remainTime != undefined)
+					{
+						remainingTimeSeconds = objects[object].$remainTime;
+						remainingDistanceMeter = objects[object].$remainDistance;
+						break;
+					}
+				}
+			}
+
+			if(that.lastRemainDistance == null || that.lastRemainDistance - 1000 > remainingDistanceMeter || done)
+			{
+				var eventId = 'ETA_UPDATE';
+				lastUpdateTimestamp = getCurrentMilliseconds();
+				if(iSimulationIsAtPosition === path.getPointCount() - 1 || done)
+				{
+					sendfceMessage(fceEventVersion, 'DESTINATION_REACHED', currJobId, document.getElementById("dispatcherID").value, null, null, currPosLat, currPosLon, lastUpdateTimestamp, updateEtaCallback);
+					reached = true;
+				}else{
+					
+					sendfceMessage(fceEventVersion, eventId, currJobId, currDispatcherId, remainingTimeSeconds, remainingDistanceMeter, currPosLat, currPosLon, lastUpdateTimestamp, updateEtaCallback);
+				}
+				
+				that.lastRemainDistance = remainingDistanceMeter;
+			}
+			if(that.lastRemainDistance == null)
+			{
+				that.lastRemainDistance = remainingDistanceMeter;
+			}
+		};
+
+		this.stop = function ()
+		{
+			clearTimeout(that.timeout);
+			this.isWalking = false;
+		};
+		
+	};
+
+	// Helper for getting current milliseconds
+	function getCurrentMilliseconds()
+	{
+		return new Date().getTime();
+	}
+
+	//Function to convert hex format to a rgb color from http://jsfiddle.net/Mottie/xcqpF/1/light/
+	function rgb2hex(rgb){
+	 rgb = rgb.match(/^rgba?[\s+]?\([\s+]?(\d+)[\s+]?,[\s+]?(\d+)[\s+]?,[\s+]?(\d+)[\s+]?/i);
+	 return (rgb && rgb.length === 4) ? "#" +
+	  ("0" + parseInt(rgb[1],10).toString(16)).slice(-2) +
+	  ("0" + parseInt(rgb[2],10).toString(16)).slice(-2) +
+	  ("0" + parseInt(rgb[3],10).toString(16)).slice(-2) : '';
+	}
+</script>

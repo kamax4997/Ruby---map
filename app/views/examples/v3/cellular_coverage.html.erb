@@ -1,0 +1,727 @@
+<%= javascript_include_tag "center-utils.js" %>
+<%= javascript_include_tag "pde-layer-provider.js" %>
+<%= javascript_include_tag "cell-mccmnc-map.js" %>
+
+<% content_for :title, "Cellular Coverage" %>
+<style>
+  li {
+    list-style-type: square;
+    font-size: medium;
+  }
+  a.speed-record {
+    color: #00ACDC;
+    text-decoration: underline;
+  }
+  .speed-record {
+    font-size: small;
+    padding: 0.1em;
+  }
+  table.speed-record td {
+    padding: 0.4em;
+    border: 1px solid white
+  }
+  .ctrl-panel select.form-control, .ctrl-panel input.form-control {
+      padding: 2px 6px;
+      height: 25px;
+  }
+</style>
+
+<div class="ctrl-panel" style = "max-width: 300px">
+    <span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+    
+    <p>Zoom in to get available MCC and MNC entries of the country automatically populated in the drop downs.
+
+    <input type="hidden" id="endpoint" value="https://fleet.api.here.com" autocomplete="off"/> <!-- http://localhost:8080 -->
+    <!-- <div style="width: 250px" id="endpoint_div"></div> -->
+    
+    <br>
+    <table id="carrierTable">
+        <tr>
+          <td>MCC: </td>
+          <td><select class='form-control' id="mcc" onchange="updateCarrier(this)"></select></td>
+        </tr>
+        <tr>
+          <td>MNC: </td>
+          <td><select class='form-control' id="mnc" onchange="updateCarrier(this)"></select></td>
+        </tr>
+        <tr>
+          <td>Network: </td>
+          <td><select class='form-control' id="network" onchange="updateCarrier(this)">
+                  <option value="2G">                2G</option>
+                  <option value="3G" selected="true">3G</option>
+                  <option value="4G">                4G</option>
+              </select>
+          </td>
+        </tr>
+    </table>
+    <br>
+    <table>
+      <tr>Colors of different signal strengths on link: </tr>
+      <tr></tr>
+      <tr>
+        <td><span class="colorbox" style="margin-left: 5px; background: #61ba72"></span>Good</td>
+        <td><span class="colorbox" style="margin-left: 5px; background: #fecf00"></span>Fair</td>
+        <td><span class="colorbox" style="margin-left: 5px; background: #ea232d"></span>Poor</td>
+        <td><span class="colorbox" style="margin-left: 5px; background: #0f1621"></span>No Coverage</td>
+      </tr>
+    </table>
+
+    <hr class="separator">
+
+    <p>Select Start and Destination by long mouse pressing, provide Carrier (MCC + MNC) and Networks that routing should be optimized for. 
+
+    <table id="routingTable">
+      <tr><td>Start:      </td><td><input class='form-control' type='text' id='start' >                                                            </td></tr>
+      <tr><td>Destination:</td><td><input class='form-control' type='text' id='dest' onkeydown="if (event.keyCode == 13) routeButton.onclick();"></td></tr>
+      
+      <tr>
+        <td>Optimize for:</td>
+        <td>
+          <div>
+            <input id="optimize-checkbox" type="checkbox" value="optimized" onchange="enableOptimization(this)" />
+          </div>
+        </td>
+      </tr>
+      <tr><td>Carrier:    </td><td><input class='form-control' type='text' id='carrier' value='' disabled></td></tr>
+      <tr>
+        <td>Networks:</td>
+        <td>
+          <div>
+            <input id="2g-checkbox" type="checkbox" value="2G"  disabled/>2G &nbsp
+            <input id="3g-checkbox" type="checkbox" value="3G"  disabled/>3G &nbsp
+            <input id="4g-checkbox" type="checkbox" value="4G"  disabled/>4G &nbsp
+          </div>
+        </td>
+      </tr>
+
+      <tr>
+        <td><input class="btn btn-default btn-sm" type="submit" id="routeButton" value="Calculate"></td>
+        <td><input class="btn btn-default btn-sm" type="submit" id="clearButton" value="Clear"></td>
+      </tr>
+    </table>
+
+    <div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+
+</div>
+
+<div id="mapContainer"></div>
+<div id="pageblock"></div>
+<div id="spinner"></div>
+
+<script type="text/javascript">
+
+  var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+  var platform = new H.service.Platform({
+    useHTTPS: (location.protocol === 'https:') ? true : false,
+    app_id: app_id,
+    app_code: app_code
+  });
+
+  maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+  
+  var greyTileLayer = platform.getMapTileService({type: 'base'}).createTileLayer('maptile', 'normal.day.grey', hidpi ? 512 : 256, 'png8', null);
+  greyTileLayer.setMax(17);
+  
+  var map = new H.Map(document.getElementById('mapContainer'), greyTileLayer, {
+    center: {lat: 50.100208, lng: 8.685442},
+    zoom: 11,
+    pixelRatio: hidpi ? 2 : 1
+  });
+
+  var mapevents = new H.mapevents.MapEvents(map);
+  var behavior = new H.mapevents.Behavior(mapevents);
+  var group = new H.map.Group();
+  map.addObject(group);
+  var ui = H.ui.UI.createDefault(map, maptypes);
+
+  window.addEventListener('resize', function () {
+    map.getViewPort().resize();
+  });
+
+  var PDE_ENDPOINT    = document.getElementById('endpoint').value;
+  var selectedMcc, selectedMnc, selectedNetwork;
+  var foundCarriers = new Map(); // mcc => [mnc1, mnc2, ...]
+  var mncNames = new Map();  // mcc + mnc => name
+
+  var FLEET_ENDPOINT  = PDE_ENDPOINT;
+  var	routeButton     = document.getElementById("routeButton");
+  var	clearButton     = document.getElementById("clearButton");
+  var	startPoint      = document.getElementById("start");
+	var	destPoint       = document.getElementById("dest");
+
+  var bLongClickUseForStartPoint = true;
+  var startMarker =  null;
+  var destMarker = null;
+      
+  var pointA;
+  var pointB;    
+  
+  var selectedNetworksForRouting = [];
+
+  var polylines = [];
+
+  // add long click in map event listener
+	map.addEventListener('longpress', handleLongClickInMap);
+
+  document.getElementById('start').addEventListener('input', evt => {
+    if(!evt.target.value.trim() && startMarker) {
+      if(group.contains(startMarker)) group.removeObject(startMarker);
+      startMarker = null;
+      bLongClickUseForStartPoint = true;
+    }
+  });
+
+  document.getElementById('dest').addEventListener('input', evt => {
+    if(!evt.target.value.trim() && destMarker) {
+      if(group.contains(destMarker)) group.removeObject(destMarker);
+      destMarker = null;
+      if(!startMarker)
+        bLongClickUseForStartPoint = true;
+      else
+        bLongClickUseForStartPoint = false;  
+    }
+  });
+
+  var checkboxIds = ['2g-checkbox', '3g-checkbox', '4g-checkbox'];
+  for(id of checkboxIds){
+      document.getElementById(id).addEventListener('change', evt => {
+                                                      if(evt.target.checked) selectedNetworksForRouting.push(evt.target.value);
+                                                      else selectedNetworksForRouting.splice(selectedNetworksForRouting.indexOf(evt.target.value), 1);
+                                                  });
+  }
+
+  (function setValuesFromUrl() {
+    var indexOf = window.location.href.indexOf('?');
+    selectedNetwork = document.getElementById("network").value;
+    
+    if(document.getElementById("endpoint_div")) document.getElementById("endpoint_div").innerHTML = ' Endpoint: ' + document.getElementById("endpoint").value;
+    
+    if (indexOf < 0) return;
+    var vars = window.location.href.slice(indexOf + 1).split('&');
+
+    for (var i = 0; i < vars.length; i++) {
+      nameVal = vars[i].split('=');
+      if (!nameVal[0]) continue;
+      document.getElementById(nameVal[0]).value = decodeURIComponent(nameVal[1]);
+    }
+  })();
+
+  function updateCarrier(selectObject) {
+    if('mcc' === selectObject.id) {
+      selectedMcc = selectObject.value;
+      // update its mnc list
+      var mncSelect = document.getElementById('mnc');
+      mncSelect.options.length = 0;
+      for(var i = 0; i < foundCarriers.get(selectedMcc).length; i++) {
+          var mnc = foundCarriers.get(selectedMcc)[i];
+          var mncName = mnc;
+          if(mncNames.get(selectedMcc + mnc) !== undefined){
+            mncName += ' - ' + mncNames.get(selectedMcc+mnc);
+          }
+          if( i == 0) {
+            mncSelect.options[i] = new Option(mncName, foundCarriers.get(selectedMcc)[i], false, true);
+            selectedMnc = foundCarriers.get(selectedMcc)[i];
+          }
+          else {
+            mncSelect.options[i] = new Option(mncName, foundCarriers.get(selectedMcc)[i], false, false);
+          }
+      }
+    }
+    else if ('mnc' === selectObject.id)
+      selectedMnc = selectObject.value;
+    else if ('network' === selectObject.id)
+      selectedNetwork = selectObject.value;
+
+    cellSignalProcessor.start();
+  }
+
+	/********************************************************
+	Start/Destination selectin via LongClick in map
+	********************************************************/
+	function handleLongClickInMap(currentEvent) {
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+
+		if(bLongClickUseForStartPoint)
+		{
+			var line1 = "" + Math.round(lastClickedPos.lat * 100000) / 100000 + ", " + Math.round(lastClickedPos.lng * 100000) / 100000;
+			startPoint.value = line1;
+      pointA = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+      
+			if(group.contains(startMarker))
+				group.removeObject(startMarker);
+      
+      startMarker = new H.map.Marker(pointA,
+				{
+					icon: createIconMarker(line1, "Start")
+				});
+			group.addObject(startMarker);
+      bLongClickUseForStartPoint = false;
+      endpoint.value = '';
+		}
+		else
+		{
+			var line1 = "" + Math.round(lastClickedPos.lat * 100000) / 100000 + ", " + Math.round(lastClickedPos.lng * 100000) / 100000;
+			destPoint.value = line1;
+			pointB = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+			if(group.contains(destMarker))
+				group.removeObject(destMarker);
+			destMarker = new H.map.Marker(pointB,
+				{
+					icon: createIconMarker(line1, "Destination")
+				});
+			group.addObject(destMarker);
+			bLongClickUseForStartPoint = true;
+			//routeButton.onclick();
+		}
+	}	
+
+	// User pressed button --> calculate route
+	routeButton.onclick = function () {
+      if(startPoint.value || destPoint.value) {
+        if(!startMarker && startPoint.value.indexOf(',') != -1) {
+          pointA = new H.geo.Point(startPoint.value.split(',')[0], startPoint.value.split(',')[1])
+          startMarker = new H.map.Marker(pointA,
+          {
+            icon: createIconMarker(startPoint.value, "Start")
+          });
+        }
+        if(!destMarker && destPoint.value.indexOf(',') != -1) {
+          pointB = new H.geo.Point(destPoint.value.split(',')[0], destPoint.value.split(',')[1])
+          destMarker = new H.map.Marker(pointB,
+          {
+            icon: createIconMarker(destPoint.value, "Destination")
+          });
+        }
+        var fleetRouterRequest = FLEET_ENDPOINT + "/2/calculateroute.json?mode=fastest;car;traffic:disabled&app_id=" + app_id + "&app_code=" + app_code + "&jsoncallback=gotRoutingResponse";
+
+        if(startPoint.value) fleetRouterRequest += "&waypoint0=" + startPoint.value;
+        if(destPoint.value)  fleetRouterRequest += "&waypoint1=" + destPoint.value;
+
+        if(!document.getElementById("carrier").disabled && document.getElementById("carrier").value)
+          fleetRouterRequest += "&cellularSignals=carrier:" + document.getElementById("carrier").value;
+        
+        if(!document.getElementById('2g-checkbox').disabled && selectedNetworksForRouting.length != 0){
+          var joinedValues = selectedNetworksForRouting.join(',');
+          if(joinedValues.indexOf('3G') != -1) 
+              joinedValues = joinedValues.replace("3G", "3G-FDD,3G-TDD");
+          fleetRouterRequest += ";network:" + joinedValues;
+        }
+        
+        Spinner.showSpinner();
+        // clean up
+        group.removeAll();
+        if(startMarker)
+          group.addObject(startMarker);
+        if(destMarker)
+          group.addObject(destMarker);  
+        bLongClickUseForStartPoint = true;
+        feedbackTxt.innerHTML = "Routing from: " + startPoint.value + " to " + destPoint.value ;
+        script = document.createElement("script");
+        script.src = fleetRouterRequest;
+        document.body.appendChild(script);
+      }
+      else{
+        feedbackTxt.innerHTML = '<font color="red">' + 'ERROR: start and destination missing' + '</font>';
+      }
+  };
+
+  clearButton.onclick = function () {
+      group.removeAll();
+      startMarker = null;
+      destMarker = null;
+      bLongClickUseForStartPoint = true;
+  };
+
+  // parse the routing response
+	var gotRoutingResponse = function (resp)	{
+    if(resp.response_code){
+        var errorMsg = '';//resp.response_code;
+        if(resp.issues && resp.issues.length > 1)
+          errorMsg += 'ERROR: ' + resp.issues[0].message;
+        feedbackTxt.innerHTML = '<font color="red">' + errorMsg.replace(/</g,'&lt;') + '</font>';
+        Spinner.hideSpinner();
+        return;
+    }
+
+    for (var r = 0; r < resp.response.route.length; r++) {
+      for (var m = 0; m < resp.response.route[r].leg[0].link.length; m++) {
+        var linkId = (resp.response.route[r].leg[0].link[m].linkId.lastIndexOf("+", 0) === 0 ? resp.response.route[r].leg[0].link[m].linkId.substring(1) : resp.response.route[r].leg[0].link[m].linkId);
+        var strip = new H.geo.Strip(),
+        shape = resp.response.route[r].leg[0].link[m].shape,
+        i,
+        l = shape.length;
+        for (i = 0; i < l; i += 2) {
+          strip.pushLatLngAlt(shape[i], shape[i + 1], 0);
+        }
+        var link = new H.map.Polyline(strip,  { style: {
+                                                lineWidth: 7, 
+                                                strokeColor: 'rgba(0, 145, 255, 0.7)',
+                                                lineCap: 'butt'
+                                              }
+                                      });
+          link.setArrows({color: "#F00F", width: 2, length: 3, frequency: 4});
+          link.$linkId = resp.response.route[r].leg[0].link[m].linkId;
+          group.addObject(link);
+      }
+    }
+    map.setViewBounds(group.getBounds());
+
+    if(resp && resp.response && resp.response.route[0] && resp.response.route[0].summary && resp.response.route[0].summary.travelTime)
+      feedbackTxt.innerHTML = '<font color="green">' + 'travel time: ' + gettime(resp.response.route[0].summary.travelTime) + ';    distance: ' + resp.response.route[0].summary.distance / 1000 + ' km' +'</font>';
+
+    Spinner.hideSpinner();
+  }
+
+  function enableOptimization(checkbox) {
+    if(checkbox.checked){
+      document.getElementById('carrier').disabled = false;
+      document.getElementById('carrier').value = (selectedMcc && selectedMnc)? selectedMcc + selectedMnc : '';
+      document.getElementById('2g-checkbox').disabled = false;
+      document.getElementById('3g-checkbox').disabled = false;
+      document.getElementById('4g-checkbox').disabled = false;
+
+      if(selectedNetworksForRouting.indexOf('2G') != -1) document.getElementById('2g-checkbox').checked = true;
+      if(selectedNetworksForRouting.indexOf('3G') != -1) document.getElementById('3g-checkbox').checked = true;
+      if(selectedNetworksForRouting.indexOf('4G') != -1) document.getElementById('4g-checkbox').checked = true;
+
+    }
+    else{
+      document.getElementById('carrier').value='';
+      document.getElementById('carrier').disabled = true;
+      document.getElementById('2g-checkbox').checked = false;
+      document.getElementById('2g-checkbox').disabled = true;
+      document.getElementById('3g-checkbox').checked = false;
+      document.getElementById('3g-checkbox').disabled = true;
+      document.getElementById('4g-checkbox').checked = false;
+      document.getElementById('4g-checkbox').disabled = true;
+    }
+  }
+
+  var	gettime = function(time){
+		h = Math.floor(time / 3600);
+		(h < 10) ? h = "0" + h : h;
+		m = Math.floor((time % 3600) / 60);
+		(m < 10) ? m = "0" + m : m;
+		s = time % 60;
+		(s < 10) ? s = "0" + s : s;
+		return h + ":" + m + ":" + s;
+	};
+  
+  // Create Start / Destination marker
+	var createIconMarker = function (line1, line2) {
+		var div = document.createElement("div");
+
+		var div = document.createElement("div");
+		var svgMarker = "";
+
+		if(line1 != "" && line2 != "")
+		{
+			svgMarker = svgMarkerImage_Line;
+			svgMarker = svgMarker.replace(/__line1__/g, line1);
+			svgMarker = svgMarker.replace(/__line2__/g, line2);
+			svgMarker = svgMarker.replace(/__width__/g, line1.length  * 4 + 57);
+			svgMarker = svgMarker.replace(/__widthAll__/g, line1.length  * 4 + 120);
+		}
+		else
+		{
+			svgMarker = svgMarkerBase64Image.replace(/__widthAll__/g, "60");
+		}
+		div.innerHTML = svgMarker;
+
+		return new H.map.Icon(svgMarker, {
+			anchor: new H.math.Point(24, 57)
+		});
+
+	};
+
+  var cellSignalProcessor = (function () {
+    var currentLayers = [];
+
+    var bubble = new H.ui.InfoBubble({lat: 0, lng: 0}, {content: ''});
+    bubble.close();
+    ui.addBubble(bubble);
+
+    function showBubble(fc, e, data) {
+      var p = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+      var cellLayer = 'CELL_SIGNALS_FC' + fc;
+      var content = ('<table class="speed-record">' +
+      '<tr><td>LINK_ID</td><td>{linkId}</td></tr>' +
+      '<tr><td>CARRIER_CELL_SIGNALS</td><td>{signalData}</td></tr>' +
+      '</table>' +
+      '<a target="_blank" class="speed-record" href="https://tcs.ext.here.com/pde/layer?region=CELLULARSIGNALWORLD&release=LATEST&url_root={pdeRoot}&layer=CELL_SIGNALS_FC{fc}">Read PDE layer doc for details</a>')
+          .replace('{linkId}', data[cellLayer].LINK_ID)
+          .replace('{signalData}', data[cellLayer].CARRIER_CELL_SIGNALS || 'n/a');
+      bubble.setPosition(p);
+      bubble.setContent(content);
+      bubble.open();
+    }
+
+    function signalStrengthBasedStyle(fc, data) {
+      var cellularLayer = 'CELL_SIGNALS_FC' + fc;
+      var cellularData = data[cellularLayer];
+      if (!cellularData) return null;
+
+      var strengthValue = parseInt(data.processedKey.split('-')[1]);
+
+      if (!strengthValue) return null;
+
+      var color;
+      if (strengthValue <= 2) color = '#61ba72';     //green -> 1, 2
+      else if(strengthValue == 3) color = '#fecf00'; //orange
+      else if(strengthValue == 4) color = '#ea232d'; //red
+      else if(strengthValue <= 6) color = '#0f1621'; //black
+     
+      return {
+        strokeColor: color,
+        lineWidth: 6 - fc
+      }
+    }
+
+    function convert(netWorkCode) {
+        if(netWorkCode == 1) return '2G';
+        else if(netWorkCode == 2 || netWorkCode == 3) return '3G';
+        else if(netWorkCode == 4) return '4G';
+        else return '';
+    }
+
+    function handleSignalOffsetsOnLink(fc, strip, data) {
+
+      var polylineSubset = function (latLonZ, startOffset, endOffset){
+        var totalPolyLineLength = 0;
+        var shapePointOffsets = Array(latLonZ.length / 3).fill(0);
+      
+        for (var i = 0; i < latLonZ.length - 3; i += 3) {
+          totalPolyLineLength += getKartesianDistanceInMeter(latLonZ[i], latLonZ[i + 1], latLonZ[i + 3], latLonZ[i + 4]);
+          shapePointOffsets[i / 3 + 1] = totalPolyLineLength;
+        }
+        var firstShapePointIndex = 0, lastShapePointIndex = 0;
+
+        for (var i = 0; i < latLonZ.length / 3; i++) {
+          shapePointOffsets[i] /= totalPolyLineLength;
+          if (firstShapePointIndex == 0 && shapePointOffsets[i] >= startOffset) firstShapePointIndex = i;
+          if (                             shapePointOffsets[i] <= endOffset  ) lastShapePointIndex  = i;
+        }
+
+        var omitFirst = shapePointOffsets[firstShapePointIndex] == startOffset, omitLast = shapePointOffsets[lastShapePointIndex] == endOffset;
+        var shift = omitFirst ? 3 : 0;
+
+        var result = Array(3 * (lastShapePointIndex - firstShapePointIndex + 3) - (omitFirst ? 3 : 0) - (omitLast ? 3 : 0)).fill(0);
+
+        // interpolate the start and end points
+        if (!omitFirst) {
+          var offsetBetweenNeighhborPoints = (startOffset - shapePointOffsets[firstShapePointIndex - 1]) / (shapePointOffsets[firstShapePointIndex] - shapePointOffsets[firstShapePointIndex - 1]);
+          result[0                ] = Math.round((latLonZ[firstShapePointIndex * 3 - 3] + (latLonZ[firstShapePointIndex * 3 + 0] - latLonZ[firstShapePointIndex * 3 - 3]) * offsetBetweenNeighhborPoints) * 100000.0) / 100000.0;
+          result[1                ] = Math.round((latLonZ[firstShapePointIndex * 3 - 2] + (latLonZ[firstShapePointIndex * 3 + 1] - latLonZ[firstShapePointIndex * 3 - 2]) * offsetBetweenNeighhborPoints) * 100000.0) / 100000.0;
+          result[2                ] = Math.round( latLonZ[firstShapePointIndex * 3 - 1] + (latLonZ[firstShapePointIndex * 3 + 2] - latLonZ[firstShapePointIndex * 3 - 1]) * offsetBetweenNeighhborPoints);
+        }
+
+        for (var i = firstShapePointIndex; i <= lastShapePointIndex; i++) {
+          for (var j = 0; j < 3; j++) 
+            result[(i - firstShapePointIndex + 1) * 3 + j - shift] = latLonZ[i * 3 + j];
+        }
+
+        if (!omitLast) {
+          var offsetBetweenNeighhborPoints = (endOffset - shapePointOffsets[lastShapePointIndex]) / (shapePointOffsets[lastShapePointIndex + 1] - shapePointOffsets[lastShapePointIndex]);
+          result[result.length - 3] = Math.round((latLonZ[lastShapePointIndex  * 3    ] + (latLonZ[lastShapePointIndex  * 3 + 3] - latLonZ[lastShapePointIndex  * 3    ]) * offsetBetweenNeighhborPoints) * 100000.0) / 100000.0;
+          result[result.length - 2] = Math.round((latLonZ[lastShapePointIndex  * 3 + 1] + (latLonZ[lastShapePointIndex  * 3 + 4] - latLonZ[lastShapePointIndex  * 3 + 1]) * offsetBetweenNeighhborPoints) * 100000.0) / 100000.0;
+          result[result.length - 1] = Math.round( latLonZ[lastShapePointIndex  * 3 + 2] + (latLonZ[lastShapePointIndex  * 3 + 5] - latLonZ[lastShapePointIndex  * 3 + 2]) * offsetBetweenNeighhborPoints);
+        }
+
+        if (result.length == 3) { // it if either just the first point or just the last point
+          var result1 = [];
+          for (var i = 0; i < 3; i++) {
+            result1[i] = result[i]; result1[i + 3] = result[i];
+          }
+          result = result1;
+        }
+        return result;
+      }
+
+      var getKartesianDistanceInMeter = function (lat1, lon1, lat2, lon2) {
+        var earthRadius = 6371000;
+        // convert input parameters from decimal degrees into radians
+        var phi1 = (lat1) * Math.PI / 180;
+        var phi2 = (lat2) * Math.PI / 180;
+        var dphi = phi2 - phi1;
+        var dl = (lon2 - lon1) * (Math.PI / 180);
+
+        var a = Math.sin(dphi/2) * Math.sin(dphi/2) +
+                Math.cos(phi1) * Math.cos(phi2) *
+                Math.sin(dl/2) * Math.sin(dl/2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return earthRadius * c;
+      }
+
+      var identifyNewCarrier = function (carrierId) {
+        if(carrierId.length != 6) return;
+        var mcc = carrierId.substring(0,3);
+        var mnc = carrierId.substring(3,6);
+
+        // found a new mcc
+        if(foundCarriers.get(mcc) === undefined) {
+          var mncArray = [];
+          foundCarriers.set(mcc, mncArray);
+          var mccOptionText = mcc;
+          // try to retrieve country name from mcc_mnc_map
+          if(mcc_mnc_map.get(mcc) !== undefined){
+            var array = mcc_mnc_map.get(mcc);
+            mccOptionText += ' - ' + array[0];
+          }
+          var selectMcc = document.getElementById("mcc");
+          if(selectMcc.options.length == 0) {
+            selectMcc.options[selectMcc.options.length] = new Option(mccOptionText, mcc, false, true);
+            selectedMcc = mcc;
+          }
+          else{
+            selectMcc.options[selectMcc.options.length] = new Option(mccOptionText, mcc, false, false);
+          }
+        }
+        // found a new mnc
+        if(!foundCarriers.get(mcc).includes(mnc)) {
+          foundCarriers.get(mcc).push(mnc);
+          // try to retrieve mnc name from mcc_mnc_map
+          var found = false;
+          if(mcc_mnc_map.get(mcc) !== undefined){
+            var array = mcc_mnc_map.get(mcc);
+            for(var i = 1; i < array.length; i++) {
+              if(array[i].mnc === mnc) {
+                mncNames.set(mcc + mnc, array[i].name);
+                found = true;
+                break;
+              }
+            }
+          }
+          if(!found) mncNames.set(mcc + mnc, "Unknown");
+          var selectMcc = document.getElementById("mcc");
+          if(selectMcc.options[selectMcc.selectedIndex].value === mcc) {          
+            var selectMnc = document.getElementById("mnc");
+            var mncOptionText = mnc;
+            if(mncNames.get(mcc + mnc) !== undefined)
+              mncOptionText += ' - ' + mncNames.get(mcc + mnc);
+            if(selectMnc.options.length == 0) {
+              selectMnc.options[selectMnc.options.length] = new Option(mncOptionText, mnc, false, true);
+              selectedMnc = mnc;
+            }
+            else{
+              selectMnc.options[selectMnc.options.length] = new Option(mncOptionText, mnc, false, false);
+            }
+          }
+        }  
+      }
+
+      var cellularLayer = 'CELL_SIGNALS_FC' + fc;
+      var cellularData = data[cellularLayer];
+      if (!cellularData) return {single: strip};
+
+      var strips = {};
+      var count = 0;
+      var selectedCarrierId = selectedMcc + selectedMnc;
+      for(var carrierData of cellularData.CARRIER_CELL_SIGNALS.split('|')){
+          var carrierValues = carrierData.split('#');
+         
+          identifyNewCarrier(carrierValues[0]);
+          if(!selectedCarrierId) selectedCarrierId = selectedMcc + selectedMnc;
+          
+          if(carrierValues[0] === selectedCarrierId){
+            for(var i = 1; i < carrierValues.length; i++){
+               var networkValues = carrierValues[i].split('=');
+               if(convert(networkValues[0]) === selectedNetwork){
+                  for(var j = 1; j < networkValues.length; j++) {
+                     var percentValues = networkValues[j].split(',');
+                     if(percentValues.length == 1) { // no offsets
+                       strengthValue = parseInt(percentValues[0].split(':')[1]);
+                       strips[(count++) + '-' + strengthValue] = strip;
+                     }
+                     else{
+                       for(var k = 1; k <= percentValues.length; k++) {
+                         var startOffsetStr = percentValues[k-1].split(':')[0];
+                         var startOffset; 
+                         if (startOffsetStr == '')
+                            startOffset = 0;
+                         else
+                            startOffset = parseInt(startOffsetStr) / 10000;
+                         var strengthValue = parseInt(percentValues[k-1].split(':')[1]);
+                         var endOffset;
+                         if(k < percentValues.length)
+                            endOffset = parseInt(percentValues[k].split(':')[0]) / 10000;
+                         else
+                            endOffset = 1;
+                         var subsetGeom = polylineSubset(strip.getLatLngAltArray(), startOffset, endOffset);
+                         strips[(count++) + '-' + strengthValue] = H.geo.Strip.fromLatLngArray(subsetGeom.filter(i => i != 0));
+                       }
+                     }
+                  }
+               }
+            }
+          }
+      }
+      return strips;
+    }
+
+    function start() {
+      currentLayers.forEach(function (l) {
+        map.removeLayer(l);
+      });
+      polylines = [];
+      for (var fc = 1; fc <= 5; fc++) {
+        var cellSignalLayer = 'CELL_SIGNALS_FC' + fc;
+        var layer = new H.map.layer.ObjectLayer(createPdeObjectProvider(map, {
+          min: 10 + fc,
+          layer: 'ROAD_GEOM_FC' + fc,
+          dataLayers: [
+            {layer: cellSignalLayer, release: ''}
+          ],
+          level: 8 + fc,
+          postProcess: handleSignalOffsetsOnLink.bind(null, fc),
+          tap: showBubble.bind(null, fc),
+          polylineStyle: signalStrengthBasedStyle.bind(null, fc)
+        }));
+        map.addLayer(layer);
+        currentLayers.push(layer);
+      }
+
+      // following layer is not being used.
+      map.addLayer(new H.map.layer.CanvasLayer(function(ctx, renderParams) {
+        if(polylines.length != 0) {
+          ctx.fillStyle = "red";
+          ctx.fillText("Polyline objects: " + polylines.length, 10, 550);
+        }
+
+        var topLeft = renderParams.projection.geoToPixel({lat: renderParams.bounds.ka, lng: renderParams.bounds.ga});
+        
+        for(polyline of polylines) {
+          var strip = polyline.getGeometry();
+          ctx.lineWidth = polyline.style.lineWidth;
+          ctx.strokeStyle = polyline.style.strokeColor;
+          ctx.beginPath();
+          for(var i = 0; i < strip.getPointCount(); i++) {
+            var pointC = strip.extractPoint(i);
+            var pointP = renderParams.projection.geoToPixel({lat: pointC.lat, lng: pointC.lng});
+            ctx.lineTo(pointP.x - topLeft.x, pointP.y - topLeft.y);
+          }
+          ctx.stroke();
+        }
+        
+        return H.map.render.RenderState.DONE;
+      }));
+    }
+
+    this.start = start;
+    return this;
+
+  })();
+
+  // check whether CELL_SIGNALS layers exist.
+  var url = FLEET_ENDPOINT + '/1/doc/layer.json?layer=CELL_SIGNALS_FC1&app_id=' + app_id + '&app_code=' + app_code;
+
+  // First we load country static layer where we have information about driving side (relevant for rendering).
+  var req = new XMLHttpRequest();
+  req.open('GET', url);
+  req.onreadystatechange = function() {
+    if (req.readyState == 4 && req.status == 200) {
+      cellSignalProcessor.start();
+    }
+  };
+  req.send( null );
+
+</script>

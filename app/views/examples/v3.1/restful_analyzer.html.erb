@@ -1,0 +1,43 @@
+<% content_for :title, "Restful APIs" %>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
+    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="shortcut icon" href="/Here.png">
+    <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"></script>
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-clustering.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" href="https://npmcdn.com/react-bootstrap-table/dist/react-bootstrap-table-all.min.css">
+    <title>Here Restful API Analyzer</title>
+    <%= stylesheet_link_tag "restfulapi_analyzer_v3.1" %>
+</head>
+
+<body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+	<script>
+		let _body = document.getElementsByTagName("body");
+		let onLoad = () => {
+			let {childNodes} = _body[0];
+			for(let idx=0; idx < childNodes.length; idx++){
+				let {nodeName} = childNodes[idx];
+				console.log(childNodes[idx]);
+				if((nodeName.toLowerCase() === 'nav') || (nodeName.toLowerCase() === 'footer')){
+					childNodes[idx].style.display = 'none';
+				}
+			}
+		}
+
+		console.log(_body);
+		_body[0].onload = onLoad;
+		onLoad();
+	</script>
+	<div id="root" style="position:absolute; top:0; left:0"></div>
+    <%= javascript_include_tag "restfulapi_analyzer_v3.1" %>
+</body>

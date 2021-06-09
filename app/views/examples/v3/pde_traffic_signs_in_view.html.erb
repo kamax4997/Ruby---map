@@ -1,0 +1,325 @@
+<%= javascript_include_tag "date-time-parser" %>
+<%= javascript_include_tag "moment" %>
+<%= javascript_include_tag "moment-range" %>
+<%= javascript_include_tag "rectangle_selection" %>
+<%= javascript_include_tag "traffic-icons" %>
+
+<% content_for :title, "PDE: Traffic Signs in Map View or in selected Area" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p id="mapReleaseTxt">After selection, additional info is retrieved from PDE Web Service and displayed. </p>
+	<div class="form-horizontal">
+		<div class="form-group">
+			<div class="col-sm-9">
+				<input id="loadSpeedLimits" class="btn btn-default btn-sm" type="button" value="Load Traffic Signs for current View" onclick="loadTrafficSignsFromView();"/>
+			</div>
+		</div>		
+		<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+		<div>HLP Service releases which are used in this demo:</div>
+		<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+	</div>
+</div>
+
+<div id="mapContainer"></div>
+
+<div id="pageblock"></div>
+<div id="spinner"></div>
+
+<style type="text/css">
+	.PO {
+		position: absolute;
+		display: none;
+		background: white;
+		padding: 10px 10px 0px;
+		margin-left: -10px;
+		margin-top: 2em;
+		border-radius: 15px;
+		left: 50%; top: 50%;
+		border: solid #a1a1a1 1px;
+		padding: 10px;
+		font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+		text-align: justify;
+		font-size: 12px;
+		color: #1F2C35;
+		z-index: 1;
+	}
+	#page_block
+	{
+		width: 100%;
+		height: 100%;
+		left: 0;
+		top: 0;
+		background: white;
+		opacity:0.6;
+		position: absolute;
+		display: none;
+	}
+</style>
+
+<script type="text/javascript" id="exampleJsSource">
+
+	/*
+		author domschuette
+		(C) HERE 2016
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	var smapTileRequests = [], // elements have tileX, tileY, fc, level
+		mapContainer = document.getElementById("mapContainer"),
+		iconMap = {},
+		dmarkerColor = "rgba(255, 224, 22, 1)",
+		layers = null,
+		pdeManager = new PDEManager(app_id, app_code, layers),
+		currentBubble;
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Initialize our map
+	var platform = new H.service.Platform({	app_code: app_code,	app_id: app_id,	useHTTPS: secure }),
+	    maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+		map = new H.Map(mapContainer, maptypes.normal.map, { center: new H.geo.Point(50.161420780029026 , 8.534013309478581), zoom: 16	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+	var rectSelection = new H.ui.RectangleSelection();
+	ui.addControl('RectangleSelection', rectSelection);
+	rectSelection.setCallback(selection);
+	
+	var rect = null;
+	
+	var pdeReleaseShown = false;
+
+	//add JS API Release information
+	releaseInfoTxt.innerHTML+="JS API: 3."+ H.buildInfo().version;
+
+	//add MRS Release information
+	loadMRSVersionTxt();
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+	
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var	mapReleaseTxt = document.getElementById("mapReleaseTxt");
+	
+	var layers = new Object();
+	layers["TRAFFIC_SIGN_FC"] = {callback: signResponse, fcLayers: [1,2,3,4,5]};
+	layers["LINK_FC"] = {callback: linkResponse, fcLayers: [1,2,3,4,5]};
+	
+	var pdeManager = new PDEManager(app_id, app_code, layers),
+		group = new H.map.Group(),
+		releaseRoutingShown=false,
+		linkIDwithCoordinate = {},
+		linkIDswithTrafficSigns = {};
+
+	var loadTrafficSignsFromView = function()
+	{
+		var rect = map.getViewBounds();
+		loadTrafficSigns(rect);
+	}
+	
+
+	loadTrafficSigns = function(rect)
+	{
+		Spinner.showSpinner();
+		
+		linkIDwithCoordinate = {};
+		linkIDswithTrafficSigns = {};
+
+		group.removeAll();
+		
+		pdeManager.setLayers(layers);
+		pdeManager.setMeta(true);
+		pdeManager.setBoundingBoxContainer(group);
+		
+		pdeManager.setBoundingBox(rect);
+		pdeManager.setOnTileLoadingFinished(pdeManagerFinished);
+
+		pdeManager.start();
+	}
+	
+	function linkResponse(resp)
+	{
+		for(var i = 0; i < resp.Rows.length; i++)
+		{
+			var cur = resp.Rows[i],
+				linkId = cur.LINK_ID
+				lats = cur.LAT.split(",");
+				lons = cur.LON.split(",");
+			
+			var refLat=0,refLon=0,nonRefLat=0,nonRefLon=0;
+			
+			refLat = parseFloat(lats[0]) / 100000;
+			for(j=0;j<lats.length;j++)
+			nonRefLat = nonRefLat + (parseFloat(lats[j])) / 100000;
+
+			refLon = parseFloat(lons[0]) / 100000;
+			for(j=0;j<lons.length;j++)
+			nonRefLon = nonRefLon + (parseFloat(lons[j])) / 100000;
+
+
+			
+			var coords = new Array();
+			coords.push(new H.geo.Point(refLat, refLon));
+			coords.push(new H.geo.Point(nonRefLat,nonRefLon));
+			
+			linkIDwithCoordinate[linkId] = coords;
+			
+		}
+	}
+
+	function pdeManagerFinished(finishedRequests)
+	{
+		
+		for(var i in linkIDswithTrafficSigns)
+		{
+			var linkId = i,
+				value = linkIDswithTrafficSigns[i];
+				pos = linkId < 0 ? 0 : 1;
+				
+			
+				
+			//! TODO FIX ME WHY WE GET A LINK_ID IN CONDITIONS WHICH ARE NOT IN THE LINK_FC LAYERS
+			// console.log(linkId + "  " + value + "  " + linkIDwithCoordinate[linkId] + "  " + pos);
+			if(!linkIDwithCoordinate[Math.abs(linkId)])
+				continue;
+			
+			// !TODO check how to handle conditions which will overlap at intersections
+			var point = linkIDwithCoordinate[Math.abs(linkId)][pos],
+				signMarker,
+				trafficSignIdentifier = value.conditionType + "_" + value.signType;
+
+
+			if(trafficIcons[trafficSignIdentifier + "_eu"]){
+				signMarker = new H.map.Marker(point,
+					{
+						icon: trafficIcons[trafficSignIdentifier + "_eu"]
+					});
+			}else{
+				signMarker = new H.map.Marker(point,
+					{
+						icon: trafficIcons["11_000_eu"]
+					});
+			}
+			signMarker.$CONDITION_ID = value.conditionId;
+		
+			
+			var trafficSignIdentifier=value.conditionType + "_" + value.signType;
+			var trafficSign=trafficSigns[trafficSignIdentifier];
+			signMarker.$signType = trafficSign;
+			
+			signMarker.addEventListener("pointerdown", function(e)
+			{
+				if(currentBubble)
+					ui.removeBubble(currentBubble);
+				var html =  '<div>'+
+					'<p style="font-family:Arial,sans-serif; font-size:12px;">Condition ID: ' + e.target.$CONDITION_ID +'<br> SignType:'+ e.target.$signType+'</p>'+
+					'</div>';
+
+				var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+
+				currentBubble = new H.ui.InfoBubble(pos, { content: html });
+				ui.addBubble(currentBubble);
+			});
+			group.addObject(signMarker);
+		}
+		map.addObject(group);
+		// map.setViewBounds(group.getBounds());
+		Spinner.hideSpinner();
+	}
+
+	function signResponse(resp)
+	{
+		if (resp.error != undefined)
+		{
+			feedbackTxt.innerHTML = resp.error;
+			return;
+		}
+		if (resp.responseCode != undefined)
+		{
+			alert (resp.message);
+			feedbackTxt.innerHTML = resp.message;
+			return;
+		}
+
+		for (var i = 0; i < resp.Rows.length; i++)
+		{
+			var bDirections = false; 
+			var conditionType = resp.Rows[i].CONDITION_TYPE,
+				signType = resp.Rows[i].TRAFFIC_SIGN_TYPE == null ? "0" : resp.Rows[i].TRAFFIC_SIGN_TYPE,
+				linkIds = resp.Rows[i].LINK_IDS.split(','), // variable speed signs have 2 links, all others just one link
+				linkId = parseInt(linkIds[0]),
+				conditionId = resp.Rows[i].CONDITION_ID;
+
+			var color = "rgba(255, 10, 50, 0.7)";
+
+			if(conditionType == "17")
+			{
+				while(signType.length < 3)
+					signType = "0" + signType;
+			}
+			
+			
+			if(resp.Rows[i].LINK_IDS.startsWith("B"))
+			{
+
+				
+				var tmp = parseInt(resp.Rows[i].LINK_IDS.replace("B", ""));
+				linkIDswithTrafficSigns[tmp] = { conditionType: conditionType, signType: signType, conditionId: conditionId};
+				linkIDswithTrafficSigns[parseInt("-" + tmp)] = { conditionType: conditionType, signType: signType, conditionId: conditionId };
+			}
+			else
+			{
+				linkIDswithTrafficSigns[linkId] = { conditionType: conditionType, signType: signType, conditionId: conditionId};
+			}
+		}
+	}
+	
+	function copyTextToClipboard(text) {
+		var textArea = document.createElement("textarea");
+
+		textArea.style.position = 'fixed';
+		textArea.style.top = 0;
+		textArea.style.left = 0;
+
+		textArea.style.width = '2em';
+		textArea.style.height = '2em';
+
+		textArea.style.padding = 0;
+
+		textArea.style.border = 'none';
+		textArea.style.outline = 'none';
+		textArea.style.boxShadow = 'none';
+
+		textArea.style.background = 'transparent';
+
+		textArea.value = text;
+
+		document.body.appendChild(textArea);
+
+		textArea.select();
+
+		try {
+		var successful = document.execCommand('copy');
+		} catch (err) {
+		}
+		document.body.removeChild(textArea);
+	}
+	
+	function selection(rectangle)
+	{
+		rect = rectangle;
+		loadTrafficSigns(rect);
+	}
+	
+</script>

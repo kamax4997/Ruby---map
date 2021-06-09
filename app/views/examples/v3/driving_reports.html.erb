@@ -1,0 +1,85 @@
+<%= javascript_include_tag "jszip.min.js" %>
+
+<% content_for :title, "Driving Reports" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<span><p>A demo to display driver report data by analyzing a trace file. </p>
+  	<h5>Please provide a trace to match with RME by either:</h5>
+    <ul>
+      <li>Drag & drop a trace file (CSV, GPX, KML or NMEA) into below box</li>
+      <li>Check one provided sample:
+        <input id="example1" class="btn btn-default btn-sm" type="button" value="Rome - maximum curve speed (GPX)" onclick="loadFromFile('sample_rome.gpx');"/>
+        <input id="example2" class="btn btn-default btn-sm" type="button" value="Kelkheim - stop sign violations (GPX)" onclick="loadFromFile('driver_reports/Public_StopSign_Violations1.gpx');"/>
+		<input id="example3" class="btn btn-default btn-sm" type="button" value="Stockholm - acceleration (CSV)" onclick="loadFromFile('driver_reports/Telia_Stockholm_Toll.csv');"/>
+		<input id="example4" class="btn btn-default btn-sm" type="button" value="Schwalbach - lighting (CSV)" onclick="loadFromFile('driver_reports/public_Selgros_KronbergerHang_intoSun.csv');"/>
+      </li>
+    </ul>
+	<h5>Driving reports:</h5>
+	<form id="reports">
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="service" id="curveSpeedKph;curveSpeedKphWarn;curveSpeedKphCrit" value="Lateral acceleration in curves < 60% of limit;Lateral acceleration in curves < 85%;Lateral acceleration in curves >= 85%" onchange="showAdditionalInfo(this)"> 
+	<label for="curveSpeedKph"> Suitable Curve Speed (open to configure)</label> 
+	<span class="glyphicon glyphicon-chevron-down" style="float:right;cursor: pointer;" id="curveSpeedKphInfo" onclick="showTooltip(this)"></span>
+	<ul style="display:none" id="curveSpeedKphInfoText">
+		 Display if speed is suitable for a curve.<br/>
+		 Max. lateral acceleration in m/s&sup2;: <input type="text" id="latAccelLimit" value="5.8" size=4><br/>
+         <small>The lateral acceleration defines the centripetal force in a curved motion, but in difference to the force the acceleration is independent of the mass of the vehicle, i.e. the lateral acceleration depends only on the speed of a vehicle and its trajectory.
+         <br/>The max. lateral acceleration is defined by earth gravity and stiction between tires and the ground. Typical range is between 5 and 8 m/s&sup2;.
+		 </small>
+	</ul>
+	<br />
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="service" id="accelerationMps" value="Acceleration (Click for details!)" onchange="showAdditionalInfo(this)"> 
+	<label for="accelerationMps">Acceleration</label> 
+	<span class="glyphicon glyphicon-chevron-down" style="float:right;cursor: pointer;" id="accelerationMpsInfo" onclick="showTooltip(this)"></span>
+	<ul style="display:none" id="accelerationMpsInfoText">
+	   Speed and acceleration found on the link. 
+	</ul>
+	<br />
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="service" id="speedKphLimit;speedLimitKphSpeedok;speedLimitKphSpeeding" value="Speed limits (Click for details!);Speed Ok;Speeding" onchange="showAdditionalInfo(this)"> 
+	<label for="applicableSpeedLimitKph">Applicable Speed Limit</label> 
+	<span class="glyphicon glyphicon-chevron-down" style="float:right;cursor: pointer;" id="applicableSpeedLimitKphInfo" onclick="showTooltip(this)"></span>
+	<ul style="display:none" id="applicableSpeedLimitKphInfoText">
+	   Applicable Speed Limit allowed on the link with matched trace points. Colors of trace points indicate, if speed limits were observed.  
+	</ul>
+	<br />
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="service" id="stopViolation" value="Stop sign violation" onchange="showAdditionalInfo(this)"> 
+	<label for="stopViolation">Stop sign violation</label> 
+	<span class="glyphicon glyphicon-chevron-down" style="float:right;cursor: pointer;" id="stopViolationInfo" onclick="showTooltip(this)"></span>
+	<ul style="display:none" id="stopViolationInfoText">
+	  Shows warnings for stop sign violation detected on the route.
+	</ul>
+	<br />
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="service" id="lightConditions" value="Light conditions" onchange="showAdditionalInfo(this)"> 
+	<label for="lightConditions">Light conditions</label> 
+	<span class="glyphicon glyphicon-chevron-down" style="float:right;cursor: pointer;" id="lightConditionsInfo" onclick="showTooltip(this)"></span>
+	<ul style="display:none" id="lightConditionsInfoText">
+	  <li>Lighting conditions covers position of the sun at each tracepoint.</li>
+	  <li>Solar altitude is the angle of the sun relative to the Earth's horizon. When considering the road slope, it is a relative angle. both shown in degrees. [relative_altAngle/absolute_altAngle]</li>
+	  <li>Solar azimuth angle is the azimuth angle of the Sun's position, shown in degrees. [azimAngle]</li>
+	</ul>
+	<br />
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="service" id="tracepoints" value="Input trace points" onchange="showAdditionalInfo(this)" checked=true>
+	<label for="tracepoints"> Nothing </label> 
+	</form>
+  <h5>Input trace</h5>
+		<textarea id="tracetextarea" class="form-control" rows="10"></textarea>
+  <input class="btn btn-default btn-sm" type="button" value="Reset" onclick="reset();"/>
+		<input id="submittracebutton" class="btn btn-default btn-sm" type="button" value="Submit"/>
+		to <!-- former request: <input type="text" id="rmeUrl" value="https://rme.api.here.com/2/calculateroute.json?routeMatch=1&mode=fastest;car;traffic:disabled&algopts=driverReports" autocomplete="off" size="40">  -->
+		<input type="text" id="rmeUrl" value="https://rme.api.here.com/2/calculateroute.json?routeMatch=1&mode=fastest;car;traffic:disabled&drivingReport=1" autocomplete="off" size="40"> 
+    <h5>Legend</h5>
+  <ul id="legendList">
+  <li id="matchedPoints" style="color: #124191;">Display route</li>
+  <!--   <li id="inputTracePoints" style="color: black;">Input trace points</li>
+<li id="speedOk" style="color: #2b9c6a;">Speed OK</li>
+  <li id="speeding" style="color: #cd1439;">Speeding</li> -->
+  </ul>
+
+  Depending on the selected report category, circles may appear at effected matched trace points. Clicking on these circles reveals the actual numbers.
+<div id="testSvg"></div>
+  <h5>Warnings</h5>
+		<textarea id="warningstextarea" autocomplete="off" class="form-control" rows="5">Please submit...</textarea>
+		<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+</div>
+<div id="mapContainer"></div>
+<%= javascript_include_tag "demos/driving_reports.js" %>

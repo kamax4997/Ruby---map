@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Traffic</title>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css">
+	<script src="https://account.here.com/js/sdk/sso.min.js"></script>
+
+	<script>
+		var app_id = "inCUge3uprAQEtRaruyaZ8",
+			app_code = "9Vyk_MElhgPCytA7z3iuPA";
+	</script>
+
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-pano.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+
+
+	<link rel="shortcut icon" type="image/x-icon" href="/assets/favicon.ico" />
+	<link rel="stylesheet" media="screen" href="/assets/application.css" data-turbolinks-track="true" />
+	<script src="/assets/application.js" data-turbolinks-track="true"></script>
+
+</head>
+
+<body>
+
+	<nav class="navbar navbar-default navbar-fixed-top">
+		<div class="container-fluid">
+			<div class="row">
+				<div class="col-xs-1">
+					<div class="navbar-header">
+						<a class="navbar-brand" href="http://tcs.ext.here.com/"><img alt="HERE logo" src="/assets/logo.svg" width="60" height="44" /></a>
+					</div>
+				</div>
+				<div class="col-xs-10">
+					<div class="header-text">Traffic</div>
+				</div>
+				<div class="col-xs-1">
+					<div id="logoutButton" onclick="javascript:logOut()" class="hvr2-overline-reveal hvr2-overline-reveal-min-width">
+						<a href="/login">Log Out</a>
+					</div>
+				</div>
+			</div>
+		</div>
+	</nav>
+	<div id="content-padder"></div>
+	<div id="content-real">
+		<script src="/assets/jszip.min.js"></script>
+
+
+
+		<script type="text/javascript" charset="UTF-8" src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.4.4/proj4.js"></script>
+		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/openlayers/4.6.5/ol.js"></script>
+
+		<link rel="stylesheet" type="text/css" href="./css/bootstrap.min.css">
+		<link rel="stylesheet" type="text/css" href="./css/legend.css">
+		<link rel="stylesheet" type="text/css" href="./css/styles.css">
+
+		<style type="text/css">
+			.ctrl-panel {
+				display: none;
+			}
+			
+			footer {
+				display: none;
+			}
+			
+			#mapContainer {
+				top: 80px;
+				height: calc(100% - 80px);
+			}
+			
+			.loading {
+				top: 80px;
+				height: calc(100% - 80px);
+				width: 100%;
+				left: 0px;
+				z-index: 10;
+			}
+			
+			.controls {
+				z-index: 1;
+				top: 96px;
+			}
+			
+			.label {
+				margin-left: 0;
+				margin-top: 0;
+			}
+		</style>
+		<div class="loading"></div>
+		<div class="controls">
+
+			<div class="group">
+				<div class="title">
+					<span class="more"></span> Settings</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="traffic" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">update traffic</div>
+			</label>
+				</div>
+
+			</div>
+		</div>
+
+		<div id="mapContainer"></div>
+		<script type="text/javascript">
+			/*
+									author domschuette
+									(C) HERE 2019
+								*/
+
+			// Check whether the environment should use hi-res maps
+			var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+			// check if the site was loaded via secure connection
+			var secure = (location.protocol === 'https:') ? true : false;
+
+			// Create a platform object to communicate with the HERE REST APIs
+			var platform = new H.service.Platform({
+					useCIT: true,
+					app_id: app_id,
+					app_code: app_code,
+					useHTTPS: secure
+				}),
+				defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+			defaultLayers.normal.map = platform.getMapTileService({
+				type: 'base'
+			}).createTileLayer('basetile', 'reduced.night', hidpi ? 512 : 256, 'png8', null, hidpi ? 2 : 1, false);
+
+			// Instantiate a map in the 'map' div, set the base map to normal
+			map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+				center: center,
+				zoom: 13,
+				pixelRatio: hidpi ? 2 : 1
+			});
+
+			// Enable the map event system
+			var mapevents = new H.mapevents.MapEvents(map);
+
+			// add request traffic at mapview end event	
+			map.addEventListener("mapviewchangeend", function() {
+				if (trafficUpdate)
+					requestTraffic(map.getViewBounds());
+			});
+
+			// Enable map interaction (pan, zoom, pinch-to-zoom)
+			var behavior = new H.mapevents.Behavior(mapevents);
+			window.addEventListener('resize', function() {
+				map.getViewPort().resize();
+			});
+
+			// Enable the default UI
+			var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+			// globals
+			var group = new H.map.Group(),
+				linkDataInfoBubble,
+				currentBubble,
+				SHIFTRIGHT = [0, 3.3, 3.2, 2.3, 2.2, 1.6],
+				SHIFTLEFT = [0, -4.7, -3.0, -2.5, -2.3, -1.6];
+
+
+			$('.traffic').click(function(evt) {
+				trafficUpdate = $(this).is(':checked');
+				if (trafficUpdate)
+					requestTraffic(map.getViewBounds());
+				else
+					group.removeAll();
+			});
+
+			// load traffic initial
+			$('.traffic').trigger('click');
+
+			function createTapLinkHandler(polyline) {
+				return function(e) {
+					var strip = polyline.getGeometry();
+					var lowIndex = Math.floor((strip.getPointCount() - 1) / 2);
+					var highIndex = Math.ceil(strip.getPointCount() / 2);
+					var center;
+					if (lowIndex === highIndex) {
+						center = strip.extractPoint(lowIndex);
+					} else {
+						var lowPoint = strip.extractPoint(lowIndex);
+						var highPoint = strip.extractPoint(highIndex);
+						center = new H.geo.Point((lowPoint.lat + highPoint.lat) / 2, (lowPoint.lng + highPoint.lng) / 2);
+					}
+
+					var linkInfo = polyline.getData().outerHTML;
+					linkInfo = "<textarea readonly rows='10' cols='50' style='background-color:black;border:0;font-size:12px;max-width:350px;max-height:400px;'>" + linkInfo + "</textarea>";
+					if (!linkDataInfoBubble) {
+						linkDataInfoBubble = new H.ui.InfoBubble(center, {
+							content: linkInfo
+						});
+						ui.addBubble(linkDataInfoBubble);
+					} else {
+						linkDataInfoBubble.setPosition(center);
+						linkDataInfoBubble.setContent(linkInfo);
+					}
+					linkDataInfoBubble.open();
+				};
+			}
+
+			function init() {
+				trafficInit = false;
+				$('.loading').show();
+			}
+
+			function requestTraffic(bbox) {
+				if (map.getZoom() < 10) {
+					group.removeAll();
+					return;
+				}
+
+				if (map.getViewBounds().getWidth() > 10 || map.getViewBounds().getHeight() > 10) {
+					var center = map.getCenter(),
+						top = center.lat + 5,
+						left = center.lng - 5,
+						bottom = center.lat - 5,
+						right = center.lng + 5;
+
+					bbox = new H.geo.Rect(top, left, bottom, right);
+				}
+
+				$('.loading').show();
+
+				group.removeAll();
+				var url = 'http' + (secure ? 's' : '') + '://traffic.api.here.com/traffic/6.2/flow.json?app_id=' + app_id + '&app_code=' + app_code +
+					'&bbox=' + bbox.getTop() + ',' + bbox.getLeft() + ';' +
+					bbox.getBottom() + ',' + bbox.getRight() +
+					'&i18n=true&responseattributes=sh,fc&locationreferences=tmc,shp&units=metric&jsoncallback=updateTraffic';
+
+
+				script = document.createElement("script");
+				script.src = url;
+				document.body.appendChild(script);
+			}
+
+			function updateTraffic(response) {
+				var i = 0,
+					j = 0,
+					k = 0,
+					l = 0,
+					m = 0,
+					n = 0,
+					z = 0;
+
+				if (response.RWS && response.RWS.length > 0) {
+					var ebuCountryCode = response.RWS[0].EBU_COUNTRY_CODE,
+						extendedCountryCode = response.RWS[0].EXTENDED_COUNTRY_CODE,
+						tableId = response.RWS[0].TABLE_ID,
+						rigtSideCountry = getRightSideCountry(ebuCountryCode, extendedCountryCode, tableId);
+
+					for (i = 0; i < response.RWS.length; i++) {
+						if (response.RWS[i].RW) {
+							for (j = 0; j < response.RWS[i].RW.length; j++) {
+								if (response.RWS[i].RW[j].FIS) {
+									for (k = 0; k < response.RWS[i].RW[j].FIS.length; k++) {
+										if (response.RWS[i].RW[j].FIS[k]) {
+											for (l = 0; l < response.RWS[i].RW[j].FIS[k].FI.length; l++) {
+												var FI = response.RWS[i].RW[j].FIS[k].FI[l],
+													shp,
+													JF,
+													CN,
+													point;
+
+												if (FI.SHP && FI.CF) {
+													JF = FI.CF[0].JF;
+													CN = FI.CF[0].CN;
+
+													for (m = 0; m < FI.SHP.length; m++) {
+														var debugpoints = new Array();
+
+														var strip = new H.geo.Strip(),
+															centerGridSizeXReduction = Math.abs(Math.cos(parseFloat(FI.SHP[m].value[0].trim().split(" ")[0].split(",")[0]) * Math.PI / 180.0));
+
+														for (n = 0; n < FI.SHP[m].value.length; n++) {
+															var cpoints = FI.SHP[m].value[n].trim().split(" ");
+
+															for (z = 0; z < cpoints.length; z++) {
+																strip.pushLatLngAlt.apply(strip, cpoints[z].split(',').map(function(item) {
+																	return parseFloat(item);
+																}));
+															}
+														}
+
+
+														var fc = parseInt(FI.SHP[m].FC);
+														var shiftedStrip = shiftPolyline(strip, rigtSideCountry ? SHIFTRIGHT[fc] : SHIFTLEFT[fc], centerGridSizeXReduction);
+
+														var polyline = new H.map.Polyline(shiftedStrip, {
+															style: {
+																lineWidth: 1,
+																strokeColor: getColorForJF(JF),
+																fillColor: "rgb(0,0,0)"
+															}
+														});
+
+														polyline.$JF = JF;
+														polyline.$CN = CN;
+
+														polyline.addEventListener("pointerdown", function(e) {
+															if (currentBubble)
+																ui.removeBubble(currentBubble);
+															e.target.setStyle({
+																lineWidth: 1,
+																strokeColor: getColorForJF(e.target.$JF),
+																lineJoin: "round"
+															});
+															var html = '<div>' +
+																'<p style="font-family:Arial,sans-serif; font-size:12px;">JamFactor: ' + e.target.$JF + '</p>' +
+																'<p style="font-family:Arial,sans-serif; font-size:12px;">Confidence: ' + e.target.$CN + '</p>' +
+																'</div>';
+
+															var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+
+															currentBubble = new H.ui.InfoBubble(pos, {
+																content: html
+															});
+															ui.addBubble(currentBubble);
+														});
+														polyline.addEventListener('pointerenter', createPointerEnterLinkHandler(polyline));
+														polyline.addEventListener('pointerleave', createPointerLeaveLinkHandler(polyline));
+														group.addObject(polyline);
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					map.addObject(group);
+					$('.loading').hide();
+				} else if (response.type && response.Details) {
+					var d = document.getElementById("error");
+					d.innerHTML = response.Details;
+					$('.loading').hide();
+				}
+				$('.loading').hide();
+			}
+
+			function createPointerEnterLinkHandler(polyline) {
+				return function(e) {
+					polyline.setStyle({
+						lineWidth: 8,
+						strokeColor: getColorForJF(polyline.$JF),
+						lineJoin: "round"
+					});
+				};
+			}
+
+			function createPointerLeaveLinkHandler(polyline) {
+				return function(e) {
+					polyline.setStyle({
+						lineWidth: 1,
+						strokeColor: getColorForJF(polyline.$JF),
+						lineJoin: "round"
+					});
+				};
+			}
+
+			function getRightSideCountry(ebuCountryCode, extendedCountryCode, tableId) {
+				if (tableId.length == 1)
+					tableId = "0" + tableId;
+
+				var tmctable = extendedCountryCode + " " + ebuCountryCode + tableId,
+					ret = true;
+
+				if (
+					tmctable == "F1 D10" || // Taiwan
+					tmctable == "D0 A17" || // South Africa
+					tmctable == "E1 C07" || // Great Britain
+					tmctable == "E3 242" || // Ireland
+					tmctable == "F0 153" || // Australia New South Wales, Australian Capital Territory
+					tmctable == "F0 254" || // Australia New South Wales, Australian Capital Territory
+					tmctable == "F0 301" || // Australia Victoria
+					tmctable == "F0 456" || // Australia Queensland
+					tmctable == "F0 557" || // Australia South Australia
+					tmctable == "F0 658" || // Australia Western Australia
+					tmctable == "F0 759" || // Australia Tasmania
+					tmctable == "F0 860" || // Australia Northern Territory
+					tmctable == "F0 F05" || // Malaysia
+					tmctable == "F1 941" || // New Zealand
+					tmctable == "F2 502" || // India - Maharashtra, Madhya Pradesh, Jharkhand, Assam, Odisha, Bihar, Gujarat, West Bengal
+					tmctable == "F2 503" || // India - Tamil Nadu, Kerala, Andhra Pradesh, Goa, Karnataka
+					tmctable == "F2 504" || // India - Rajasthan, Uttar Pradesh, Delhi, Haryana, Chandigarh, Punjab
+					tmctable == "F2 A01" || // Singapore
+					tmctable == "F2 C21" || // Indonesia
+					tmctable == "F3 219" // Thailand
+				) {
+					ret = false;
+				}
+				return ret;
+			}
+
+			function shiftPolyline(strip, offsetToRightMeter, centerGridSizeXReduction) {
+				var latLonZ = strip.getLatLngAltArray(),
+					shiftedLatLonZ = new Array(),
+					i = 0,
+					shiftedStrip = new H.geo.Strip();
+
+				for (; i < latLonZ.length / 3; i++) {
+					var i1 = i < latLonZ.length / 3 - 1 ? i : i - 1,
+						y1 = latLonZ[3 * i1],
+						x1 = latLonZ[3 * i1 + 1],
+						y2 = latLonZ[3 * i1 + 3],
+						x2 = latLonZ[3 * i1 + 4],
+						dx = (x2 - x1) * centerGridSizeXReduction,
+						dy = y2 - y1,
+						length = Math.sqrt(dx * dx + dy * dy);
+
+					if (length == 0) {
+						length = 0.00001;
+					}
+					shiftedLatLonZ[3 * i] = latLonZ[3 * i] + ((dx * offsetToRightMeter) * -1) / (1.113238715696961 * 100000.0 * length);
+					shiftedLatLonZ[3 * i + 1] = latLonZ[3 * i + 1] + (dy * offsetToRightMeter) / (1.113238715696961 * 100000.0 * length * centerGridSizeXReduction);
+					shiftedLatLonZ[3 * i + 2] = latLonZ[3 * i + 2];
+				}
+
+				for (i = 0; i < shiftedLatLonZ.length; i += 3) {
+					shiftedStrip.pushPoint(new H.geo.Point(shiftedLatLonZ[i], shiftedLatLonZ[i + 1]));
+				}
+				return shiftedStrip;
+			}
+
+			function getColorForJF(jamFactor) {
+				if (jamFactor == -1)
+					return 'rgb(0, 77, 168)';
+				else if (jamFactor < 4.0)
+					return 'rgb(138,198,144)';
+				else if (jamFactor < 6.5)
+					return 'rgb(254,212,3)';
+				else if (jamFactor < 8.0)
+					return 'rgb(254,153,37)';
+				else if (jamFactor < 10.0)
+					return 'rgb(227,15,56)';
+				else if (jamFactor == 10.0 || jamFactor > 10.0)
+					return 'rgba(0,0,0)';
+			}
+
+			$(document).ready(function() {
+				init();
+			});
+		</script>
+</body>
+
+</html>

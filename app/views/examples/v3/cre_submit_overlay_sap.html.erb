@@ -1,0 +1,1959 @@
+<%= javascript_include_tag "moment" %>
+<%= javascript_include_tag "moment-range" %>
+<%= javascript_include_tag "jszip.min" %>
+<%= javascript_include_tag "gpx-parser" %>
+<%= javascript_include_tag "date-time-parser" %>
+
+<% content_for :title, "HERE Overlays for SAP TM" %>
+
+<style>
+.H_ui {
+  font-size: 16px;
+  font-family: "Lucida Grande", Arial, Helvetica, sans-serif;
+
+  -moz-user-select: none;
+  -khtml-user-select: none;
+  -webkit-user-select: none;
+  -o-user-select: none;
+  -ms-user-select: none;
+
+  z-index: 0;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  left: 100%;
+}
+
+a.link-info {
+    color: #00ACDC;
+    text-decoration: underline;
+  }
+
+  .link-info {
+    font-size: small;
+    padding: 0.1em;
+  }
+
+  table.link-info td {
+    padding: 0.4em;
+    border: 1px solid white
+  }
+
+</style>
+
+
+<div class="ctrl-panel" style='overflow-y:scroll;max-height:888px;max-width:358px'>
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	 	<div class="form-horizontal">
+ 		<div class="form-group" style="display:none;">
+		 	<label class="control-label col-sm-4" for="endpoint">CRE Endpoint</label>
+            <div class="col-sm-8">
+            	<input class="form-control col-sm-6" type="text" id="endpoint" size="33" value="https://cre.api.here.com" placeholder="Enter the endpoint for CRE" />
+            </div>
+         	<label class="control-label col-sm-4" for="mapname"> Custom Map Name</label>
+            <div class="col-sm-8">
+            	<input class="form-control col-sm-6" type="text" id="mapname" size="33" value="OVERLAYBASICDEMO1" placeholder="enter a custom map name" />
+				<input class="btn btn-default btn-sm" style="display:none;" type="button" value="Display Overlay" id="display" onclick="showAffectedRoads()"/>
+            </div>
+            <label class="control-label col-sm-4" for="customAppId">App Id</label>
+            <div class="col-sm-8">
+                <input class="form-control col-sm-6" type="text" id="customAppId" size="33" value="" placeholder="Leave empty for demo account" autocomplete="off" onchange="changeAuth();">
+            </div>
+            <label class="control-label col-sm-4" for="customAppCode">App Code</label>
+            <div class="col-sm-8">
+                <input class="form-control col-sm-6" type="text" id="customAppCode" size="33" value="" placeholder="Leave empty for demo account" autocomplete="off" onchange="changeAuth();">
+            </div>
+
+        </div>
+	</div>
+	<input id="file-input" type="file" name="name" style="display: none;" />
+
+	<!--<p> <b>1. Do you want to?</b><br>
+	<input type='radio' name='edit-goal' value='create' onclick='changegoal(this)'> Create a new road
+	<br>
+	<input type='radio' name='edit-goal' value='override' onclick='changegoal(this)'> Block/modify an existing road-->
+	<div class="form-horizontal">
+		<label for="location">1. Where do you want to add/modify a road?</label><br>
+      	<input class="form-control col-sm-6" type="text" id="location" size="33" value="Frankfurt, Germany" placeholder="Enter a location" onkeydown = "if (event.keyCode == 13)
+                        document.getElementById('geocode').click()"/>
+		<input class="btn btn-default btn-sm" type="button" value="Go" id="geocode" onclick="geocode()"/>
+    </div>
+	<br>
+
+	<div class="form-horizontal" id='mode-chooser' style="display:block">
+		<h4><input type='radio' name='rightclick-mode' value='routing' onclick='rightclickchooser(this)' checked="true"> <b>Routing</b>&nbsp;&nbsp;&nbsp;
+		<input type='radio' name='rightclick-mode' value='drawing' onclick='rightclickchooser(this)'> <b>Overlay Upload</b><br></h4>
+	</div><br>
+
+	<div class="form-horizontal" id='routing-info' style="display:block">
+		<b>2. Right click on the map to add start and destination, route, or re calculate last route.</b>
+		<br><br>
+	</div>
+
+	<div id="shape-mode" style="display:none;">
+		<div class="form-horizontal" id='drawing-chooser' style="display:block">
+			<label for="edit-mode" id="edit-mode-label">2. Draw a shape on the map to modify or create a new road</label><br>
+			<input type='radio' name='edit-mode' value='samples' onclick='editmode(this)'> Choose from some examples<br>
+			<input type='radio' name='edit-mode' value='drawing' onclick='editmode(this)'> Draw your own shape<br>
+			<input type='radio' name='edit-mode' value='text' onclick='editmode(this)'> Add shapes as free text<br><br>
+		</div>
+		
+		<div class="form-horizontal" id='edit-info' style="display:block">
+			<b>Click on the added shapes to add details about them</b>
+			<br><br>
+		</div>
+		
+		<div class="form-horizontal" id='shape-chooser' style="display:none">
+		<p>Select an example to upload as overlay
+			<div class="form-group">
+				<div class="col-sm-10">
+					<select id= "sampleSelector" class='form-control' onchange="addRoadExample(this)">
+						<option id="-1">Select an example: </option>
+					</select>
+				</div>
+			</div>
+		</div>
+
+		<div class="form-horizontal" id='shape-drawing' style="display:none">
+
+			<p>Right click on the map to start drawing a road, and click to add more points.
+			
+		</div>
+
+		<div class="form-horizontal" id='shape-text-area' style="display:none">
+			<p>Paste a shape here
+			<textarea id="shapedrop"  class="form-control" rows="8"></textarea>
+			<input type="button" value="Add Shape" onclick="applyShapes();">
+		</div>
+
+		
+		<br>
+		<br>
+		
+		<div class="form-horizontal" id='road-selector' style="display:none">
+			<p>Choose selected roads to edit details
+			<div class="form-group">
+				<div class="col-sm-10">
+					<select id= "roadSelector" class='form-control' onchange="showFormForRoad(this.selectedOptions[0].id)">
+						<option id="-1">Select a road: </option>
+					</select>
+				</div>
+			</div>
+		</div>
+
+		<div id="overlay-def-container" class = "container">
+			
+		</div>
+
+		<input class="btn btn-default btn-sm" type="button" value="Upload Overlay" onclick="overlay_upload()"/>
+		<input class="btn btn-default btn-sm" type="button" value="Delete Overlay" onclick="delete_overlay()"/>
+		<input class="btn btn-default btn-sm" type="button" value="Display Overlay" id="refreshView" onclick="showAffectedRoads()"/>
+		<br>
+		
+		
+		<input class="btn btn-default btn-sm" type="button" value="Backup shapes to disk" onclick="backup()"/>
+		<input class="btn btn-default btn-sm" type="button" value="Restore shapes from disk" onclick="restore()"/>
+		<br>
+
+	</div>
+	<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+			<br>
+
+			<input class="btn btn-default btn-sm" type="button" value="Clear Map" onclick="clearMap()"/>
+			<input class="btn btn-default btn-sm" type="button" value="Clear Log" onclick="feedbackTxt.innerHTML = '';"/>
+			<input class="btn btn-default btn-sm" type="button" value="Clear Route" onclick="clearRoute()"/>
+	</div>
+</div>
+<div id="mapContainer"></div>
+<div id="pageblock"></div>
+<div id="spinner"></div>
+
+
+
+
+<script type="text/javascript">
+
+	/*
+	* @author Rohit Misra
+	* (C) HERE 2017
+	* Dom Schuette 
+	* (C) HERE 2018
+	*/
+	
+	// IE11 Fix for startsWith
+	if (!String.prototype.startsWith)
+	{
+		String.prototype.startsWith = function(searchString, position)
+		{
+			position = position || 0;
+			return this.indexOf(searchString, position) === position;
+		};
+	}
+	
+	// check URL Parameters
+	var custom_app_id = getUrlParameter('app_id');
+	var custom_app_code = getUrlParameter('app_code');
+	var custom_mapname = getUrlParameter('mapname');
+	var custom_env = getUrlParameter('env');
+	var endpoint = document.getElementById('endpoint');
+
+	if( custom_app_id !== null && custom_app_code !== null )
+	{
+		app_id = custom_app_id;
+		app_code = custom_app_code;
+		document.getElementById("customAppId").value = app_id;
+		document.getElementById("customAppCode").value = app_code;
+	}
+
+	if( custom_mapname !== null)
+	{
+		document.getElementById('mapname').value = custom_mapname;
+	}
+	
+	endpoint.value = endpoint.value.replace(".cit.", ".");
+	
+	var mapname = document.getElementById('mapname');
+	
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	var secure = (location.protocol === 'https:') ? true : false; // check if the site was loaded via secure connection
+	var mapContainer = document.getElementById('mapContainer'),
+		platform = new H.service.Platform({app_code: app_code, app_id: app_id, useHTTPS: secure}),
+		maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+		group = new H.map.Group(),
+		map = new H.Map(mapContainer, maptypes.normal.map, { center: new H.geo.Point(50.107890,8.687840), zoom: 17 });
+		
+		// make logout button invisible
+		var logoutButton= document.getElementById('logoutButton');
+		if( logoutButton != null )
+			logoutButton.style.visibility = 'hidden';
+
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());	// Do not draw under control panel
+	//new H.mapevents.Behavior(new H.mapevents.MapEvents(map));	// add behavior control
+	var ui = H.ui.UI.createDefault(map, maptypes);	// add UI
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var roadShapes = [];
+	var currentRoadShape = null;
+	var growingStrip = new H.geo.Strip();
+	var roadCreated = false;
+	var underConstruction = false;
+	// Current Layer polygons.
+
+
+	var overlayGroup = new H.map.Group();
+
+	var NORMAL_STYLE = {
+		strokeColor: "#f00",
+		lineWidth: 1
+	};
+	var SELECTED_STYLE = {
+		strokeColor: "#000000",
+		lineWidth: 7,
+		fillColor:  "#000000"
+	};
+
+	var ROAD_STYLE0 = {
+		strokeColor: "#2a26a5",
+		lineWidth: 7,
+		fillColor:  "#f01"
+	}
+	var ROAD_STYLE1 = {
+		strokeColor: "#f27209",
+		lineWidth: 7,
+		fillColor:  "#f01"
+	};
+
+	var ROAD_STYLE2 = {
+		strokeColor: "#f2c309",
+		lineWidth: 7,
+		fillColor:  "#f01"
+	};
+
+	var ROAD_STYLE3 = {
+		strokeColor: "#0957f2",
+		lineWidth: 7,
+		fillColor:  "#f01"
+	};
+
+	var ROAD_STYLE4 = {
+		strokeColor: "#6d33af",
+		lineWidth: 7,
+		fillColor:  "#f01"
+	};
+
+	var ROAD_STYLE5 = {
+		strokeColor: "#33afa1",
+		lineWidth: 7,
+		fillColor:  "#f01"
+	};
+	var ROAD_STYLE6 = {
+		strokeColor: "#578781",
+		lineWidth: 7,
+		fillColor:  "#f01"
+	};
+	
+
+	var SELECTED_STYLE = {
+		strokeColor: '#',
+		lineWidth: 2
+	};
+
+	var roadEdits = [];
+
+	var overlaySpecs = {};
+	
+	function overlaySpec(op, shape, layer, data){
+		this.op = op;
+		this.shape = shape;
+		this.layer = layer;
+		this.data = data;
+
+		this.getOverlaySpecString = function(){
+			return JSON.stringify(this);
+		};
+	}
+
+	var attributeObj = {
+			LINK_ATTRIBUTE_FCN: "VEHICLE_TYPES,TRAVEL_DIRECTION",
+			TRUCK_RESTR_FCN: "VEHICLE_TYPES,TIME_OVERRIDE,WEIGHT_RESTRICTION,HEIGHT_RESTRICTION,LENGTH_RESTRICTION,WIDTH_RESTRICTION,MAX_WEIGHT_PER_AXLE,NUMBER_OF_AXLES,KPRA_LENGTH,HAZARDOUS_MATERIAL_TYPE,HAZMAT_PERMIT_REQUIRED,TRAILER_TYPE,PHYSICAL_STRUCTURE_TYPE,TRANSPORT_SPEED_LIMIT,TRANSPORT_SPEED_TYPE,SPEED_LIMIT_TYPE,WEIGHT_DEPENDENT,WEATHER_TYPE,PREFERRED_ROUTE_TYPE,tunnelCategory" 
+	};
+
+	function roadEdit(){
+		var strip = new H.geo.Strip();
+		var addPointToEdit = function(point){
+			this.strip.pushPoint(point);
+		};
+	}
+
+	var polygonOptions = {style: NORMAL_STYLE};
+	var roadDisplayOptions = [{style: ROAD_STYLE0}, {style: ROAD_STYLE1}, {style: ROAD_STYLE2}, {style: ROAD_STYLE3}, {style: ROAD_STYLE4}, {style: ROAD_STYLE5}, {style: ROAD_STYLE6}];
+	var routingMode = true;
+	var currClickedviewportX = null;
+	var currClickedviewportY = null;
+	var lockGrowingShape = false;
+	var tempMarkersGroup = new H.map.Group();
+	map.addObject(tempMarkersGroup);
+	// add context menu listner  
+    map.addEventListener('contextmenu', function(e){
+		if(e.target.type==3){
+			return;
+		}
+		lockGrowingShape = true;
+		currClickedviewportX = e.viewportX;
+		currClickedviewportY = e.viewportY;
+        clickCoords = map.screenToGeo(e.viewportX, e.viewportY);
+        if (routingMode) {
+			// add routing options 
+            e.items.push(new H.util.ContextItem({
+                label: 'Route from here',
+                callback: function(){
+                    removeObjects(false);
+                    waypoint_first = clickCoords;
+                    firstMarker = addMarker(clickCoords);
+                    waypoint_last = "";
+                    
+                }
+            }));
+            e.items.push(new H.util.ContextItem({
+                label: 'Route to here (car)',
+                callback: function(){
+                    removeObjects(true);
+                    waypoint_last = clickCoords;
+                    lastMarker = addMarker(clickCoords);
+                    calculateRouteFromAtoB('car');
+                    routeNotCalculated = false;
+                }
+            }));
+			e.items.push(new H.util.ContextItem({
+                label: 'Route to here (truck)',
+                callback: function(){
+                    removeObjects(true);
+                    waypoint_last = clickCoords;
+                    lastMarker = addMarker(clickCoords);
+                    calculateRouteFromAtoB('truck');
+                    routeNotCalculated = false;
+                }
+            }));
+			if(lastRouteURL!=""){
+				e.items.push(new H.util.ContextItem({
+					label: 'Re-calculate last route',
+					callback: function(){
+						removeObjects(true);
+						reCalculateRoute();
+						routeNotCalculated = false;
+					}
+				}));	
+			}
+        }
+        else {
+           //draw shape
+		   // add routing options 
+            e.items.push(new H.util.ContextItem({
+				
+                label: 'Add shape point',
+                callback: function(){
+                    if(!underConstruction){
+						roadEdits.push(new H.geo.Strip());
+						roadEdits[roadEdits.length-1].id = roadEdits.length;
+						roadEdits[roadEdits.length-1].pushPoint(map.screenToGeo(currClickedviewportX, currClickedviewportY));
+						currRoadShapeArr.push([map.screenToGeo(currClickedviewportX, currClickedviewportY).lat, map.screenToGeo(currClickedviewportX, currClickedviewportY).lng]);
+						
+					}
+					underConstruction = true;
+					lockGrowingShape = false;
+					var handleMarker = new H.map.Marker(map.screenToGeo(currClickedviewportX, currClickedviewportY),{
+							icon: new H.map.Icon(markerSVG1.replace(/__NO__/g, roadShapes.length +1).replace(/__NO2__/g, ""))
+						});
+					tempMarkersGroup.addObject(handleMarker);
+                }
+            }));
+			 e.items.push(new H.util.ContextItem({
+                label: 'Finalize shape',
+                callback: function(){
+                    map.removeObject(currentRoadShape);// will be added as a group
+					//currRoadShapeArr.splice(-1,1);
+					addRoad(roadShapes.length +1  , currRoadShapeArr, true);
+					currRoadShapeArr = [];
+					
+					currentRoadShape = null;
+					//growingStrip = new H.geo.Strip();
+					underConstruction = false;
+					lockGrowingShape = false;
+                }
+            }));
+        }
+		
+    });
+
+	map.addEventListener('dbltap', finalizePolygon);
+	map.addEventListener('tap', initializeOraddPointToPolygon);
+	map.addEventListener('pointermove', refreshNonFinalizedPolygon);
+
+	var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+  	behavior.disable(H.mapevents.Behavior.DBLTAPZOOM);
+	var xmlns = "http://www.w3.org/2000/svg";
+
+	var roadGroups = [];
+	function clearMap(retainSampleCombo){
+		roadGroups.forEach(function (val, idx){
+			val.removeAll();
+		});
+		routingGroup.removeAll();
+		roadGroups = [];
+		roadShapes = [];
+		roadEdits = [];
+		if(overlayGroup) overlayGroup.removeAll();
+		document.getElementById("overlay-def-container").innerHTML = ""
+		document.getElementById("feedbackTxt").innerHTML = "";
+		if(!retainSampleCombo){
+			document.getElementById("sampleSelector").selectedIndex = 0;
+		}
+		var selectobject = document.getElementById("roadSelector");
+		selectobject.selectedIndex = 0;
+
+		for (var i=selectobject.length-1; i>0; i--){
+			if (i > 0){
+				selectobject.remove(i);
+			}
+		}
+	}
+
+	function addRowToContainer(id, roadShapeArr){
+		var container = document.getElementById("overlay-def-container");
+		
+		var header =  document.createElement("p");
+		var iconDivElem = document.createElement("div");
+		iconDivElem.id = 'container-block-'+id;
+		var iconDiv = "";
+		iconDiv+='<div>';
+		
+		iconDiv+=markerSVG1.replace(/__NO__/g, id).replace(/#1188DD/g, roadDisplayOptions[id%6].style.strokeColor);
+		
+		
+		
+		
+		
+		iconDiv+="<label for='shape-"+ id +"'>Shape of Road:</label>"
+		iconDiv+='<input class="form-control col-sm-4 dropdown-toggle" type="text" id="shape' +'-'+ id +  '" size="10" value=""/><br>';
+		iconDiv+='<input class="btn btn-default btn-xs" type="button" id="applyShapeChange" value="Apply" onclick="applyShapeEdit(' + id + ');"><br>';
+
+		//iconDiv+='<input class="btn btn-default btn-xs" type="button" id="more" value="Edit details for Road" onmouseover="highlightRoad(\'container-' + id + '\');" onmouseout="showAllRoads();" onclick="toggleDetail(\'container-' + id + '\');"></div>';
+
+		iconDivElem.innerHTML= iconDiv;
+		container.appendChild(iconDivElem);
+
+		var formContainer = document.createElement("div");
+		//formContainer.style="display: none";
+		formContainer.id = "container-"+id;
+        // Create an <input> element, set its type and name attributes
+		var opInput = document.createElement("div");
+		
+		opInput.className = "form-group";
+		
+		
+		var opDd = "";
+		opDd+="<label for='op-"+ id +"'><b>3. Create as a new road or Modify existing road?</b></label>"
+		opDd+="<select class='form-control' id='op-"+ id +"' onchange=\"operationChanged(\'"+id+"\')\">"
+		opDd+="<option value='create'>New road</option>";
+		opDd+="<option value='override'>Modify or block road</option>";
+		opDd+="</select>";
+		opInput.innerHTML = opDd;
+		formContainer.appendChild(opInput);
+		var formSubContainer = document.createElement("div");
+		formSubContainer.id = "sub-container-"+id;
+		formContainer.appendChild(formSubContainer);
+		
+		container.appendChild(formContainer);
+		document.getElementById("shape-"+id).value=JSON.stringify(generateShapeFromRoadGroup(id)).replace(/"/g,"");
+		operationChanged(id);
+	}
+
+	function applyShapeEdit(id){
+		addRoad(id, JSON.parse(document.getElementById("shape-"+id).value), true);
+	}
+
+	function operationChanged(id){
+		var formContainer = document.getElementById('sub-container-'+id);
+		formContainer.innerHTML = "";
+		var layerInput = document.createElement("div");
+		layerInput.className = "form-group";
+		var layerDd = "";
+		layerDd+="<label for='layer-"+ id +"'>What properties to modify?</label>"
+		layerDd+="<select class='form-control' id='layer-"+ id +"' onchange=\"attachAttributeForm(\'"+id+"\')\">"
+		layerDd+="<option></option>";
+		layerDd+="<option value='LINK_ATTRIBUTE_FCN'>Link Attributes (Block, change access, driving direction)</option>";
+		layerDd+="<option value='TRUCK_RESTR_FCN'>Truck restrictions</option>";
+		layerDd+="</select>"
+		layerInput.innerHTML = layerDd;
+		formContainer.appendChild(layerInput);
+
+		var dataInput = document.createElement("div");
+
+		var dataDdEditable = "";
+		dataDdEditable+="<label for='mode-"+ id +"'>Make changes to link(s)</label><br>";
+		dataDdEditable+="<input type='radio' name='mode-"+ id +"' value='quick' onclick='modechange(this)'>Simple&nbsp&nbsp&nbsp";
+		dataDdEditable+="<input type='radio' name='mode-"+ id +"' value='advanced' onclick='modechange(this)'>Advanced<br><br>";
+		
+		dataDdEditable+="<div class='form-group' id='quickchange-"+ id +"' style='display:none'>"
+		dataDdEditable+="<label for='quickchange-vehicle-types-"+ id +"'>Select vehicle types to allow:</label><br>";
+
+		dataDdEditable+="<input type='checkbox' name='quickchange-vehicle-types-"+ id +"' value='1' alt='car' onclick='quickvehiclechange(this)'>Car<br>";
+		dataDdEditable+="<input type='checkbox' name='quickchange-vehicle-types-"+ id +"' value='32' alt='truck' onclick='quickvehiclechange(this)'>Truck<br>";
+		dataDdEditable+="<input type='checkbox' name='quickchange-vehicle-types-"+ id +"' value='16' alt='pedestrian' onclick='quickvehiclechange(this)'>Pedestrian<br>";
+		dataDdEditable+="<input type='checkbox' name='quickchange-vehicle-types-"+ id +"' value='0' alt='none' onclick='clearVehicleChange(this)'>None(Block all)<br>";
+
+		dataDdEditable+="<label for='quickchange-vehicle-types-"+ id +"'>Select Travel direction:</label><br>";
+
+		dataDdEditable+="<input type='radio' id='traveldir-FORWARD-"+ id +"' name='quickchange-traveldir-"+ id +"' value='FORWARD' alt='car' onclick='quicktraveldir(this)'>FORWARD<br>";
+		dataDdEditable+="<input type='radio' id='traveldir-BACKWARD-"+ id +"' name='quickchange-traveldir-"+ id +"' value='BACKWARD' alt='truck' onclick='quicktraveldir(this)'>BACKWARD<br>";
+		dataDdEditable+="<input type='radio' id='traveldir-BOTH-"+ id +"' name='quickchange-traveldir-"+ id +"' value='BOTH' alt='pedestrian' onclick='quicktraveldir(this)'>BOTH<br>";
+
+
+		dataDdEditable+="</div>"
+
+		dataDdEditable+="<div class='form-group' id='attribute-"+ id +"' style='display:none'>"
+		dataDdEditable+="<label for='attribute-"+ id +"'>Select Attribute to Override:</label>";
+		dataDdEditable+="</div>"
+		dataDdEditable+="<div id='attributecontainer-"+ id+"'>";
+		
+		dataDdEditable+="</div>";
+		dataDdEditable+="<br><br>";
+		dataInput.innerHTML = dataDdEditable;
+		dataInput.id = "attributeDiv-"+id;
+		formContainer.appendChild(dataInput);
+		document.getElementById("attributeDiv-"+id).style.display = "none";
+
+	}
+
+	function editmode(that){
+		if(that.value =='samples'){
+			document.getElementById('shape-chooser').style.display = "block";
+			document.getElementById('shape-drawing').style.display = "none";
+			document.getElementById('shape-text-area').style.display = "none";
+		}
+		else if(that.value =='drawing'){
+			document.getElementById('shape-chooser').style.display = "none";
+			document.getElementById('shape-drawing').style.display = "block";
+			document.getElementById('shape-text-area').style.display = "none";
+			var other = document.getElementsByName('rightclick-mode');
+			other[1].checked = true;
+			rightclickchooser();
+		}
+		else if(that.value =='text'){
+			document.getElementById('shape-chooser').style.display = "none";
+			document.getElementById('shape-drawing').style.display = "none";
+			document.getElementById('shape-text-area').style.display = "block";
+		}
+	}
+	
+	function rightclickchooser(){
+		var that = document.getElementsByName('rightclick-mode');
+		if(that[0].checked){
+			routingMode = true;
+			document.getElementById('shape-mode').style.display = 'none';
+			document.getElementById('routing-info').style.display = 'block';
+		}
+		else if(that[1].checked){
+			routingMode = false;
+			document.getElementById('shape-mode').style.display = 'block';
+			document.getElementById('routing-info').style.display = 'none';
+		}
+	}
+
+	function changegoal(that){
+		document.getElementById('drawing-chooser').style.display = 'block';
+		if(that.value == 'create'){
+			document.getElementById('edit-mode-label').innerHTML = '<b>2. Add a shape to create a new road. <br>Draw shape using:</b>';
+		}else if(that.value == 'override'){
+			document.getElementById('edit-mode-label').innerHTML = '<b>2. Add a shape corresponsing to an existing road to block it. <br>Draw shape using:</b>';
+		}
+	}
+
+	function clearVehicleChange(that){
+		var inputs = document.getElementsByName(that.name);
+		for(var idx in inputs){
+			if(inputs[idx].checked && inputs[idx].value=='0'){
+				document.getElementById("VEHICLE_TYPES-LINK_ATTRIBUTE_FCN-"+that.name.substring(26)).value = 0;
+			}if(inputs[idx].checked && inputs[idx].value!='0'){
+				inputs[idx].checked = false;
+			}
+		}
+	}
+
+	function quickvehiclechange(that){
+		var inputs = document.getElementsByName(that.name);
+		
+		var vehicleMask = 0;
+		for(var idx in inputs){
+			if(inputs[idx].checked){
+				vehicleMask += parseInt(inputs[idx].value);
+			}
+			if(inputs[idx].value=="0"){
+				inputs[idx].checked = false;
+			}
+		}
+		if(vehicleMask>0){
+			document.getElementById("VEHICLE_TYPES-LINK_ATTRIBUTE_FCN-"+that.name.substring(26)).value = vehicleMask;
+		}
+	}
+	
+	function quicktraveldir(that){
+		var inputs = document.getElementsByName(that.name);
+		var splitStr = that.name.split('-');
+		var vehicleMask = 0;
+		for(var idx in inputs){
+			if(inputs[idx].checked){
+				document.getElementById('TRAVEL_DIRECTION-LINK_ATTRIBUTE_FCN-'+	splitStr[splitStr.length-1]).value = inputs[idx].value;
+				addDirectionArrows(splitStr[splitStr.length-1], inputs[idx].value);
+				return;
+			}
+		}
+	}
+
+	function drawTravelDirIcons(){
+		
+	}
+
+	function modechange(that){
+		if(that.value=='advanced'){
+			document.getElementById("attribute-"+that.name.substring(5)).style.display = "block";
+			document.getElementById("quickchange-"+that.name.substring(5)).style.display = "none";
+		}else{
+			if(document.getElementById("layer-"+that.name.substring(5)).value != 'TRUCK_RESTR_FCN'){
+				document.getElementById("quickchange-"+that.name.substring(5)).style.display = "block";
+			}
+			document.getElementById("attribute-"+that.name.substring(5)).style.display = "none";
+		}
+	}
+	/*function toggleDetail(id){
+		var detaildesc = document.getElementById(id);
+		detaildesc.style.display = (detaildesc.style.display == 'block') ? 'none' : 'block';
+		//map.setViewBounds(roadGroups[id.split("-")[1]].getBounds());
+	}*/
+
+	function highlightRoad(id){
+		roadGroups.forEach(function (val, idx){
+			val.setVisibility(idx==id.split("-")[1]);
+		});
+	}
+
+	function showAllRoads(){
+		roadGroups.forEach(function (val, idx){
+			val.setVisibility(true);
+		});
+	}
+
+	function attachAttributeForm(id){
+		var layerName = document.getElementById("layer-"+id).value;
+		if(layerName){
+			document.getElementById("attribute-"+id).innerHTML = getAttributeOptions(layerName, id);
+			if(document.getElementById("layer-"+id).value == "LINK_ATTRIBUTE_FCN"){
+				document.getElementsByName('mode-'+id)[0].checked = true;
+				document.getElementsByName('mode-'+id)[0].onclick();
+				//No travel direction in case of Truck Restrictions layer
+				document.getElementsByName("quickchange-traveldir-"+id)[2].checked = true;
+				document.getElementsByName("quickchange-traveldir-"+id)[2].onclick(id);
+			}else{
+				document.getElementsByName('mode-'+id)[1].checked = true;
+				document.getElementsByName('mode-'+id)[1].onclick();
+			}
+
+			
+		}
+	}
+
+	function attachAttributeValuesForm(id){
+		document.getElementById("attributecontainer-"+id).innerHTML = getAttributeValueOptions(document.getElementById("attribute-"+id).value, id);
+	}
+
+	function getAttributeOptions(layerName, id){
+		document.getElementById("attributeDiv-"+id).style.display = "block";
+		if(layerName == "TRUCK_RESTR_FCN"){
+			document.getElementById("quickchange-"+id).style.display = "none";
+		}
+		var attributeHTML = '';
+		attributes = attributeObj[layerName].split(",");
+		//attributeHTML+= "<option>" + "" + "</option>";
+		for(var i=0; i<attributes.length; i++){
+			//attributeHTML+= "<option>" + attributes[i] + "</option>";
+			attributeHTML+= '<label class="control-label col-sm-6" for="mapname">'+ attributes[i] +'</label>';
+            attributeHTML+= '<div class="col-sm-4 input-group dropdown">';
+            attributeHTML+=		'<input class="form-control col-sm-4 dropdown-toggle" type="text" id="'+ attributes[i] + '-' + layerName + '-'  + id +  '" size="10" value=""/>';
+			attributeHTML+= '<ul class="dropdown-menu">';
+			attributeHTML+= getAttributeValueOptions(attributes[i], id, layerName);
+			attributeHTML+= "</ul>";
+			attributeHTML+= "<span role='button' class='input-group-addon dropdown-toggle' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'><span class='caret'></span></span></div>";
+            attributeHTML+= '</div>'
+		}
+		return attributeHTML;
+	}
+
+	function getAttributeValueOptions(attributeName, id, layerName){
+		var attributeValuesObj = {
+			VEHICLE_TYPES: "car,truck,pedestrian",
+			TRAVEL_DIRECTION: "FORWARD,BACKWARD,BOTH",
+			CONDITION_TYPE: "",
+			WEIGHT_RESTRICTION:"2.5t,3.5t",
+			HEIGHT_RESTRICTION: "2m,3m"
+		};
+		var attributeValueHTML = "";
+		//attributeValueHTML+="<label for='data-"+ id +"'>Select example values for attribute and edit them:</label><div class='input-group dropdown'>"
+		//attributeValueHTML+="<input type='text' id='data-"+ id +"' class='form-control dropdown-toggle' value=''>";
+		//attributeValueHTML+="<ul class='dropdown-menu'>";
+		if(attributeValuesObj[attributeName]){
+			attributeValues = attributeValuesObj[attributeName].split(",");
+			for(var i=0; i<attributeValues.length; i++){
+				attributeValueHTML+= "<li><a href='#' onclick='changeExample(this)' road-id='"+ id +"'  data-value='"+ attributeName + "-" + layerName + "-"  + id +"'>"+ attributeValues[i] +"</a></li>";
+			}
+		}
+		
+		return attributeValueHTML;
+
+	}
+
+	function changeExample(drop){
+		document.getElementById(drop.getAttribute("data-value")).value = drop.innerText;
+	}
+
+	function sampleObj(sampleText, overlay_specs){
+		this.sampleText = sampleText;
+		this.overlay_specs = overlay_specs;
+	}
+
+	var samples = {
+					mainRiver : new sampleObj("Add a bridge on the Main river and block another one", 
+												[{ "op": "override", "shape": [
+															[50.10765, 8.68774],
+															[50.10914, 8.68771]
+														], "layer": "LINK_ATTRIBUTE_FCN", "data": { "VEHICLE_TYPES": "0" } 
+													}, 
+													{ "op": "create", "shape": [
+															[50.10937, 8.68422],
+															[50.10807, 8.68525],
+															[50.10737, 8.68387]
+														], "data": { "NAMES": "ENGBNDemo Road" } 
+													}, {
+													  "op": "create","shape": [
+															[50.109498, 8.685869],
+															[50.107469, 8.685751]
+														], "layer": "LINK_ATTRIBUTE_FCN",
+														"data": {
+															"TRAVEL_DIRECTION": "BACKWARD"
+														}
+													}
+												]
+											),
+					mainRiver2 : new sampleObj("Add another bridge on the Main river and block another one",
+												[{ "op": "override", "shape": [
+															[50.10765, 8.68774],
+															[50.10914, 8.68771]
+														], "layer": "LINK_ATTRIBUTE_FCN", "data": { "VEHICLE_TYPES": "0" } 
+													}, 
+													{ "op": "create", "shape":[
+															[50.109518,8.689234],
+															[50.107858,8.689065],
+															[50.107205,8.688175]											
+														], "data": { "NAMES": "ENGBNDemo1 Road" } 
+													}
+												]
+												 ),
+					zeilStreet : new sampleObj("Zeil Street", 
+												[{ "op": "override", "shape": [
+													[50.114741, 8.687676],
+													[50.114738, 8.687214],
+													[50.114738, 8.686732],
+													[50.114731, 8.686356],
+													[50.114745, 8.685771],
+													[50.114762, 8.685353],
+													[50.114769, 8.684940],
+													[50.114776, 8.684827],
+													[50.114858, 8.684833]
+    											], "layer": "LINK_ATTRIBUTE_FCN", "data": { "VEHICLE_TYPES": "car,truck,pedestrian", "TRAVEL_DIRECTION": "BOTH" } }
+												]
+											),
+					oneWayExampleFfm: new sampleObj("Convert a one way street to two way in Frankfurt",
+												 [{ "op": "override", "shape": [
+													[50.132306, 8.615628],
+													[50.131150, 8.618176]
+												 ], "layer": "LINK_ATTRIBUTE_FCN", "data": { "TRAVEL_DIRECTION": "BACKWARD" } }
+												 ]
+											),
+					swissRoadBlock: new sampleObj("Block a road due to Snow and create a road network", 
+												 [{"op":"override","shape":[
+													 [46.996328,7.726329],
+													 [46.994454,7.728647],
+													 [46.990473,7.734226],
+													 [46.989771,7.734998],
+													 [46.987956,7.736200],
+													 [46.985790,7.737573],
+													 [46.981339,7.739547],
+													 [46.979056,7.740405],
+													 [46.979056,7.740405],
+													 [46.978060,7.740234]
+													 ], "layer":"LINK_ATTRIBUTE_FCN", "data":{"VEHICLE_TYPES":"0"} },
+												{"op":"create","shape":[
+													[46.997600,7.723447],[46.998947,7.725013],[46.998947,7.726472],[46.998260,7.727573],[46.997689,7.728797],[46.996899,7.728925],[46.996021,7.728539],[46.995523,7.728260],[46.995186,7.728797],[46.994338,7.729429],[46.994506,7.729737],[46.994918,7.730225],[46.995419,7.730716],[46.995742,7.730535],[46.996021,7.730642],[46.996606,7.730513],[46.997118,7.730749],[46.997645,7.730663],[46.997996,7.730427],[46.997835,7.729977],[46.997221,7.729633],[46.997206,7.729333],[46.997747,7.729075],[46.996943,7.729118],[46.996079,7.729075],[46.995567,7.729033],[46.995201,7.729462],[46.995186,7.729891],[46.995596,7.730127]] }
+												]
+											),
+					fraNoTruck: new sampleObj("Allow trucks through blocked street",
+											  [{"op":"override","shape":[
+												  [50.105717,8.633522],
+												  [50.105879,8.633532],
+												  [50.105910,8.633500],
+												  [50.105979,8.633254],
+												  [50.106846,8.629246]
+												  ],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"33"}}
+											   ]
+											),
+					neckarWestHeim : new sampleObj("Private Facility", 
+											  [{"op":"create","shape":[
+												  [49.037591,9.171666],
+												  [49.039012,9.170829],
+												  [49.03852,9.177116],
+												  [49.040025,9.175228],
+												  [49.040165,9.171966],
+												  [49.041684,9.174284],
+												  [49.0434,9.175078]]
+											  },
+											  {"op":"create","shape":[
+												 [49.039884,9.179798],
+												 [49.043398,9.17509]],
+												 "layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"0","TRAVEL_DIRECTION":"BACKWARD"}
+											  },
+											  {"op":"create","shape":[
+												 [49.0419,9.177114],
+												 [49.043329,9.181164],
+												 [49.045411,9.182859]],
+												 "layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"0","TRAVEL_DIRECTION":"FORWARD"}
+											  },
+											  {"op":"create","shape":[
+												 [49.045406,9.182843],
+												 [49.045805,9.179583]],
+												 "layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"0","TRAVEL_DIRECTION":"FORWARD"}
+											  },
+											  {"op":"create","shape":[
+												  [49.0458,9.179594],
+												  [49.04412,9.179192],
+												  [49.043712,9.17651]],
+												 "layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"0","TRAVEL_DIRECTION":"FORWARD"}
+											  },
+											  {"op":"create","shape":[
+												  [49.043396,9.175104],
+												  [49.043711,9.176504]],
+												 "layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"0","TRAVEL_DIRECTION":"BACKWARD"}
+											  },
+											  {"op":"create","shape":[
+												  [49.043726,9.176564],
+												  [49.048192,9.178887],
+												  [49.045408,9.187513]],
+												 "layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"0","TRAVEL_DIRECTION":"FORWARD"}
+											  }]
+											),
+				daimlerWoerth: new sampleObj("Daimler Wörth", [{"op":"override","shape":[[49.0435,8.28255],[49.04358,8.28254],[49.04362,8.28253],[49.04367,8.28248],[49.04369,8.28238],[49.04371,8.28219],[49.04377,8.2817],[49.04378,8.28157],[49.04377,8.28143],[49.04374,8.28137]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.04341,8.28254],[49.04344,8.28244],[49.04347,8.28219],[49.04348,8.28186],[49.04351,8.28164],[49.04355,8.28149],[49.04363,8.28137],[49.04368,8.28135],[49.04374,8.28137]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BACKWARD"}},{"op":"override","shape":[[49.043838,8.285887],[49.043922,8.285848],[49.043954,8.285796],[49.043966,8.285615],[49.043997,8.285064],[49.043975,8.284478],[49.043971,8.284435],[49.043971,8.284435]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.04325,8.28368],[49.0433,8.28406],[49.0434,8.28447],[49.04349,8.28487],[49.0436,8.28539],[49.04368,8.28568],[49.04376,8.28586],[49.04384,8.28589]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"override","shape":[[49.04325,8.28368],[49.04341,8.28374],[49.04373,8.28381],[49.04385,8.28386],[49.04392,8.28403],[49.04398,8.28449]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BACKWARD"}},{"op":"create","shape":[[49.043977,8.285306],[49.043589,8.285263]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.043989,8.284918],[49.043502,8.284868],[49.043502,8.284868]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.043985,8.284564],[49.043415,8.284499],[49.043415,8.284499]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.043938,8.284178],[49.043323,8.28411],[49.043323,8.28411]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.043348,8.283017],[49.046378,8.283499],[49.046505,8.280055],[49.04467,8.279841],[49.04467,8.279841]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.044682,8.27982],[49.044485,8.282706],[49.043894,8.282609]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.044675,8.279819],[49.04438,8.27998],[49.044155,8.280345],[49.044035,8.28072],[49.043965,8.28116],[49.043902,8.281804],[49.043803,8.28307],[49.043396,8.282995],[49.043396,8.282995]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.046498,8.280557],[49.046825,8.280584],[49.046638,8.284071],[49.046382,8.284039],[49.046382,8.284039]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.046371,8.283527],[49.0459,8.291262],[49.0459,8.291262]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.046364,8.284171],[49.046634,8.284203],[49.046634,8.284203]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.046497,8.28628],[49.046227,8.286243]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.046324,8.284534],[49.045422,8.284448]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045283,8.286736],[49.046193,8.286828]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.045694,8.286835],[49.045722,8.285976]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045295,8.291222],[49.045556,8.286812]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.045204,8.287756],[49.045496,8.287783],[49.045496,8.287783]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.044276,8.285301],[49.045338,8.285424]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.044265,8.285814],[49.045324,8.285942]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.044227,8.286553],[49.045274,8.286679]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.04617,8.287152],[49.046458,8.287185],[49.046458,8.287185]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.04602,8.289437],[49.046343,8.28947],[49.046343,8.289459]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.04692,8.278719],[49.046821,8.280017]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.048447,8.282037],[49.048778,8.282059]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.048361,8.28434],[49.04865,8.284383]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.048158,8.287365],[49.048474,8.28743]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.048158,8.287365],[49.048474,8.28743]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.049233,8.289844],[49.04834,8.289736]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.049479,8.285329],[49.048596,8.285206]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.049639,8.291732],[49.049477,8.294607],[49.050651,8.294757]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.049634,8.293245],[49.050716,8.293384]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.050722,8.293433],[49.051703,8.293545]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.051635,8.29488],[49.051786,8.292005]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.051773,8.292325],[49.050803,8.29218]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"override","shape":[[49.050651,8.294755],[49.051646,8.294895]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.050797,8.292239],[49.051785,8.292346],[49.052759,8.292453]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"override","shape":[[49.052365,8.294802],[49.052555,8.294357],[49.052668,8.293659],[49.052773,8.292136]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.05165,8.294897],[49.051836,8.295144],[49.052001,8.295262],[49.052124,8.295181],[49.052367,8.294832],[49.052367,8.294832]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.051351,8.283749],[49.05153,8.280665],[49.05153,8.280665]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.053474,8.280886],[49.053439,8.281454]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.053341,8.283338],[49.053292,8.283982]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.053167,8.284012],[49.053146,8.284474]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.050587,8.288132],[49.051199,8.288197]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.048179,8.292195],[49.047962,8.292165]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.048083,8.29393],[49.047892,8.293892]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.048014,8.295576],[49.047803,8.295541]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.048122,8.29396],[49.048439,8.293756],[49.049031,8.29383],[49.049129,8.291939]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.048315,8.293818],[49.048416,8.291846],[49.049132,8.291938],[49.049132,8.291938]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.04858,8.293764],[49.048691,8.291889]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"override","shape":[[49.048848,8.293803],[49.048953,8.291918],[49.048953,8.291918]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.048423,8.293957],[49.04838,8.294944]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.048236,8.295664],[49.048507,8.295401],[49.04857,8.294731],[49.048542,8.294302],[49.048532,8.293996],[49.048532,8.293991]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.049686,8.292041],[49.049129,8.291986]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.049505,8.292019],[49.04935,8.294964],[49.04935,8.294964]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.049345,8.292008],[49.049191,8.29495]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.047981,8.297103],[49.047981,8.297393],[49.049071,8.297854],[49.049837,8.297994],[49.050344,8.297908],[49.050344,8.297908]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.049807,8.297551],[49.049933,8.294697],[49.049933,8.294697]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.049854,8.296497],[49.049144,8.296386],[49.048975,8.295849],[49.048258,8.295699]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.049693,8.295948],[49.048975,8.295846]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.050359,8.297844],[49.050334,8.297689],[49.050162,8.297641],[49.049821,8.297539]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.052022,8.295393],[49.051215,8.297075],[49.05052,8.297578],[49.050336,8.29769]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.050839,8.29734],[49.049826,8.297203]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.051245,8.29702],[49.049842,8.296859]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.051422,8.296687],[49.049865,8.29651]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.051501,8.296491],[49.050904,8.296432],[49.050984,8.294842],[49.050907,8.296427]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.050913,8.29629],[49.049873,8.296167],[49.049869,8.296167],[49.049848,8.296167]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.050928,8.295945],[49.049889,8.295827]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.050939,8.295601],[49.049907,8.295486],[49.049907,8.295486]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.05096,8.295263],[49.049921,8.295134]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.050685,8.294768],[49.049936,8.294692],[49.049936,8.294694],[49.049929,8.294804]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.046268,8.291333],[49.04625,8.291757]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045311,8.291231],[49.045355,8.292846],[49.045339,8.293637],[49.045237,8.295448],[49.045358,8.295896],[49.045684,8.295863]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045728,8.29366],[49.045346,8.29362]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045715,8.293893],[49.045332,8.293846]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045699,8.294257],[49.045311,8.294213]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045688,8.294591],[49.04529,8.294562],[49.045288,8.294588]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045677,8.294952],[49.045272,8.2949]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045656,8.295302],[49.04525,8.295261]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.045631,8.295634],[49.045281,8.295606]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.054603,8.281001],[49.055549,8.281157],[49.055848,8.281672],[49.055999,8.282954],[49.056192,8.28629],[49.05608,8.28687],[49.055792,8.287674],[49.055588,8.288146],[49.05551,8.288833],[49.055461,8.28967],[49.054906,8.290228]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.054564,8.281551],[49.055338,8.281669],[49.054853,8.290177]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.054298,8.287462],[49.054987,8.287527]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.054326,8.286588],[49.055033,8.286672]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"FORWARD"}},{"op":"create","shape":[[49.055189,8.283699],[49.054479,8.283592]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.055185,8.283975],[49.054456,8.283892]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.055174,8.284333],[49.054445,8.284258]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.05515,8.284709],[49.054424,8.284631]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.055144,8.284938],[49.054416,8.284863]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.054606,8.280596],[49.053914,8.280515]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.054636,8.280273],[49.053947,8.280192]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.05465,8.279924],[49.053961,8.279846]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.054658,8.279593],[49.053976,8.279512]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.054666,8.279573],[49.054343,8.279208]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.054343,8.279209],[49.053995,8.27918]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.053998,8.279178],[49.053901,8.280922]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.053963,8.279853],[49.053757,8.279856]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"17","TRAVEL_DIRECTION":"BOTH"}},{"op":"create","shape":[[49.055265,8.282687],[49.054516,8.282591]],"layer":"LINK_ATTRIBUTE_FCN","data":{"VEHICLE_TYPES":"49","TRAVEL_DIRECTION":"BOTH"}}]) 
+										};
+
+
+	function populateSampleOptions(){
+		for(var sampleId in samples){
+			var opt = document.createElement('option');
+			opt.innerHTML = samples[sampleId].sampleText;
+			opt.id = sampleId;
+			document.getElementById("sampleSelector").appendChild(opt);
+		}
+	}
+
+	document.addEventListener("DOMContentLoaded", function(event) {
+		populateSampleOptions();
+	});
+
+	function addRoadExample(that){
+		if(that.selectedOptions[0].id!='-1'){
+			var selectedExampleId = that.selectedOptions[0].id;
+			var overlay_specs = samples[selectedExampleId].overlay_specs;
+			drawShapes(overlay_specs, false);
+		}
+	}
+
+	function applyShapes(){
+		var overlay_shape = JSON.parse(document.getElementById('shapedrop').value)
+		addRoad(roadShapes.length+1, overlay_shape, true);
+	}
+	function removeRoadById(id){
+		var currOverlaySpec = generateOverlayParams();
+		currOverlaySpec.splice(id-1,1);
+		clearMap();
+		drawShapes(currOverlaySpec, true);
+	}
+	function drawShapes(overlay_specs, showForm){
+		clearMap(true);
+			overlay_specs.forEach(function(overlay_spec, idx){
+				var id = roadShapes.length+1;
+				addRoad(id, overlay_spec.shape, showForm);
+
+				document.getElementById("op-"+id).value = overlay_spec.op;
+				operationChanged(id);
+				document.getElementById("layer-"+id).value =overlay_spec.layer;
+				attachAttributeForm(id);
+
+				for (var attribute in overlay_spec.data) {
+					if (overlay_spec.data.hasOwnProperty(attribute)) {
+						if(overlay_spec.layer){
+							document.getElementById(attribute+'-'+overlay_spec.layer+'-'+id).value = overlay_spec.data[attribute];
+							if((attribute == "VEHICLE_TYPES") && overlay_spec.layer=="LINK_ATTRIBUTE_FCN"){
+								var inputs = document.getElementsByName("quickchange-vehicle-types-"+ id);
+								for(var idx in inputs){
+									if((overlay_spec.data[attribute]==0 && inputs[idx].value == 0) || 
+										(inputs[idx].value & overlay_spec.data[attribute]) ||
+										(overlay_spec.data[attribute].indexOf(inputs[idx].alt)!=-1)){
+										inputs[idx].checked = true;
+									}
+								}
+							}else if((attribute == "TRAVEL_DIRECTION") && overlay_spec.layer=="LINK_ATTRIBUTE_FCN"){
+								var inputs = document.getElementsByName("quickchange-traveldir-"+ id);
+								inputs.forEach(function (val, idx){
+									if(val.value == overlay_spec.data[attribute]){
+										val.checked = true;
+										addDirectionArrows(id, val.value);
+									}
+								});
+							}
+						}
+					}
+				}
+			});
+
+	}
+
+
+	function generateShapeFromRoadGroup(id){
+		var shape = [];
+
+		roadShapes[id-1].getGeometry().eachLatLngAlt(function (lat, lng, alt, idx) {
+			var tempShape = [];
+			tempShape.push(parseFloat(parseFloat(lat).toFixed(6)));
+			tempShape.push(parseFloat(parseFloat(lng).toFixed(6)));
+			shape[shape.length] = tempShape;
+		});
+		return shape;
+	}
+	
+	function generateOverlayParams(){
+		var overlay_specs = [];
+		for(i = 1; i<roadGroups.length; i++){
+			var op = document.getElementById("op-"+(i)).value;
+			var layer;
+			var data;
+			var shape = generateShapeFromRoadGroup(i);
+			layer = document.getElementById("layer-"+(i)).value;
+			if(layer){
+				data = new Object();
+				attributeObj[layer].split(",").forEach(function (val, idx){
+					var attrVal = document.getElementById(val+"-"+ layer +"-"+ (i)).value;
+					if(attrVal!=undefined && attrVal!=null && attrVal!=""){
+						data[val] = (attrVal==""?undefined:attrVal);
+					}
+				});	
+			}
+			
+			
+			var tempOverlayOp = new overlaySpec(op, shape, layer, data);
+			overlay_specs[overlay_specs.length] = tempOverlayOp;
+		}
+		return overlay_specs;
+	}
+
+
+	function addDirectionArrows(id, dir){
+
+		roadGroups[id].getObjects().forEach(function(obj, i){
+			if(obj.objtype=='dirmarker'){
+				roadGroups[id].removeObject(obj);
+			}
+		});
+
+		var roadShapeArr = generateShapeFromRoadGroup(id);
+		for(var i=0; i<roadShapeArr.length-1; i++){
+			var midpoint = new H.geo.Point((roadShapeArr[i][0]+roadShapeArr[i+1][0])/2 - 0.00002, (roadShapeArr[i][1]+roadShapeArr[i+1][1])/2 - 0.00002);
+			
+			var p1 = map.geoToScreen({lat: roadShapeArr[i][0], lng: roadShapeArr[i][1]});
+			var p2 = map.geoToScreen({lat: roadShapeArr[i+1][0], lng: roadShapeArr[i+1][1]});
+			var angleDeg = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+			var dirMarker = new H.map.Marker(midpoint,{
+				icon: new H.map.Icon(directionSVG.replace(/__rotang__/g, angleDeg).replace(/__displayfwd__/g, (dir=='BOTH' || dir =='FORWARD')?'block':'none').replace(/__displaybck__/g, (dir=='BOTH' || dir =='BACKWARD')?'block':'none'))
+			});
+			dirMarker.objtype="dirmarker";
+			roadGroups[id].addObject(dirMarker);
+		}
+		roadGroups[id].dir = dir;
+	}
+
+
+	function addRoad(id, roadShapeArr, showForm){
+		var direction="BOTH";
+
+		var roadGroup = new H.map.Group();
+		roadGroup.roadShapeArr = roadShapeArr;
+		var road = new H.geo.Strip();
+		for(var i=0; i<roadShapeArr.length; i++){
+			road.pushPoint(new H.geo.Point(roadShapeArr[i][0], roadShapeArr[i][1]));
+		}
+		currentRoadShape = new H.map.Polyline(road, roadDisplayOptions[id%6]);
+
+		//currentRoadShape.setArrows( true );
+
+		currentRoadShape.addEventListener('pointerenter', function(e){
+			document.getElementById('mapContainer').style.cursor = 'pointer';
+			e.currentTarget.setStyle(e.currentTarget.getStyle().getCopy({
+				lineWidth: 9
+			}));
+		});
+		currentRoadShape.addEventListener('pointerleave', function(e){
+			document.getElementById('mapContainer').style.cursor = 'default';
+			e.currentTarget.setStyle(e.currentTarget.getStyle().getCopy({
+				lineWidth: 7,
+				strokeColor: roadDisplayOptions[e.currentTarget.getGeometry().id%6].style.strokeColor
+			}));
+		});
+		currentRoadShape.addEventListener('pointercancel', function(e){
+			document.getElementById('mapContainer').style.cursor = 'default';
+			e.currentTarget.setStyle(e.currentTarget.getStyle().getCopy({
+				lineWidth: 7,
+				strokeColor: '#000000',
+				strokeColor: roadDisplayOptions[e.currentTarget.getGeometry().id%6].style.strokeColor
+			}));
+		});
+		currentRoadShape.addEventListener('tap', function(e){
+			var selectedRoadId = e.currentTarget.getGeometry().id;
+			showFormForRoad(selectedRoadId);
+			e.currentTarget.setStyle(e.currentTarget.getStyle().getCopy({
+				lineWidth: 9
+			}));
+
+			e.currentTarget.setStyle(e.currentTarget.getStyle().getCopy({
+				lineWidth: 7,
+				strokeColor: '#000000',
+				strokeColor: roadDisplayOptions[e.currentTarget.getGeometry().id%6].style.strokeColor
+			}));
+		});
+
+		
+		roadGroup.addObject(currentRoadShape);
+		var polygonHandles = new H.map.Group();
+		roadGroup.addObject(polygonHandles);
+
+		var oldStrip = currentRoadShape.getGeometry();
+		var newStrip = new H.geo.Strip();
+		// fix the dbltap adding two points in last place, removing last.
+		for (var i = 0; i < oldStrip.getPointCount(); i++) {
+			newStrip.pushPoint(oldStrip.extractPoint(i));
+		}
+		newStrip.id = id;
+		currentRoadShape.setGeometry(newStrip);
+
+		makeHandles(currentRoadShape, polygonHandles);
+		
+		map.addObject(roadGroup);
+		roadShapes[id-1]= currentRoadShape;
+		if(roadGroups[id]){
+			roadGroups[id].removeAll();
+			roadGroups[id] = roadGroup;
+		}else{
+			roadGroups[id] = roadGroup;
+			addRowToContainer(newStrip.id, roadShapeArr);
+			if(showForm){
+				showFormForRoad(newStrip.id);
+			}else{
+				showFormForRoad(null);
+			}
+				
+		}
+		
+		currentRoadShape = null;
+		//growingStrip = new H.geo.Strip();
+		underConstruction = false;
+		addDirectionArrows(id, direction);
+
+		map.setViewBounds(roadGroup.getBounds());
+
+		var opt = document.createElement('option');
+		opt.innerHTML = id;
+		opt.id = id;
+		document.getElementById("roadSelector").appendChild(opt);
+		document.getElementById("road-selector").style.display = 'block';
+	}
+
+	function showFormForRoad(id){
+		roadGroups.forEach(function (val, idx){
+				if(idx==id){
+					//show the selected
+					document.getElementById('container-block-'+idx).style.display='block';
+					document.getElementById('container-'+idx).style.display='block';
+				}else{
+					//hide the rest
+					document.getElementById('container-block-'+idx).style.display='none';
+					document.getElementById('container-'+idx).style.display='none';
+				}
+			});
+	}
+
+	var currRoadShapeArr = [];
+
+	function initializeOraddPointToPolygon(e) {
+		if(underConstruction){
+			roadEdits[roadEdits.length-1].pushPoint(map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY));
+			currRoadShapeArr.push([map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY).lat, map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY).lng]);
+			/*var handleMarker = new H.map.Marker(map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY),{
+					icon: new H.map.Icon(markerSVG1.replace(/__NO__/g, roadEdits.length).replace(/__NO2__/g, ""))
+			});
+			tempMarkersGroup.addObject(handleMarker);*/
+			//growingStrip.pushPoint(map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY));
+		}
+	}
+
+	function refreshNonFinalizedPolygon(e) {
+		if(underConstruction && !lockGrowingShape){
+			var point = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+			var strip = new H.geo.Strip(roadEdits[roadEdits.length-1].getLatLngAltArray().concat(point.lat, point.lng, point.alt));
+			if(underConstruction){
+				if (!currentRoadShape) {
+					currentRoadShape = new H.map.Polyline(strip, polygonOptions);
+					map.addObject(currentRoadShape);
+				} else {
+					currentRoadShape.setGeometry(strip);
+				}
+			}
+		}
+	}
+
+	function finalizePolygon(e) {
+		e.originalEvent.stopImmediatePropagation();
+
+		map.removeObject(currentRoadShape);// will be added as a group
+
+		currRoadShapeArr.splice(-1,1);
+		addRoad(roadShapes.length +1  , currRoadShapeArr, true);
+		currRoadShapeArr = [];
+		
+		currentRoadShape = null;
+		//growingStrip = new H.geo.Strip();
+		underConstruction = false;
+	}
+
+
+	function makeHandles(polygon, polygonHandles) {
+		tempMarkersGroup.removeAll();
+		var polygonStrip = polygon.getGeometry();
+		
+		for (var k = 0; k < polygonStrip.getPointCount(); k++) {
+			var markerToUse = ((k==0 || k==polygonStrip.getPointCount()-1)?markerSVG1:markerSVG1);
+			var handleCenter = polygonStrip.extractPoint(k);
+			var handleMarker = new H.map.Marker(handleCenter,{
+				icon: new H.map.Icon(markerToUse.replace(/__NO__/g, polygonStrip.id).replace(/__NO2__/g, ""))
+			});
+			handleMarker.draggable = true;
+			handleMarker.markerId = k;
+			handleMarker.polygonId = polygonStrip.id;
+			handleMarker.addEventListener('contextmenu', function(e){
+				currClickedviewportX = e.viewportX;
+				currClickedviewportY = e.viewportY;
+				if(e.target!==e.currentTarget){
+					return;			
+				}
+				var shapePointId = e.currentTarget.markerId;
+				var shapeId = e.currentTarget.polygonId;
+				e.items.push(new H.util.ContextItem({
+					label: 'Delete Road',
+					callback: function(){
+						removeRoadById(shapeId);
+					}
+				}));
+				e.items.push(new H.util.ContextItem({
+					label: 'Delete Shape Point',
+					callback: function(){
+						removeObjects(true);
+						var shapeArr = generateShapeFromRoadGroup(shapeId);
+						shapeArr.splice(shapePointId,1);
+						document.getElementById('shape-'+shapeId).value = JSON.stringify(shapeArr).replace(/"/g,"");
+						applyShapeEdit(shapeId);
+					}
+				}));
+				//draw shape
+				e.items.push(new H.util.ContextItem({
+					label: 'Add shape point',
+					callback: function(){
+						if(!underConstruction){
+							roadEdits.push(new H.geo.Strip());
+							roadEdits[roadEdits.length-1].id = roadEdits.length;
+							roadEdits[roadEdits.length-1].pushPoint(map.screenToGeo(currClickedviewportX, currClickedviewportY));
+							currRoadShapeArr.push([map.screenToGeo(currClickedviewportX, currClickedviewportY).lat, map.screenToGeo(currClickedviewportX, currClickedviewportY).lng]);
+							
+						}
+						underConstruction = true;
+						lockGrowingShape = false;
+						var handleMarker = new H.map.Marker(map.screenToGeo(currClickedviewportX, currClickedviewportY),{
+								icon: new H.map.Icon(markerSVG1.replace(/__NO__/g, roadShapes.length+1).replace(/__NO2__/g, ""))
+							});
+						tempMarkersGroup.addObject(handleMarker);
+					}
+				}));
+				e.items.push(new H.util.ContextItem({
+					label: 'Finalize shape',
+					callback: function(){
+						map.removeObject(currentRoadShape);// will be added as a group
+						//currRoadShapeArr.splice(-1,1);
+						addRoad(roadShapes.length +1  , currRoadShapeArr, true);
+						currRoadShapeArr = [];
+						
+						currentRoadShape = null;
+						//growingStrip = new H.geo.Strip();
+						underConstruction = false;
+						lockGrowingShape = false;
+					}
+				}));
+			});
+			handleMarker.addEventListener('dragstart', function () {
+				document.body.style.cursor = 'pointer';
+				behavior.disable();
+			}, false);
+			handleMarker.addEventListener('dragend', function () {
+				polygonHandles.removeObjects(polygonHandles.getObjects());
+				makeHandles(polygon, polygonHandles);
+				document.body.style.cursor = 'auto';
+				behavior.enable();
+				behavior.disable(H.mapevents.Behavior.DBLTAPZOOM);
+				document.getElementsByName("quickchange-traveldir-"+handleMarker.polygonId)[2].onclick();
+				addDirectionArrows(handleMarker.polygonId, roadGroups[handleMarker.polygonId].dir);
+			}, false);
+			(function (closureK) {// funny closures.
+				handleMarker.addEventListener('drag', function (ev) {
+				var target = ev.target;
+				var pointer = ev.currentPointer;
+				var screenToGeo = map.screenToGeo(pointer.viewportX, pointer.viewportY);
+				target.setPosition(screenToGeo);
+				var newStrip = new H.geo.Strip();
+				newStrip.id = polygonStrip.id;
+				document.getElementById("shape-"+newStrip.id).value=JSON.stringify(generateShapeFromRoadGroup(newStrip.id)).replace(/"/g,"");
+				polygonStrip.eachLatLngAlt(function (lat, lng, alt, idx) {
+					if (idx !== closureK) {
+					newStrip.pushLatLngAlt(lat, lng, 0);
+					} else {
+					newStrip.pushLatLngAlt(screenToGeo.lat, screenToGeo.lng, 0);
+					}
+				});
+				polygon.setGeometry(newStrip);
+				}, false);
+			})(k);
+			polygonHandles.addObject(handleMarker);
+		}
+	}
+
+	function getFormattedTime() {
+		var today = new Date();
+		var y = today.getFullYear();
+		var m = ('0' + parseInt(today.getMonth()+1)).slice(-2);
+		var d = ('0' + today.getDate()).slice(-2);
+		var h = ('0' + today.getHours()).slice(-2);
+		var min = ('0' + today.getMinutes()).slice(-2);
+		var s = ('0' + today.getSeconds()).slice(-2);
+
+		return y + "-" + m + "-" + d + "T" + h + "-" + min + "-" + s;
+	}
+
+	function useShapesInOverlay(){
+
+	}
+
+	function backup(){
+		download(JSON.stringify(generateOverlayParams()), mapname.value+'_'+getFormattedTime()+".json", 'application/json');
+	}
+
+	function download(text, name, type) {
+		var a = document.createElement("a");
+		var file = new Blob([text], {type: type});
+		a.href = URL.createObjectURL(file);
+		a.download = name;
+		a.click();
+	}
+
+	document.getElementById('file-input').addEventListener('change', restoreShapes, false);
+
+	function restore(){
+		document.getElementById('file-input').value = null;
+		document.getElementById('file-input').click();
+	}
+
+	function restoreShapes(e) {
+		var file = e.target.files[0];
+		
+		if (!file) {
+			return;
+		}
+		var userConfirm = true;
+		var fileNameSplit = file.name.split('.');
+		var fileExtension = fileNameSplit[1];
+		var fileNameArr = fileNameSplit[0].split('_');
+		if(fileExtension!=='json'){
+			//Could be Invalid file
+			userConfirm = confirm('File Extension is not ".json". Might be an invalid file! Continue?')
+		}
+		if(userConfirm && !fileNameArr[0].startsWith('OVERLAY')){
+			//Could be Invalid file
+			userConfirm = confirm('File name does not start with OVERLAY. Might be an invalid file! Continue?')
+		}
+		if(userConfirm && fileNameArr[0]!==mapname.value){
+			//Could be a different overlay map
+			userConfirm = confirm('Map name of backup file('+ fileNameArr[0] +') is different than that in progress('+ mapname.value +'). Changes could be lost! Continue?');
+			mapname.value = fileNameArr[0];
+		}
+		var reader = new FileReader();
+		reader.onload = function(e) {
+			var contents = e.target.result;
+			var parsedShape;
+			try{
+				parsedShape = JSON.parse(contents)
+			}catch(e){
+				alert('Invalid shape file');
+			}
+			drawShapes(parsedShape, false);
+		};
+		if(userConfirm){
+			reader.readAsText(file);
+		}
+	}
+
+
+
+
+	var overlay_upload = function(){		
+		Spinner.showSpinner();
+		overlayparamString = JSON.stringify(generateOverlayParams());
+		var url = endpoint.value + '/2/overlays/upload.json'+ '?app_id=' + app_id + '&app_code=' + app_code + '\n&storage=readonly'+'&map_name='+mapname.value;
+		 $.ajax({
+                url: url,
+                dataType: "json",
+                async: true,
+                type: 'post',
+				data:{
+					overlay_spec : overlayparamString
+				},
+                success: function(data) {
+                    gotOverlayResponse(data, this);
+                },
+                error: function(xhr, status, e) {
+					Spinner.hideSpinner();
+                    var errorResp = (xhr.responseJSON.issues[0] || {
+                        "message": "unknown error occured"
+                    });
+                    feedbackTxt.innerHTML = "<font color=\"red\">" + errorResp.message + "</font>";
+                    feedbackTxt.innerHTML += "<br/>";
+                }
+            });
+	}
+
+	var layersAffected = {};
+	var layersToShow = [];
+	var gotOverlayResponse = function (respJsonObj, that){
+		feedbackTxt.innerHTML = "";
+		if (respJsonObj.error != undefined) {
+			Spinner.hideSpinner();
+			alert (respJsonObj.error);
+			feedbackTxt.innerHTML += JSON.stringify(respJsonObj, null, 2) + '\n';
+			return;
+		}
+		//feedbackTxt.innerHTML += JSON.stringify(respJsonObj, null, 2) + '\n';
+		
+		if(respJsonObj.meta === undefined){
+			layersToShow = [];
+			respJsonObj.layers.forEach(function (val, idx){
+				if(val.indexOf("LINK_ATTRIBUTE_FC")!=-1){
+					layersToShow.push (val);
+				}
+			});
+			layersAffected = {};
+		}else{
+			respJsonObj.meta.forEach(function (val, idx){
+				if(val.layerId.indexOf("LINK_ATTRIBUTE_FC")!=-1){
+					layersAffected[val.layerId] = val.lastUpdateTimeStamp;
+				}
+			});
+			layersToShow = [];
+		}
+		
+		showAffectedRoads(layersAffected);
+	};
+
+	function showAffectedRoads(layersMeta){
+		var layerIds = "";
+		if(layersMeta){
+			layerIds= Object.keys(layersMeta).map(function(elem){
+							return elem;
+					  }).join(",");
+		}else{
+			layerIds = "LINK_ATTRIBUTE_FCn";
+			Spinner.showSpinner();
+		}
+		
+		var displayURL = endpoint.value + '/2/search/all.json' +
+		'?map_name='+mapname.value+'&geom=full' +
+		'&layer_id=' + layerIds + 
+		'&acceptMissingLayers=' + "true" + 
+		'&app_id=' + app_id + '&app_code=' + app_code + '&meta=1';
+
+		overlayGroup.removeAll();
+
+		$.ajax({
+                url: displayURL,
+                dataType: "json",
+                async: true,
+                type: 'get',
+				tryCount : 0,
+    			retryLimit : 20,
+                success: function(respJsonObj) {
+                    var meta = respJsonObj.meta;
+					var layerFound = true;
+					
+					if(layersToShow.length == 0 && layerIds != "LINK_ATTRIBUTE_FCn"){
+						meta.forEach(function(obj, idx){
+							layerFound = layersMeta[obj.layerId] == obj.lastUpdateTimeStamp;
+						});
+					}
+					
+					if(layerFound){
+						var links = respJsonObj.geometries;
+						if(links.length==0){
+							setTimeout(function(){showAffectedRoads(layersMeta);}, 3000);
+						}else{
+							for (var i = 0; i < links.length; i++)	{
+
+								var strip = new H.geo.Strip();
+								if(links[i] && links[i].geometry && links[i].geometry !== undefined)
+								{
+									var shape = links[i].geometry.startsWith('LINESTRING')
+										? links[i].geometry.substring(11, links[i].geometry.length - 1).split(',') // LINESTRING(lat lon, lat lon, ...)
+										: links[i].geometry.substring(17, links[i].geometry.length - 2).split(',') // MULTILINESTRING((lat lon, lat lon, ...))
+									for (var j = 0; j < shape.length; j++) {
+										var lonLat = shape[j].trim().split(' ');
+										strip.pushLatLngAlt(parseFloat(lonLat[1]), parseFloat(lonLat[0]), 0);
+									}
+									var polyline = new H.map.Polyline(strip, { style: { lineWidth: 11, strokeColor: "#B22222", lineJoin: "round" } });
+									polyline.$linkInfo = links[i].attributes;
+									polyline.addEventListener('tap', createTapLinkHandler(polyline));
+									polyline.addEventListener('pointerenter', createPointerEnterLinkHandler(polyline));
+									polyline.addEventListener('pointerleave', createPointerLeaveLinkHandler(polyline));
+									overlayGroup.addObject(polyline);
+								}
+							}
+							Spinner.hideSpinner();
+							map.addObject(overlayGroup);
+							map.setViewBounds(overlayGroup.getBounds());
+						}
+					}else{
+						setTimeout(function(){showAffectedRoads(layersMeta);}, 3000);
+					}
+                },
+                error: function(xhr, status, e) {
+                    if (xhr.status == 400 && layersToShow.length == 0) {
+							setTimeout(function(){showAffectedRoads(layersMeta);}, 3000);
+					}else if (xhr.status == 500) {
+						//handle error
+						Spinner.hideSpinner();
+					} else {
+						//handle error
+						Spinner.hideSpinner();
+					}
+                }
+            });
+	}
+
+		 // Link selection display handlers
+        function createPointerEnterLinkHandler(polyline){
+            return function(evt){
+                polyline.setStyle(HOVER_LINK_STYLE);
+            };
+        }
+    
+        function createPointerLeaveLinkHandler(polyline) {
+            return function (e) {
+                polyline.setStyle(DEFAULT_LINK_STYLE);
+            };
+        }
+	
+        //LinkInfo display handler
+        function createTapLinkHandler(polyline) {
+            return function (e) {
+                var strip = polyline.getStrip();
+                var linkId = polyline.$linkId;
+                var lowIndex = Math.floor((strip.getPointCount() - 1) / 2);
+                var highIndex = Math.ceil(strip.getPointCount() / 2);
+                var center;
+                if (lowIndex === highIndex) {
+                    center = strip.extractPoint(lowIndex);
+                } else {
+                    var lowPoint = strip.extractPoint(lowIndex);
+                    var highPoint = strip.extractPoint(highIndex);
+                    center = new H.geo.Point((lowPoint.lat + highPoint.lat ) / 2, (lowPoint.lng + highPoint.lng) / 2);
+                }
+                
+                // Get the LinkId
+                linkInfo= polyline.$linkInfo;
+                
+                var tableText = "";
+                tableText += '<table <table class="link-info">';
+				tableText += "<tr>";
+					tableText += "<th>Attribute</th>";
+					tableText += "<th>Value    </th>";
+				tableText += "</tr>";
+				var keys = Object.keys(linkInfo);
+				keys.sort();
+				keys.forEach(function(val, idx){
+					var editable = false;
+					if(attributeObj['LINK_ATTRIBUTE_FCN'].indexOf(val)!=-1){
+						editable = true;
+					}
+					tableText += '<tr style="color:'+ ((editable)?'red':'gray') +'">';
+						tableText += "<td>"+val          +"</td>";
+						tableText += "<td>"+linkInfo[val]+"</td>";
+					tableText += "</tr>";
+					console.log(val + ":"+ linkInfo[val]);
+				});
+
+				tableText += "</table>";
+                
+                // Adding Link data to a Infobubble with text area formatting
+                infoText="<div style='background-color:black;border:0;font-size:12px;width:375px;max-height:250px;overflow-y: scroll'>"+tableText+"</div>";
+            
+                if (!linkDataInfoBubble){
+                    linkDataInfoBubble = new H.ui.InfoBubble(center,{content: infoText});
+                    ui.addBubble(linkDataInfoBubble);	
+                }
+                else {
+                    linkDataInfoBubble.setPosition(center);
+                    linkDataInfoBubble.setContent(infoText);
+                }
+                linkDataInfoBubble.open();
+            };
+        }
+        // Info Bubbles for LinkInfo display
+        var linkDataInfoBubble;
+      	var HOVER_LINK_STYLE = {lineWidth: 12, strokeColor: 'rgba(0, 255, 50, 0.7)', lineJoin: 'round'};
+    	var DEFAULT_LINK_STYLE = { lineWidth: 11, strokeColor: "#B22222", lineJoin: "round" };
+		
+	var display_overlay = function(){
+		var displayURL = endpoint.value + '/2/search/all.json\n' +
+		'?map_name='+mapname.value+'&geom=full\n' +
+		'&layer_id=' + layerIds + 
+		'&app_id=' + app_id + '&app_code=' + app_code;
+		
+		
+		overlayGroup.removeAll();
+		var url = displayURL.replace('\n','') + '&callback=gotSearchAllResponse';
+		script = document.createElement("script");
+		script.src = url;
+		document.body.appendChild(script);
+	};
+	
+	var gotSearchAllResponse = function (respJsonObj){
+		feedbackTxt.innerHTML = "";
+		if (respJsonObj.issues != undefined) {
+			feedbackTxt.innerHTML += respJsonObj.issues[0].message + '\n';
+			return;
+		}
+		// for debugging: feedbackTxt.innerHTML += JSON.stringify(respJsonObj, null, 2) + '\n';
+		var links = respJsonObj.geometries;
+		for (var i = 0; i < links.length; i++)	{
+			var strip = new H.geo.Strip();
+			var shape = links[i].geometry.startsWith('LINESTRING')
+				? links[i].geometry.substring(11, links[i].geometry.length - 1).split(',') // LINESTRING(lat lon, lat lon, ...)
+				: links[i].geometry.substring(17, links[i].geometry.length - 2).split(',') // MULTILINESTRING((lat lon, lat lon, ...))
+			for (var j = 0; j < shape.length; j++) {
+				var lonLat = shape[j].trim().split(' ');
+				strip.pushLatLngAlt(parseFloat(lonLat[1]), parseFloat(lonLat[0]), 0);
+			}
+			var polyline = new H.map.Polyline(strip, { style: { lineWidth: 11, strokeColor: "#B22222", lineJoin: "round" } });
+			overlayGroup.addObject(polyline);
+		}
+		map.addObject(overlayGroup);
+		map.setViewBounds(overlayGroup.getBounds());
+	};
+
+	var request_route = function(start, destination){
+		var url = document.getElementById("route-area").value.replace('\n','') + '&algopts=nohlprouter&jsoncallback=gotRoutingResponse';
+		script = document.createElement("script");
+		script.src = url;
+		document.body.appendChild(script);
+	};
+
+	var gotRoutingResponse = function (respJsonRouteObj){
+		if (respJsonRouteObj.error != undefined || respJsonRouteObj.issues != undefined) {
+			alert (respJsonRouteObj.error);
+			feedbackTxt.innerHTML = respJsonRouteObj.error;
+			return;
+		}
+		var strip = new H.geo.Strip();
+		for (var l = 0; l < respJsonRouteObj.response.route[0].leg.length; l++)	{
+			var links = respJsonRouteObj.response.route[0].leg[l].link;
+			for (var i = 0; i < links.length; i++)	{
+				var shape = links[i].shape;
+				for (var j = 0; j < shape.length; j += 2) {
+					strip.pushLatLngAlt(parseFloat(shape[j]), parseFloat(shape[j + 1]), 0);
+				}
+			}
+		}
+		var polyline = new H.map.Polyline(strip, { style: { lineWidth: 5, strokeColor: "#2222B2", lineJoin: "round" } });
+		group.addObject(polyline);
+		map.addObject(group);
+		map.setViewBounds(group.getBounds());
+	}
+
+	var delete_overlay = function(){
+		var deleteURL = endpoint.value + '/2/layers/delete.json?map_name='+mapname.value+'\n' +
+		'&app_id=' + app_id + '&app_code=' + app_code + '\n&storage=readonly';
+
+		var url = deleteURL.replace('\n','') + '&callback=gotDeleteResponse';
+		script = document.createElement("script");
+		script.src = url;
+		document.body.appendChild(script);
+	};
+	
+	var gotDeleteResponse = function (respJsonObj){	
+		feedbackTxt.innerHTML = "";
+		if (respJsonObj.error != undefined) alert (respJsonObj.error);
+		feedbackTxt.innerHTML += JSON.stringify(respJsonObj, null, 2) + '\n';
+	};
+
+	//--- Create marker with 2 text lines
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_Line;
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line2);
+		svgMarker = svgMarker.replace(/__width__/g, line2.length * 4 + 20);
+		svgMarker = svgMarker.replace(/__widthAll__/g, line2.length * 4 + 200);
+		return new H.map.Icon(svgMarker, { anchor: new H.math.Point(24, 57)	});
+	};
+
+
+	var markerSVG1 = '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="36px">' +
+			  '<path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 28 13 28 C 16.3 28 19' +
+			  ' 29.3 19 31 Z" fill="#000" fill-opacity=".2"/>' +
+			  '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 19.5 3.8 21.9 L 13 31 L 22.2' +
+			  ' 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="#fff"/>' +
+			  '<path d="M 13 2.2 C 6 2.2 2.3 7.2 2.1 12.8 C 2.1 16.1 3.1 18.4 5.2 20.5 L 13 28.2 L 20.8 20.5 C' +
+			  ' 22.9 18.4 23.8 16.2 23.8 12.8 C 23.6 7.07 20 2.2 13 2.2 Z" fill="#1188DD"/>' +
+			  '<text font-size="11" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" text-anchor="middle" x="45%" y="50%">__NO__</text>' +
+			  '</svg>';
+	
+	var markerSVG = '<svg xmlns="http://www.w3.org/2000/svg" style="margin-left:10%; margin-top:10%;" width="58" height="45"><rect id="backgroundrect" width="100%" height="100%" x="0" y="0" fill="none" stroke="none" class=""/><g class="currentLayer"><title>Layer 1</title><path d="M27.28125,42.25601625442505 C27.28125,43.95601625442505 24.58125,45.25601625442505 21.28125,45.25601625442505 C17.98125,45.25601625442505 15.28125,43.95601625442505 15.28125,42.25601625442505 C15.28125,40.556016254425046 17.98125,39.25601625442505 21.28125,39.25601625442505 C24.58125,39.25601625442505 27.28125,40.556016254425046 27.28125,42.25601625442505 z" fill="#000" fill-opacity=".2" id="svg_1" class=""/><path d="M21.28125,11.256016254425049 C17.78125,11.256016254425049 14.58125,12.55601625442505 12.08125,15.05601625442505 C9.68125,19.05601625442505 8.28125,20.656016254425047 8.28125,24.05601625442505 C8.28125,27.55601625442505 9.68125,30.75601625442505 12.08125,33.15601625442505 L21.28125,42.25601625442505 L30.48125,33.15601625442505 C32.88125,30.75601625442505 34.18125,27.55601625442505 34.18125,24.05601625442505 C34.18125,20.656016254425047 32.88125,17.35601625442505 30.38125,15.05601625442505 C27.98125,12.55601625442505 24.78125,11.256016254425049 21.28125,11.256016254425049 z" fill="#fff" id="svg_2" class=""/><path d="M21.28125,13.456016254425048 C14.28125,13.456016254425048 10.58125,18.456016254425048 10.38125,24.05601625442505 C10.38125,27.35601625442505 11.38125,29.656016254425047 13.48125,31.75601625442505 L21.28125,39.45601625442505 L29.08125,31.75601625442505 C31.18125,29.656016254425047 32.08125,27.456016254425048 32.08125,24.05601625442505 C31.88125,18.32601625442505 28.28125,13.456016254425048 21.28125,13.456016254425048 z" fill="#1188DD" id="svg_3" class=""/><text font-size="11" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" text-anchor="middle" x="20.79110421382913" y="29.499886909634334" id="svg_4" class="">__NO1__</text><path fill="#4aabba" fill-opacity="1" stroke="#ffffff" stroke-opacity="1" stroke-width="2" stroke-dasharray="none" stroke-linejoin="round" stroke-linecap="butt" stroke-dashoffset="" fill-rule="nonzero" opacity="1" marker-start="" marker-mid="" marker-end="" d="M26.37215133392041,12.620879067530943 C26.37215133392041,6.200503858927616 31.572655252889106,0.9999999399589239 37.99303046149243,0.9999999399589239 C44.413405670095756,0.9999999399589239 49.61390958906445,6.200503858927616 49.61390958906445,12.620879067530943 C49.61390958906445,19.041254276134268 44.413405670095756,24.241758195102964 37.99303046149243,24.241758195102964 C31.572655252889106,24.241758195102964 26.37215133392041,19.041254276134268 26.37215133392041,12.620879067530943 z" id="svg_8" class=""/><text font-size="11" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" text-anchor="middle" x="37.724287400894525" y="16.44589037306701" class="" id="svg_5">__NO2__</text></g></svg>';
+
+	var markerSVG2 = '<svg xmlns="http://www.w3.org/2000/svg" width="25" height="25"><rect id="backgroundrect" width="100%" height="100%" x="0" y="0" fill="none" stroke="none" class=""/><g class="currentLayer"><title>Layer 1</title><path fill="#4aabba" fill-opacity="1" stroke="#ffffff" stroke-opacity="1" stroke-width="2" stroke-dasharray="none" stroke-linejoin="round" stroke-linecap="butt" stroke-dashoffset="" fill-rule="nonzero" opacity="1" marker-start="" marker-mid="" marker-end="" d="M1.000000912777832,12.620879127135588 C1.000000912777832,6.20050391853226 6.200504831746528,0.9999999995635687 12.620880040349853,0.9999999995635687 C19.041255248953178,0.9999999995635687 24.24175916792187,6.20050391853226 24.24175916792187,12.620879127135588 C24.24175916792187,19.041254335738913 19.041255248953178,24.24175825470761 12.620880040349853,24.24175825470761 C6.200504831746528,24.24175825470761 1.000000912777832,19.041254335738913 1.000000912777832,12.620879127135588 z" id="svg_8" class=""/><text font-size="11" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" text-anchor="middle" x="12.352136979751947" y="16.445890432671654" class="" id="svg_5">__NO2__</text></g></svg>';
+
+	//var directionSVG = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<svg\r\n   xmlns:dc=\"http:\/\/purl.org\/dc\/elements\/1.1\/\"\r\n   xmlns:cc=\"http:\/\/creativecommons.org\/ns#\"\r\n   xmlns:rdf=\"http:\/\/www.w3.org\/1999\/02\/22-rdf-syntax-ns#\"\r\n   xmlns:svg=\"http:\/\/www.w3.org\/2000\/svg\"\r\n   xmlns=\"http:\/\/www.w3.org\/2000\/svg\"\r\n   xmlns:xlink=\"http:\/\/www.w3.org\/1999\/xlink\"\r\n   xmlns:sodipodi=\"http:\/\/sodipodi.sourceforge.net\/DTD\/sodipodi-0.dtd\"\r\n   xmlns:inkscape=\"http:\/\/www.inkscape.org\/namespaces\/inkscape\"\r\n   viewBox=\"0 0 10000 5000\"\r\n   version=\"1.1\"\r\n   id=\"svg3718\"\r\n   sodipodi:docname=\"left-circle-arrow-icon.svg\"\r\n   width=\"10000\"\r\n   height=\"5000\"\r\n   style=\"clip-rule:evenodd;fill-rule:evenodd;image-rendering:optimizeQuality;shape-rendering:geometricPrecision;text-rendering:geometricPrecision\"\r\n   inkscape:version=\"0.92.2 (5c3e80d, 2017-08-06)\">\r\n  <metadata\r\n     id=\"metadata3722\">\r\n    <rdf:RDF>\r\n      <cc:Work\r\n         rdf:about=\"\">\r\n        <dc:format>image\/svg+xml<\/dc:format>\r\n        <dc:type\r\n           rdf:resource=\"http:\/\/purl.org\/dc\/dcmitype\/StillImage\" \/>\r\n        <dc:title><\/dc:title>\r\n      <\/cc:Work>\r\n    <\/rdf:RDF>\r\n  <\/metadata>\r\n  <sodipodi:namedview\r\n     pagecolor=\"#ffffff\"\r\n     bordercolor=\"#666666\"\r\n     borderopacity=\"1\"\r\n     objecttolerance=\"10\"\r\n     gridtolerance=\"10\"\r\n     guidetolerance=\"10\"\r\n     inkscape:pageopacity=\"0\"\r\n     inkscape:pageshadow=\"2\"\r\n     inkscape:window-width=\"2560\"\r\n     inkscape:window-height=\"1377\"\r\n     id=\"namedview3720\"\r\n     showgrid=\"false\"\r\n     inkscape:pagecheckerboard=\"true\"\r\n     inkscape:zoom=\"0.1208\"\r\n     inkscape:cx=\"4782.784\"\r\n     inkscape:cy=\"2545.2589\"\r\n     inkscape:window-x=\"1592\"\r\n     inkscape:window-y=\"-8\"\r\n     inkscape:window-maximized=\"1\"\r\n     inkscape:current-layer=\"svg3718\" \/>\r\n  <defs\r\n     id=\"defs3711\">\r\n    <style\r\n       type=\"text\/css\"\r\n       id=\"style3699\"><![CDATA[\r\n    .str0 {stroke:#434242;stroke-width:100}\r\n    .fil0 {fill:url(#id0)}\r\n    .fil1 {fill:url(#id1)}\r\n   ]]><\/style>\r\n    <radialGradient\r\n       cy=\"0.47999999\"\r\n       fx=\"0.5\"\r\n       fy=\"0.47999999\"\r\n       id=\"id0\">\r\n      <stop\r\n         offset=\"0\"\r\n         stop-color=\"#0af\"\r\n         id=\"stop3701\" \/>\r\n      <stop\r\n         offset=\"1\"\r\n         stop-color=\"#008BFF\"\r\n         id=\"stop3703\" \/>\r\n    <\/radialGradient>\r\n    <radialGradient\r\n       fx=\"0.5\"\r\n       fy=\"0.5\"\r\n       id=\"id1\"\r\n       r=\"0.38\">\r\n      <stop\r\n         offset=\"0\"\r\n         stop-color=\"#fff\"\r\n         id=\"stop3706\" \/>\r\n      <stop\r\n         offset=\"1\"\r\n         stop-color=\"#FCFCFD\"\r\n         id=\"stop3708\" \/>\r\n    <\/radialGradient>\r\n    <radialGradient\r\n       cy=\"0.47999999\"\r\n       fx=\"0.5\"\r\n       fy=\"0.47999999\"\r\n       id=\"id0-1\">\r\n      <stop\r\n         offset=\"0\"\r\n         stop-color=\"#0af\"\r\n         id=\"stop3701-2\" \/>\r\n      <stop\r\n         offset=\"1\"\r\n         stop-color=\"#008BFF\"\r\n         id=\"stop3703-1\" \/>\r\n    <\/radialGradient>\r\n    <radialGradient\r\n       fx=\"0.5\"\r\n       fy=\"0.5\"\r\n       id=\"id1-5\"\r\n       r=\"0.38\">\r\n      <stop\r\n         offset=\"0\"\r\n         stop-color=\"#fff\"\r\n         id=\"stop3706-9\" \/>\r\n      <stop\r\n         offset=\"1\"\r\n         stop-color=\"#FCFCFD\"\r\n         id=\"stop3708-1\" \/>\r\n    <\/radialGradient>\r\n    <radialGradient\r\n       inkscape:collect=\"always\"\r\n       xlink:href=\"#id0\"\r\n       id=\"radialGradient3763\"\r\n       cy=\"2410\"\r\n       fx=\"2500\"\r\n       fy=\"2410\"\r\n       cx=\"2500\"\r\n       r=\"2250\"\r\n       gradientUnits=\"userSpaceOnUse\" \/>\r\n    <radialGradient\r\n       inkscape:collect=\"always\"\r\n       xlink:href=\"#id1\"\r\n       id=\"radialGradient3765\"\r\n       fx=\"2135.5652\"\r\n       fy=\"2927.0647\"\r\n       r=\"1201.2675\"\r\n       gradientTransform=\"scale(1.1708259,0.85409794)\"\r\n       cx=\"2135.5652\"\r\n       cy=\"2927.0647\"\r\n       gradientUnits=\"userSpaceOnUse\" \/>\r\n    <radialGradient\r\n       inkscape:collect=\"always\"\r\n       xlink:href=\"#id0\"\r\n       id=\"radialGradient3767\"\r\n       cy=\"2410\"\r\n       fx=\"2500\"\r\n       fy=\"2410\"\r\n       cx=\"2500\"\r\n       r=\"2250\"\r\n       gradientUnits=\"userSpaceOnUse\" \/>\r\n    <radialGradient\r\n       inkscape:collect=\"always\"\r\n       xlink:href=\"#id1\"\r\n       id=\"radialGradient3769\"\r\n       fx=\"2135.5651\"\r\n       fy=\"2927.0648\"\r\n       r=\"1201.2674\"\r\n       gradientTransform=\"scale(1.1708259,0.85409794)\"\r\n       cx=\"2135.5651\"\r\n       cy=\"2927.0648\"\r\n       gradientUnits=\"userSpaceOnUse\" \/>\r\n  <\/defs>\r\n  <g\r\n     id=\"Layer_x0020_1\"\r\n     transform=\"matrix(0.1,0,0,0.1,4516.4292,2251.3526)\">\r\n    <circle\r\n       class=\"fil0 str0\"\r\n       cx=\"2500\"\r\n       cy=\"2500\"\r\n       r=\"2200\"\r\n       id=\"circle3713\"\r\n       style=\"fill:url(#radialGradient3767);stroke:#434242;stroke-width:100\" \/>\r\n    <path\r\n       class=\"fil1 str0\"\r\n       d=\"M 801,2300 1801,1300 c 50,-50 100,-100 200,-100 100,0 200,100 200,200 v 500 c 0,50 50,100 100,100 h 1900 c 50,0 100,50 100,100 v 800 c 0,50 -50,100 -100,100 H 2301 c -50,0 -100,50 -100,100 v 500 c 0,100 -100,200 -200,200 -100,0 -150,-50 -200,-100 L 801,2700 c -135,-135 -135,-265 0,-400 z\"\r\n       id=\"path3715\"\r\n       inkscape:connector-curvature=\"0\"\r\n       style=\"fill:url(#radialGradient3769);stroke:#434242;stroke-width:100\" \/>\r\n  <\/g>\r\n  <g\r\n     transform=\"matrix(-0.1,0,0,-0.1,5520.0802,2751.3526)\"\r\n     id=\"Layer_x0020_1-2\">\r\n    <circle\r\n       class=\"fil0 str0\"\r\n       cx=\"2500\"\r\n       cy=\"2500\"\r\n       r=\"2200\"\r\n       id=\"circle3713-6\"\r\n       style=\"fill:url(#radialGradient3763);stroke:#434242;stroke-width:100\" \/>\r\n    <path\r\n       inkscape:connector-curvature=\"0\"\r\n       class=\"fil1 str0\"\r\n       d=\"M 801,2300 1801,1300 c 50,-50 100,-100 200,-100 100,0 200,100 200,200 v 500 c 0,50 50,100 100,100 h 1900 c 50,0 100,50 100,100 v 800 c 0,50 -50,100 -100,100 H 2301 c -50,0 -100,50 -100,100 v 500 c 0,100 -100,200 -200,200 -100,0 -150,-50 -200,-100 L 801,2700 c -135,-135 -135,-265 0,-400 z\"\r\n       id=\"path3715-5\"\r\n       style=\"fill:url(#radialGradient3765);stroke:#434242;stroke-width:100\" \/>\r\n  <\/g>\r\n<\/svg>"
+
+	var directionSVG = '<svg  transform="rotate(__rotang__ 32 32)" xmlns:dc="http://purl.org/dc/elements/1.1/"   xmlns:cc="http://creativecommons.org/ns#"   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"   xmlns:svg="http://www.w3.org/2000/svg"   xmlns="http://www.w3.org/2000/svg"   xmlns:xlink="http://www.w3.org/1999/xlink"   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"   viewBox="0 0 64.999993 64.999999"   version="1.1"   id="svg3718"   sodipodi:docname="left-circle-arrow-resized-icon.svg"   width="65"   height="65"   style="clip-rule:evenodd;fill-rule:evenodd;image-rendering:optimizeQuality;shape-rendering:geometricPrecision;text-rendering:geometricPrecision"   inkscape:version="0.92.2 (5c3e80d, 2017-08-06)">  <metadata     id="metadata3722">    <rdf:RDF>      <cc:Work         rdf:about="">        <dc:format>image/svg+xml</dc:format>        <dc:type           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />        <dc:title></dc:title>      </cc:Work>    </rdf:RDF>  </metadata>  <sodipodi:namedview     pagecolor="#ffffff"     bordercolor="#666666"     borderopacity="1"     objecttolerance="10"     gridtolerance="10"     guidetolerance="10"     inkscape:pageopacity="0"     inkscape:pageshadow="2"     inkscape:window-width="2560"     inkscape:window-height="1377"     id="namedview3720"     showgrid="false"     inkscape:pagecheckerboard="true"     inkscape:zoom="16"     inkscape:cx="42.049669"     inkscape:cy="32.913576"     inkscape:window-x="1592"     inkscape:window-y="-8"     inkscape:window-maximized="1"     inkscape:current-layer="svg3718"     fit-margin-top="0"     fit-margin-left="0"     fit-margin-right="0"     fit-margin-bottom="0" />  <defs     id="defs3711">    <style       type="text/css"       id="style3699"><![CDATA[    .str0 {stroke:#434242;stroke-width:100}    .fil0 {fill:url(#id0)}    .fil1 {fill:url(#id1)}   ]]></style>    <radialGradient       cy="0.47999999"       fx="0.5"       fy="0.47999999"       id="id0">      <stop         offset="0"         stop-color="#0af"         id="stop3701" />      <stop         offset="1"         stop-color="#008BFF"         id="stop3703" />    </radialGradient>    <radialGradient       fx="0.5"       fy="0.5"       id="id1"       r="0.38">      <stop         offset="0"         stop-color="#fff"         id="stop3706" />      <stop         offset="1"         stop-color="#FCFCFD"         id="stop3708" />    </radialGradient>    <radialGradient       cy="0.47999999"       fx="0.5"       fy="0.47999999"       id="id0-1">      <stop         offset="0"         stop-color="#0af"         id="stop3701-2" />      <stop         offset="1"         stop-color="#008BFF"         id="stop3703-1" />    </radialGradient>    <radialGradient       fx="0.5"       fy="0.5"       id="id1-5"       r="0.38">      <stop         offset="0"         stop-color="#fff"         id="stop3706-9" />      <stop         offset="1"         stop-color="#FCFCFD"         id="stop3708-1" />    </radialGradient>    <radialGradient       inkscape:collect="always"       xlink:href="#id0"       id="radialGradient3763"       cy="2410"       fx="2500"       fy="2410"       cx="2500"       r="2250"       gradientUnits="userSpaceOnUse" />    <radialGradient       inkscape:collect="always"       xlink:href="#id1"       id="radialGradient3765"       fx="2135.5652"       fy="2927.0647"       r="1201.2675"       gradientTransform="scale(1.1708259,0.85409794)"       cx="2135.5652"       cy="2927.0647"       gradientUnits="userSpaceOnUse" />    <radialGradient       inkscape:collect="always"       xlink:href="#id0"       id="radialGradient3767"       cy="2410"       fx="2500"       fy="2410"       cx="2500"       r="2250"       gradientUnits="userSpaceOnUse" />    <radialGradient       inkscape:collect="always"       xlink:href="#id1"       id="radialGradient3769"       fx="2135.5652"       fy="2927.0647"       r="1201.2675"       gradientTransform="scale(1.1708259,0.85409794)"       cx="2135.5652"       cy="2927.0647"       gradientUnits="userSpaceOnUse" />  </defs>  <g   style="display:__displaybck__"  id="Layer_x0020_1"     transform="matrix(0.00703125,0,0,0.00703125,-1.5078125,15.539064)">    <circle       class="fil0 str0"       cx="2500"       cy="2500"       r="2200"       id="circle3713"       style="fill:url(#radialGradient3767);stroke:#434242;stroke-width:100" />    <path       class="fil1 str0"       d="M 801,2300 1801,1300 c 50,-50 100,-100 200,-100 100,0 200,100 200,200 v 500 c 0,50 50,100 100,100 h 1900 c 50,0 100,50 100,100 v 800 c 0,50 -50,100 -100,100 H 2301 c -50,0 -100,50 -100,100 v 500 c 0,100 -100,200 -200,200 -100,0 -150,-50 -200,-100 L 801,2700 c -135,-135 -135,-265 0,-400 z"       id="path3715"       inkscape:connector-curvature="0"       style="fill:url(#radialGradient3769);stroke:#434242;stroke-width:100" />  </g>  <g  style="display:__displayfwd__"   transform="matrix(-0.00703125,0,0,-0.00703125,66.376812,50.695315)"     id="Layer_x0020_1-2">    <circle       class="fil0 str0"       cx="2500"       cy="2500"       r="2200"       id="circle3713-6"       style="fill:url(#radialGradient3763);stroke:#434242;stroke-width:100" />    <path       inkscape:connector-curvature="0"       class="fil1 str0"       d="M 801,2300 1801,1300 c 50,-50 100,-100 200,-100 100,0 200,100 200,200 v 500 c 0,50 50,100 100,100 h 1900 c 50,0 100,50 100,100 v 800 c 0,50 -50,100 -100,100 H 2301 c -50,0 -100,50 -100,100 v 500 c 0,100 -100,200 -200,200 -100,0 -150,-50 -200,-100 L 801,2700 c -135,-135 -135,-265 0,-400 z"       id="path3715-5"       style="fill:url(#radialGradient3765);stroke:#434242;stroke-width:100" />  </g></svg>';
+
+
+	// ------------------------- Routing functions -------------------
+
+	var routeLinkHashMap = new Object();
+    var legLinkHashMap = new Object();
+	var lastRouteURL = "";
+	var routeStroke = 8;
+    var routeColor = ["rgba(18, 65, 145, 0.8)", "rgba(0, 145, 255, 0.7)", "rgba(127, 201, 255, 0.6)"];
+	var address = "", firstMarker = null, lastMarker = null;
+    // instance of routing service
+    var router = platform.getRoutingService();
+    var clickCoords = null, polyline;
+    var routingGroup = new H.map.Group();
+    map.addObject(routingGroup);
+
+
+	// function to calculate route
+    function calculateRouteFromAtoB(vehicleType){
+		var routerResource =   '/2/calculateroute.json?'+'app_id=' + app_id + '&app_code=' + app_code;
+		lastRouteURL = routerResource +'&mode=fastest;'+ vehicleType +';traffic:disabled' +"&waypoint0="+waypoint_first.lat + "," + waypoint_first.lng+"&waypoint1="+waypoint_last.lat + "," + waypoint_last.lng;
+		calculateRoute(lastRouteURL);
+    }
+
+	function reCalculateRoute(){
+		calculateRoute(lastRouteURL);
+	}
+
+	/**
+	*	Calculate route
+	*/
+	function calculateRoute(url) {
+		Spinner.showSpinner();
+		$.ajax({
+			url: endpoint.value + url + '&algopts=nohlprouter&overlays='+ mapname.value,
+			dataType: "json",
+			async: true,
+			type: 'get',
+			success: function(data) {
+				Spinner.hideSpinner();
+				parseRoutingResponse(data);
+			},
+			error: function(xhr, status, e) {
+				Spinner.hideSpinner();
+				var errorResp = (xhr.responseJSON.issues[0] || {
+					"message": "unknown error occured"
+				});
+				feedbackTxt.innerHTML = "<font color=\"red\">" + errorResp.message + "</font>";
+				feedbackTxt.innerHTML += "<br/>";
+			}
+		});
+	}
+
+        /**
+         * Creates poly lines for interconnections
+         * @param strip
+         * @param num
+         * @returns {H.map.Polyline}
+         */
+        var createPolylineForIndex = function(strip, num) {
+            return new H.map.Polyline(strip, {
+                style: {
+                    lineWidth: 8,
+                    strokeColor: "rgba(70, 105, 160, 0.8)",
+                    fillColor: "rgba(120, 133, 160, 0.9)"
+                }
+            });
+        };
+
+		function clearRoute(){
+			routingGroup.removeAll();
+		}
+
+        /**
+        *  Parse the routing response
+        */
+        function parseRoutingResponse(resp) {
+			clearRoute();
+            routeLinkHashMap = new Object();
+
+            // create link objects
+            for (var r = 0; r < resp.response.route.length; r++) {
+                for(var k = 0; k<resp.response.route[r].leg.length; k++){
+                    for (var m = 0; m < resp.response.route[r].leg[k].link.length; m++) {
+                        // only add new link if it does not exist so far - so alternatives are not drawn multiple times
+                        var linkId = (resp.response.route[r].leg[k].link[m].linkId.lastIndexOf("+", 0) === 0 ? resp.response.route[r].leg[k].link[m].linkId.substring(1) : resp.response.route[r].leg[k].link[m].linkId);
+                        if (routeLinkHashMap[linkId] == null) {
+                            var strip = new H.geo.Strip(),
+                                shape = resp.response.route[r].leg[k].link[m].shape,
+                                i,
+                                l = shape.length;
+
+                            for (i = 0; i < l; i += 2) {
+                                strip.pushLatLngAlt(shape[i], shape[i + 1], 0);
+                            }
+
+                            var link = new H.map.Polyline(strip, {
+                                style: {
+                                    lineWidth: (routeStroke - (r + 1)), // alternatives get smaller line with
+                                    strokeColor: routeColor[r],
+                                    lineCap: 'butt'
+                                }
+                            });
+                            link.setArrows({
+                                color: "#F00F",
+                                width: 2,
+                                length: 3,
+                                frequency: 8
+                            });
+                            link.$linkId = resp.response.route[r].leg[k].link[m].linkId;
+
+                            //The router can send back links ids with "-" or "+" prefix: only "-" prefix is kept and stored in this HashMap, the "+" is removed
+                            routeLinkHashMap[linkId] = link;
+                            legLinkHashMap[linkId] = resp.response.route[r].leg[k].link[m];
+                            // add event listener to link
+                            link.addEventListener("mouseover", function(e) {
+                                if (currentOpenBubble)
+                                    ui.removeBubble(currentOpenBubble);
+                                var html = '<div>' +
+                                    '<p style="font-family:Arial,sans-serif; font-size:12px;">LinkId: ' + e.target.$linkId + '</p>'
+                                '</div>';
+
+                                var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+
+                                currentOpenBubble = new H.ui.InfoBubble(pos, {
+                                    content: html
+                                });
+                                ui.addBubble(currentOpenBubble);
+                            });
+
+                            //group.addObject(link);
+                        }
+                    }
+                }
+            }
+
+            /**
+            *   draw a smooth route
+            */
+            for (var r = 0; r < resp.response.route.length; r++) {
+                for(var k = 0; k<resp.response.route[r].leg.length; k++){
+                    for (var linkIdx in resp.response.route[0].leg[k].link) {
+                        var strip = new H.geo.Strip();
+                        var shape = resp.response.route[0].leg[k].link[linkIdx].shape;
+                        var l = shape.length;
+
+                        for (var i = 0; i < l; i = i + 2) {
+                            strip.pushLatLngAlt.apply(strip, [shape[i], shape[i + 1]].map(function(item) {
+                                return parseFloat(item);
+                            }));
+                        }
+                        var polyline = createPolylineForIndex(strip, linkIdx);
+                        polyline.setArrows(true);
+                        routingGroup.addObject(polyline);
+                    }
+                    var maneuvers = resp.response.route[0].leg[k].maneuver
+                    for(var i in maneuvers){
+                        var lat = maneuvers[i].position.latitude;
+                        var lon = maneuvers[i].position.longitude;
+                        var point = new H.geo.Point(parseFloat(lat), parseFloat(lon));
+                        var instr = maneuvers[i].instruction.replace(new RegExp("</span>", 'g'), "").replace(new RegExp('<span class="[a-z\-]+">', 'g'), "");
+                        var marker = new H.map.Marker(point, { icon: createIconMarker(maneuvers[i].travelTime + " seconds", instr) });
+                        routingGroup.addObject(marker);
+                    }
+                }
+            }
+            
+            
+
+
+
+            map.addObject(routingGroup);
+			map.setViewBounds(routingGroup.getBounds());
+            feedbackTxt.innerHTML = "";
+
+        }
+    
+    // add route to map
+    function addRouteShapeToMap(result){
+        try {
+            var route = result.response.route[0];
+            var strip = new H.geo.Strip(), routeShape = route.shape;
+            
+            routeShape.forEach(function(point){
+                var parts = point.split(',');
+                strip.pushLatLngAlt(parts[0], parts[1]);
+            });
+            
+            polyline = new H.map.Polyline(strip, {
+                style: {
+                    lineWidth: 4,
+                    strokeColor: 'rgba(0, 128, 255, 0.7)'
+                }
+            });
+            // Add the polyline to the map
+            routingGroup.addObject(polyline);
+            // And zoom to its bounding rectangle
+            map.setViewBounds(polyline.getBounds(), true);
+        } 
+        catch (e) {
+            console.log(e);
+        }
+        
+        
+    }
+    
+    // function creates a marker , adds to map
+    function addMarker(coordinates){
+        var marker = new H.map.Marker({
+            lat: clickCoords.lat,
+            lng: clickCoords.lng
+        });
+        routingGroup.addObject(marker);
+        return marker;
+    }
+    
+    // function removes objects from map as required
+    function removeObjects(onlyPolyline){
+        if (onlyPolyline) {
+            if (routingGroup.contains(polyline)) 
+                routingGroup.removeObject(polyline);
+            if (routingGroup.contains(lastMarker)) 
+                routingGroup.removeObject(lastMarker);
+        }
+        else {
+            routingGroup.removeAll();
+        }
+    }
+
+	// user-provided appid and appcode
+    function changeAuth() {
+        var customAppId = document.getElementById('customAppId').value;
+        var customAppCode = document.getElementById('customAppCode').value;
+        				
+        if( customAppId.length > 0 && customAppCode.length > 0 ) {
+            app_id= customAppId;
+			app_code= customAppCode;
+            console.log( 'Credentials updated to ' + app_id  );
+        }
+    }
+
+// ------------------------- Geocoding functions -------------------
+var geocoder = platform.getGeocodingService();
+
+var geocode = function(){
+	var location = document.getElementById("location").value;
+	geocoder.geocode({
+			searchText: location
+		},
+		function(result) {
+			if(result.Response.View[0].Result[0].Location != null){
+				pos = result.Response.View[0].Result[0].Location.DisplayPosition;
+				address = result.Response.View[0].Result[0].Location.Address;
+			}
+			else{
+				pos = result.Response.View[0].Result[0].Place.Locations[0].DisplayPosition;
+				address = result.Response.View[0].Result[0].Place.Locations[0].Address;
+			}
+			pointA = new H.geo.Point(pos.Latitude, pos.Longitude);
+			map.setCenter(pointA);
+			map.setZoom(17);
+		},
+		function(error) {
+			alert(error);
+		}
+	);
+};
+</script>

@@ -1,0 +1,77 @@
+<%= javascript_include_tag "fullscreen" %>
+<% content_for :title, "InfoBubble display" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Youtube Video and customized colors <br> and removed closing X</p>
+	<div>HLP Service releases which are used in this demo:</div>
+	<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;"></div>
+	<button onclick="openFullscreen();">Open Fullscreen Mode</button>
+</div>
+
+<div id="mapContainer"></div>
+
+<style type="text/css">
+	/*
+	overwrite the info bubble content css
+	background color and padding to remove "closing X" display
+	*/
+	
+	.H_ib_body {
+		background-color: rgb(18, 65, 145);
+		padding: 0 0 0 0;
+		right: -320px !important;
+	}
+	/* remove the X, which closes the InfoBubble on click */
+	.H_ib_close
+	{
+		display: none;
+	}
+	.H_ib {
+		color: #0000FF;
+	}
+</style>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2019
+	*/
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		useHTTPS: secure,
+		apikey: api_key
+	}),
+	mapContainer = document.getElementById('mapContainer'),
+	defaultLayers = platform.createDefaultLayers();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(mapContainer, defaultLayers.vector.normal.map, {
+		center: center, 
+		zoom: zoom,
+		pixelRatio: window.devicePixelRatio || 1
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+	ui.addControl('FullScreen', new H.ui.FullScreen());
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	htmlStr = '<iframe title="YouTube video player" class="youtube-player" type="text/html" ' +
+		'width="640" height="390" src="https://www.youtube.com/embed/h5CYeESsTko" ' +
+		'frameborder="0" allowFullScreen><\/iframe>';
+
+	var infoBubble = new H.ui.InfoBubble(new H.geo.Point(50.02247733016747, 8.538626708984374), { content: htmlStr });
+	ui.addBubble(infoBubble);
+</script>

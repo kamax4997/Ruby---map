@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="initial-scale=1.0, width=device-width" />
+<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css?dp-version=1549984893" />
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+<link rel="shortcut icon" type="image/x-icon" href="/assets/favicon.ico" />
+<link rel="stylesheet" media="screen" href="/assets/application.css" data-turbolinks-track="true" />
+<link rel="stylesheet" type="text/css" href="/demo/css/legend.css">
+<link rel="stylesheet" type="text/css" href="/demo/css/styles.css">
+<style type="text/css">
+	.ctrl-panel 
+	{
+		display: none;
+	}
+	footer
+	{
+		display: none;
+	}
+	#map
+	{
+		top: 80px;
+		height: 100%;
+	}
+	#feedback{
+		color : white;
+	}
+	.controls
+	{
+		z-index: 1;
+		top: 96px;
+		background-color : #435260;
+		border : 1px solid;
+		border-radius : 4px;
+		color : #57D9CF;
+		padding : 10px;
+		width : auto;
+	}
+	
+</style>
+
+</head>
+<body>
+<nav class="navbar navbar-default navbar-fixed-top">
+			<div class="container-fluid">
+				<div class="row">
+					<div class="col-xs-1">
+						<div class="navbar-header">
+							<a class="navbar-brand" href="http://tcs.ext.here.com/"><img alt="HERE logo" src="/assets/logo.svg" width="60" height="44" /></a>
+						</div>
+					</div>
+					<div class="col-xs-10">
+						<div class="header-text">Map Tiles Demo</div>
+					</div>
+				</div>
+			</div>
+		</nav>
+		<div id="content-padder"></div>
+  <div class="controls">
+	<div class="group">
+	 Zoom Level &lt;= 5 		   : Default-Map<br/>
+	 Zoom Level &gt; 5 &&  &lt;=10  : Car-Nav-Grey-Base<br/>
+	 Zoom Level &gt; 10 && &lt;=16 : Car-Nav-Grey-Map<br/>
+	 Zoom Level &gt;16 		   : Default-Grey-Map<br/>
+	</div>
+	<div id="feedback" class="group">
+	</div>
+  </div>
+  <div id="map"  ></div>
+  <!-- <div id="panel" style="position:absolute; width:15%; left:85%; height:50px; background:inherit" ></div> -->
+<script  type="text/javascript" charset="UTF-8" >
+    
+/**
+ * Moves the map to display over Berlin
+ *
+ * @param  {H.Map} map      A HERE Map instance within the application
+ */
+function moveMap(map){
+  map.setCenter({lat:59.3470057, lng:18.07826754});
+  map.setZoom(16);
+}
+
+//POI mask (https://developer.here.com/documentation/map-tile/topics/filter-pois.html)
+var POI_MASK="70000000004000001e0800000300000000000000000000000000000000000000000000000000000000070002000004";
+POI_MASK = "true";
+
+// for displaying meta info
+var container = document.getElementById('feedback');
+
+var listnerAdded = false;
+
+
+//initialize communication with the platform
+var platform = new H.service.Platform({
+  app_id: 'inCUge3uprAQEtRaruyaZ8',
+  app_code: '9Vyk_MElhgPCytA7z3iuPA',
+  useHTTPS: true
+});
+var pixelRatio = window.devicePixelRatio || 1;
+var defaultLayers = platform.createDefaultLayers({
+  tileSize: pixelRatio === 1 ? 256 : 512,
+  ppi: pixelRatio === 1 ? undefined : 320,
+  pois : POI_MASK
+});
+
+
+// initialize a map  - not specificing a location will give a whole world view.
+var map = new H.Map(document.getElementById('map'),
+  defaultLayers.normal.map, {pixelRatio: pixelRatio});
+
+// make the map interactive
+// MapEvents enables the event system
+// Behavior implements default interactions for pan/zoom (also on mobile touch environments)
+var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+
+// get the Base Map Tile Service
+basemaptileService = platform.getMapTileService({'type': 'base'});
+
+// config object for Map tile paramters
+var configObj = {} , marker;
+
+
+configObj.pois = POI_MASK;
+//configObj.filter = 1;
+
+// This is the layer with most information.
+var normalMapLayer = basemaptileService.createTileLayer("mapnopttile", "normal.day",  pixelRatio === 1 ? 256 : 512, 'png', configObj);
+map.setBaseLayer(normalMapLayer);
+
+// This is the base layer with least information
+var carNavBaseLayer = basemaptileService.createTileLayer("basetile", "carnav.day.grey",  pixelRatio === 1 ? 256 : 512, 'png', configObj);
+
+
+// This is the nomral with more information
+var carNavLayer = basemaptileService.createTileLayer("mapnopttile", "carnav.day.grey",  pixelRatio === 1 ? 256 : 512, 'png', configObj);
+
+// This is the layer with most information.
+var normalMapGreyLayer = basemaptileService.createTileLayer("mapnopttile", "normal.day.grey",  pixelRatio === 1 ? 256 : 512, 'png', configObj);
+
+// Now use the map as required...
+moveMap(map);
+
+// function captures change in map zoom level and switches the map base layer
+map.addEventListener("mapviewchangeend",function(event){
+	
+	var currentBaseLyer = map.getBaseLayer();
+	
+	var mapZoom = map.getZoom();
+    var feedback  = "Zoom Level :" +  Math.round(mapZoom) ;
+	
+    
+	if(mapZoom > 16 && currentBaseLyer !== normalMapGreyLayer){
+		map.setBaseLayer(normalMapGreyLayer);
+		addListner();
+		feedback  = feedback +  "<br/> Switching to normal.day.grey (maptile)";
+	}
+	else if( mapZoom <= 16 && mapZoom > 10 && currentBaseLyer !== carNavLayer){
+		map.setBaseLayer(carNavLayer);
+		addListner();
+		feedback  = feedback + "<br/> Switching to carnav.day.grey (maptile)";
+	}
+	else if(mapZoom <= 10  && mapZoom > 5 && currentBaseLyer !== carNavBaseLayer){
+		map.setBaseLayer(carNavBaseLayer);
+		removeListner();
+		feedback  = feedback + "<br/> Switching to carnav.day.grey(basemaptile)";
+	}
+	else if(mapZoom <= 5 && currentBaseLyer !== normalMapLayer){
+		map.setBaseLayer(normalMapLayer);
+		removeListner();
+		feedback  = feedback + "<br/> Switching to nomral.day(basemaptile)";
+	}
+	container.innerHTML = feedback;
+})
+
+/**
+* Add listner for Meta layer
+**/
+function addListner(){
+		if(!listnerAdded){
+			addMetaInfoLayer(map);
+			listnerAdded = true;
+		}
+}
+
+/**
+* Add listner for Meta layer
+**/
+function removeListner(){
+		if(listnerAdded){
+			map.removeLayer(defaultLayers.normal.metaInfo);
+			listnerAdded = false;
+		}
+}
+
+    /**
+ * Adds meta information layer to the map and makes supported geographic objects
+ * (street names, city labels, parks, transit stations etc) "interactive".
+ *
+ * @param {H.Map} map Reference to initialized map object
+ */
+function addMetaInfoLayer(map) {
+  // Subscribe to the metaInfo objects' pointermove event. The event bubbles up to
+  // the TileProvider of the metaInfo layer.
+  var tileProvider = defaultLayers.normal.metaInfo.getProvider();
+  //tileProvider.addEventListener('tap', updateMapCursor);
+
+  // Change cursor back when not needed
+  map.addEventListener('tap', updateMapCursor);
+
+  // Add a metaInfo layer to the map
+  map.addLayer(defaultLayers.normal.metaInfo);
+}
+
+function showMetaInfo(e) {
+  
+  
+
+     // Get the spatial object on which the user clicked:
+	 var spatial = e.target,
+	 // Get the meta data for the object:
+	 metadata = spatial.getData();
+	 //console.log(metadata);
+	 // Translate the screen coordinates of the click to lat/lon:
+	 coord = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+    // Display an info bubble with the name of the object at the location of the click:
+	 if (metadata.category === 'POIs') {
+		
+	    marker = new H.map.DomMarker(
+		coord,
+		{
+			icon: createSvgMarkerIcon("!", metadata.name, "#FF0000", "#FFF")
+		});
+		map.addObject(marker);
+		
+	 }
+}
+
+/**
+ * Sets cursor to pointer, when hovering over meta objects
+ * @this {H.Map}
+ * @param {H.mapevents.Event} e
+ */
+function updateMapCursor(e) {
+     // remove marker if added
+	if(marker !== undefined){
+	  map.removeObject(marker);
+	  marker = undefined;
+    } 
+
+  // Change cursor appearance when hovering over geographic objects
+  map.getElement().style.cursor = (e.target === map) ? '' : 'pointer';
+  if (e.target !== map){
+    showMetaInfo(e);
+  }
+}
+
+	//draw marker 1 (SVG marker + text)
+var createSvgMarkerIcon = function (text, line1, mainColor, accentColor) {
+
+		var svg =
+		'<svg width="150" height="40" xmlns="http://www.w3.org/2000/svg">' +
+			'<g>' +
+			'<rect id="label-box" ry="3" rx="3" stroke="#000000" height="20" width="130" x="5" y="5"  fill="#ffffff"/>' +
+			'<text width="130" id="label-text"  class="wrap" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="10" font-weight="bold" x="15" y="20"  stroke-width="0" fill="#000000">__line1__</text>' +
+			'</g>' +
+			'</svg>',
+
+		svg = svg.replace(/__line1__/g, line1);
+		svg = svg.replace(/__TEXTCONTENT__/g, text)
+		svg = svg.replace(/__TEXT__/g, text)
+		svg = svg.replace(/__ACCENTCOLOR__/g, accentColor)
+		svg = svg.replace(/__MAINCOLOR__/g, mainColor);
+
+		return new H.map.DomIcon(svg);
+
+	};
+
+  </script>
+</body>
+</html>

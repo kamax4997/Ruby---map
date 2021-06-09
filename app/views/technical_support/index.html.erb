@@ -1,0 +1,31 @@
+<% content_for :title, "Technical Support" %>
+
+ <script language="javascript" type="text/javascript">
+    function pageLoad() {
+      var ticketNumber = getQueryParamValue("TicketNumber", window.location);
+      var organizationID = getQueryParamValue("OrganizationID", window.location);
+      var url = "https://portal.TeamSupport.com?OrganizationID=869700";
+
+      if (ticketNumber != null)
+      {
+        var url = "https://portal.TeamSupport.com/protected/ticketdetail.aspx?TicketNumber=" + ticketNumber + "&OrganizationID=" + organizationID;
+      }
+      var frame = document.getElementById("frmPortal");
+      frame.setAttribute('src', url);
+
+    }
+
+    function getQueryParamValue(name, url) {
+      params = url.search.substring(1);
+      name = name.toLowerCase();	
+      param = params.split("&");
+      for (i = 0; i < param.length; i++) {
+        value = param[i].split("=");
+        if (value[0].toLowerCase() == name) {
+          return this.unescape(value[1]);
+        }
+      }
+    }   
+  </script>
+
+<iframe id="frmPortal" src="https://portal.teamsupport.com/HERE" frameborder="0" style="border-top-width: 32px; overflow: hidden; height: 100%; width: 100%; position: absolute; background-color: #fff" height="100%" width="100%" ></iframe>

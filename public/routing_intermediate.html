@@ -1,0 +1,321 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="initial-scale=1.0, width=device-width" />
+  <link rel="stylesheet" type="text/css"
+    href="https://js.api.here.com/v3/3.0/mapsjs-ui.css" />
+  <script type="text/javascript" charset="UTF-8"
+    src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+  <script type="text/javascript" charset="UTF-8"
+    src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+  <script type="text/javascript" charset="UTF-8"
+    src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+  <script type="text/javascript" charset="UTF-8"
+    src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+	 <script type="text/javascript" charset="UTF-8"
+    src="bdccGeo.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.2/jquery.min.js"></script>  
+
+</head>
+<body>
+
+  <div id="map" style="position:absolute; width:70%; height:100%; background:grey" ></div>
+  <div id="panel" style="position:absolute; width:30%; left:71%; height:100%; background:inherit" >
+	<table id="results" border="1px">
+	<tr>
+	<td> Stop </td>
+	<td> Distance/Delta (meters)</td>
+	<td> Time/Delta (seconds)</td>
+	</tr>
+	</table>
+  </div>
+  
+
+  <script  type="text/javascript" charset="UTF-8" >
+ var stringColor= 'rgba(0, 0, 255, 0.5)';
+ var startPOint = '40.7127999,-74.0059001';
+ var destination = '40.0955164,-77.8177178';
+ var distStrtDestn = 0;
+ var timeStrtDestn = 0;
+ var maneuverStrip;
+ 
+var pois=['40.7316,-74.03944',
+'40.73187,-74.03936',
+'40.73155,-74.03983',
+'40.73015,-74.04132',
+'40.73027,-74.04214',
+'40.73167,-74.04117',
+'40.73181,-74.04107',
+'40.73202,-74.04104',
+'40.73173,-74.04135',
+'40.73179,-74.04191',
+'40.73042,-74.04429',
+'40.7319,-74.04309',
+'40.73202,-74.0443',
+'40.72488,-74.0512',
+'40.7172,-74.05495',
+'40.7102779,-74.2320032',
+'40.70971,-74.25963',
+'40.71434,-74.26993',
+'40.71124,-74.31357',
+'40.63489,-74.91206',
+'40.63245,-74.91758',
+'40.63265,-74.92014',
+'40.63617,-74.96755',
+'40.63597,-74.96995',
+'40.64402,-74.99547',
+'40.64534,-74.99813',
+'40.65912,-75.07221',
+'40.65905,-75.07252',
+'40.65878,-75.07361',
+'40.67266,-75.21486',
+'40.66872,-75.21976',
+'40.59804,-75.34053',
+'40.58366,-75.38744',
+'40.58183,-75.38802',
+'40.56204,-75.47696',
+'40.58095,-75.70772',
+'40.58167,-75.70784',
+'40.51822,-76.11019',
+'40.51762,-76.11048',
+'40.50074,-76.18617'];
+
+var index = 0;
+var routePolyline=[],polyline;
+var marker ;
+
+
+ /**
+ * Calculate route
+ */
+function calculateRouteWithStop () {
+   var router = platform.getRoutingService();
+   var routeRequestParams = {
+	  'waypoint0' : startPOint,
+      'mode': 'fastest;car;traffic:enabled',
+	   representation: 'display',
+	 
+	   routeattributes : 'all',
+	  linkattributes : 'all',
+	  legattributes : 'all'
+   };
+   
+    if(index < pois.length){
+		var latLong=pois[index];
+		var coordinates=bdccGeoDistanceToPolyMtrs(maneuverStrip, new H.geo.Point(latLong.split(",")[0],latLong.split(",")[1]));
+		console.log(coordinates);
+		routeRequestParams['waypoint1'] = "geo!passThrough!"+coordinates[0];	
+		routeRequestParams['waypoint2'] = "geo!stopOver!"+latLong ;
+		routeRequestParams['waypoint3'] = "geo!passThrough!"+coordinates[1];	
+		routeRequestParams['waypoint4'] = destination;
+		router.calculateRoute(
+				routeRequestParams,
+				onSuccess,
+				onError
+		);
+   }
+}
+/**
+ * This function will be called once the Routing REST API provides a response
+ */
+function onSuccess(result) {
+	if(result!=null && result.response!=null && result.response.route!=null){
+	 var distance = result.response.route[0].summary.distance;
+	 var time = result.response.route[0].summary.baseTime;
+	 addDiv(index, distance - distStrtDestn,time- timeStrtDestn );
+	
+	 var routeShape = result.response.route[0].shape;
+	 var strip = new H.geo.Strip();
+	 routeShape.forEach(function(point) {
+		var parts = point.split(',');
+		var coord=new H.geo.Point(parseFloat(parts[0]) , parseFloat(parts[1]) );
+		strip.pushLatLngAlt(parts[0], parts[1]);
+	 });
+	 routePolyline[index]=strip;
+	 
+	 
+	}
+	 index++;
+	calculateRouteWithStop(); 
+}
+
+function onSuccessStartDestn(result) {
+	if(result!=null && result.response!=null && result.response.route!=null){
+	  
+	  var startMarker = new H.map.Marker({lat:startPOint.split(",")[0] , lng: startPOint.split(",")[1] });
+	  map.addObject(startMarker);
+	  
+	  var destinationMarker = new H.map.Marker({lat:destination.split(",")[0] , lng: destination.split(",")[1] });
+	  map.addObject(destinationMarker);
+	  
+	  distStrtDestn = result.response.route[0].summary.distance;
+	  timeStrtDestn = result.response.route[0].summary.baseTime;
+	   var routeShape = result.response.route[0].shape;
+	   var maneuvers = result.response.route[0].leg[0].maneuver;
+	  var strip = new H.geo.Strip();
+	 routeShape.forEach(function(point) {
+		var parts = point.split(',');
+		//var coord=new H.geo.Point(parseFloat(parts[0]) , parseFloat(parts[1]) );
+		strip.pushLatLngAlt(parts[0], parts[1]);
+	 });
+	 routePolyline['base']=strip;
+	 showRoute('base');
+	
+	  maneuverStrip = new H.geo.Strip();
+	 maneuvers.forEach(function(maneuver) {
+	 // var coord=new H.geo.Point(maneuver.position.latitude , maneuver.position.longitude );
+		maneuverStrip.pushLatLngAlt(maneuver.position.latitude, maneuver.position.longitude);
+	 });
+	  
+	  addDiv('base', distStrtDestn,timeStrtDestn );
+	  calculateRouteWithStop();
+	}	
+}
+
+function showRoute(index){
+   if(polyline){
+    map.removeObject(polyline);
+	polyline=null;
+   }
+   
+   if(marker){
+    map.removeObject(marker);
+	marker=null;
+   }
+   
+    var strip  = routePolyline[index];
+   
+   if(index!='base'){
+	 var markerCord = pois[index];
+     marker = new H.map.Marker({lat:markerCord.split(",")[0] , lng: markerCord.split(",")[1] });
+	 map.addObject(marker);
+	 stringColor =  'rgba(255, 0, 0, 0.5)';
+	 polyline = new H.map.Polyline(strip,{ style:{ lineWidth: 8, strokeColor:stringColor, lineDash: [7,14]}} );
+	 polyline.setZIndex(900);
+	  // Add the polyline to the map
+	 map.addObject(polyline);
+	  // And zoom to its bounding rectangle
+	 map.setViewBounds(polyline.getBounds(), true);
+   }else{
+		stringColor= 'rgba(0, 0, 255, 0.5)';		
+		var basePolyline = new H.map.Polyline(strip,{ style:{ lineWidth: 8, strokeColor:stringColor}} );
+		  // Add the polyline to the map
+		 basePolyline.setZIndex(1000);
+		 map.addObject(basePolyline);
+		  // And zoom to its bounding rectangle
+		 map.setViewBounds(basePolyline.getBounds(), true);
+		 
+	
+   }
+   
+   
+   
+  
+}
+
+function addDiv(waypoint,distance,time){
+	var row = document.createElement("tr");
+	var col = document.createElement("td");
+	if(waypoint!="base")
+	col.innerHTML = '<a href="#" onclick="showRoute(\''+waypoint+'\')">'+pois[waypoint]+'</a>';
+	else
+		col.innerHTML = '<a href="#" onclick="showRoute(\''+waypoint+'\')">'+waypoint+'</a>';
+	var col1 = document.createElement("td");
+	col1.innerHTML = distance;
+	
+	var col2 = document.createElement("td");
+	col2.innerHTML = time;
+	
+	row.appendChild(col);
+	row.appendChild(col1);
+	row.appendChild(col2);
+	
+	var table=document.getElementById("results");
+	table.appendChild(row);
+	
+}
+
+
+function calculateRouteStrtDetn () {
+  
+   var router = platform.getRoutingService();
+   var routeRequestParams = {
+	  'waypoint0' : startPOint,
+      'mode': 'fastest;car;traffic:disabled',
+	  'waypoint1' : destination,
+	   routeattributes : 'all',
+	  linkattributes : 'all',
+	  legattributes : 'all'
+   };
+   router.calculateRoute(
+			routeRequestParams,
+			onSuccessStartDestn,
+			onError
+	);
+   
+   
+   
+   
+}
+
+
+/**
+ * This function will be called if a communication error occurs during the JSON-P request
+ * @param  {Object} error  The error message received.
+ */
+function onError(error) {
+  alert('Ooops!');
+}
+
+
+
+
+/**
+ * Boilerplate map initialization code starts below:
+ */
+
+// set up containers for the map  + panel
+var mapContainer = document.getElementById('map'),
+  routeInstructionsContainer = document.getElementById('panel');
+
+//Step 1: initialize communication with the platform
+var platform = new H.service.Platform({
+  app_id: 'inCUge3uprAQEtRaruyaZ8',
+  app_code: '9Vyk_MElhgPCytA7z3iuPA',
+  useCIT: true,
+  useHTTPS: true
+});
+var defaultLayers = platform.createDefaultLayers();
+
+//Step 2: initialize a map - this map is centered over Berlin
+var map = new H.Map(mapContainer,
+  defaultLayers.normal.map,{
+  center: {lat:39.2328, lng:9.01168},
+});
+
+//Step 3: make the map interactive
+// MapEvents enables the event system
+// Behavior implements default interactions for pan/zoom (also on mobile touch environments)
+var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+	// Create the default UI components
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	// adding zoom rectangle control
+	var rectControl = new H.ui.ZoomRectangle();
+	ui.addControl("rectControl", rectControl);
+	
+
+	
+	// adding distance measure(Ruler) Control
+	var distanceMeasurement = new H.ui.DistanceMeasurement();
+	ui.addControl("distanceMeasurement", distanceMeasurement);
+
+	calculateRouteStrtDetn();
+	
+</script>
+</body>
+</html> 
+
+

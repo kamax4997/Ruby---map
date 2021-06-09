@@ -1,0 +1,6 @@
+{
+  "manifest_version": 2,
+  "name": "Custom Routing Basic Demo",
+  "permissions": ["clipboard-write"],
+  "version": "0.1"
+}

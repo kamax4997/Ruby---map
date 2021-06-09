@@ -1,0 +1,446 @@
+<%= javascript_include_tag "jszip.js" %>
+<%= javascript_include_tag "jszip-utils.js" %>
+<% content_for :title, "Geocoding Drag 'n Drop" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p><H5>Drag and Drop a file to get it geocoded in a webworker</H5></p>
+	<hr>
+	<p><H5>Two different Modes: </H5></p>
+	<p><H5><font color="red">#1</font> less than <span id="thresholdNumber1">500</span> Addresses will be processed directly</H5></p>
+	<p><H5><font color="red">#2</font> more than <span id="thresholdNumber2">500</span> Addresses will schedule a Batch Processing</H5></p>
+	<hr>
+	<div class="form-group">
+		<table id ="credentials"  border="0">
+			<tr>
+				<td>Api Key</td><td><input type="text" id="apiKeyExt" class="form-control" size = "50" value="3lKmytJ9qwM22dCKUNNbu2C6zab5zWXYPy5lGKGdYM4&mv" 
+					onblur="if (this.value == '') {this.value = 'API_KEY';} else {init();}"
+					onfocus="if (this.value == 'API_KEY') {this.value = '';}">
+				</td>
+			</tr>
+			<tr>
+				<td>EMail</td><td>	<input type="text" id="mailToExt" class="form-control" size = "50" value="ds"
+					onblur="if (this.value == '') {this.value = 'EMAIL';} else {init();}"
+					onfocus="if (this.value == 'EMAIL') {this.value = '';}">
+				</td>
+			</tr>
+			<tr>
+				<td>Threshold</td><td>	<input type="number" min="1" max="2000" id="threshold" class="form-control" size = "50" value="500"
+					onblur="if (this.value == '') {this.value = '500';} else {init();}"
+					onfocus="if (this.value == '500') {this.value = '500';}">
+				</td>
+			</tr>
+		</table>
+	</div>
+	<hr>
+	<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+		author domschuette
+		(C) HERE 2016
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		useCIT: true,
+		useHTTPS: secure,
+		apikey: api_key
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	icon,
+	no = 1,
+	start, 
+	end,
+	count, 
+	currentCount = 0,
+	apikey = "",
+	mailTo = "",
+	threshold = "",
+	worker,
+	currentBubble,
+	group = new H.map.Group();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.vector.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	map.addObject(group);
+	
+	var n = document.getElementById('threshold');
+	
+	n.addEventListener("input", function(e) {
+		document.getElementById('thresholdNumber1').innerHTML = n.value;
+		document.getElementById('thresholdNumber2').innerHTML = n.value;
+	}, false);
+
+	n.addEventListener("keyup", function(e) {
+		document.getElementById('thresholdNumber1').innerHTML = n.value;
+		document.getElementById('thresholdNumber2').innerHTML = n.value;
+	}, false);
+
+	n.addEventListener("change", function(e) {
+		document.getElementById('thresholdNumber1').innerHTML = n.value;
+		document.getElementById('thresholdNumber2').innerHTML = n.value;
+	}, false);
+	
+	init();
+	
+	function init()
+	{
+		apikey = document.getElementById('apiKeyExt').value;
+		mailTo = document.getElementById('mailToExt').value;
+		threshold = document.getElementById('threshold').value;
+
+		if(apikey == 'API_KEY' || mailTo == 'EMAIL')
+		{
+			return;
+		}
+		
+		var file_drop = document.getElementById('mapContainer');
+		
+		file_drop.addEventListener(
+			'dragover',
+			function handleDragOver(evt) 
+			{
+				evt.stopPropagation();
+				evt.preventDefault();
+				evt.dataTransfer.dropEffect = 'copy';
+			},
+		false
+		);
+		
+		file_drop.addEventListener(
+			'drop',
+			function(evt) {
+				evt.stopPropagation();
+				evt.preventDefault();
+				var files = evt.dataTransfer.files;
+				var file = files[0];
+				var r = new FileReader();
+				r.onload = function(e) { 
+					var contents = e.target.result;             
+					var ct = r.result;
+					parse(ct);
+				}
+				r.readAsText(file);
+			},
+			false
+		);
+	}
+	
+	function showStatus(status)
+	{
+		var points = "";
+		if(document.getElementById("feedbackTxt").innerHTML.indexOf(status) != -1)
+		{
+			no++;
+			if(no > 4)
+				no = 0;
+			for(var i = 0; i < no; i++)
+				points += ".";
+		}
+		
+		var inner = "<H5><b>" + status + points + "</b></H4>";
+		document.getElementById("feedbackTxt").innerHTML = inner;
+	}
+	
+	function parse(input)
+	{
+		group.removeAll();
+		start = performance.now();
+		var addresses = input.split(/\n/);
+		worker = new Worker('/assets/geocoder_worker.js');
+		worker.addEventListener('message', receiveMessage);
+
+		// set the init parameters
+		var params = new Object();
+		params.apikey = apikey;
+		params.mailTo = mailTo;
+		params.threshold = threshold;
+		worker.postMessage(params);
+		
+		// send the addresses
+		worker.postMessage(addresses);
+	}
+	
+	function showCountMessage(msg)
+	{
+		document.getElementById("feedbackTxt").innerHTML = msg;
+	}
+	
+	function receiveMessage(e) {
+		if(e !== null && e.data !== null && e.data.msg !== null && e.data.msg !== undefined && e.data.count !== undefined)
+		{
+			showCountMessage(e.data.msg);
+			count = e.data.count;
+		}
+		else if(e.data !== null && e.data.status == null)
+		{
+			geocallback(e.data);
+		}
+		else if(e.data.status && e.data.zipURL == null)
+		{
+			showStatus("Status:" + e.data.status);
+		}
+		else if(e.data.status && e.data.zipURL)
+		{
+			showStatus("Status:" + e.data.status + " start download");
+
+			JSZipUtils.getBinaryContent(e.data.zipURL, function(err, data) {
+				if(err) {
+					showStatus("Status:" + err);
+					return;
+				}
+
+				try 
+				{
+					JSZip.loadAsync(data)
+					.then(function(zip) {
+						for (var i = 0, keys = Object.keys(zip.files), ii = keys.length; i < ii; i++) 
+						{
+							if(keys[i].indexOf("out") != -1)
+							{
+								return zip.file(keys[i]).async("arraybuffer", function (meta) {
+									showStatus("Status:" + "Decompressing " + meta.percent.toFixed(2) + " %");
+								});
+							}
+						}
+					})
+					.then(function success(arraybuffer) {
+						
+						var dataView = new DataView(arraybuffer);
+						var decoder = new TextDecoder('utf-8');
+						var decodedString = decoder.decode(dataView);
+						
+						parseBatchResponse(decodedString);
+						}, function error(e) {
+							showStatus("Status:" + e);
+						});
+				} catch(e) {
+					showStatus("Status:" + e);
+				}
+			});
+		}
+	}
+	
+	function showElapsedTime(t, c, fromBatch)
+	{
+		var time = getDuration(t),
+			str; 
+		if(fromBatch)
+			str = "<font color='red'>#2</font>-Batch: Processed <" + c + "> of <" + count +"> addresses in " + time +"";
+		else
+			str = "<font color='red'>#1</font>-Direct: Processed <" + c + "> of <" + count +"> addresses in " + time +"";
+		document.getElementById("feedbackTxt").innerHTML = "<H5><b>" + str + "</H4></b>";
+		
+		worker.terminate();
+	}
+	
+	var parseBatchResponse = function(response)
+	{
+		showStatus("Status:" + "start parsing");
+		end = performance.now();
+		
+		var allLines = response.split(/\n/);
+		if(allLines[allLines.length -1] == "")
+			allLines.splice(-1, 1);
+		
+		// remove all sequences bigger one, we only want to see one record
+		var cleanLines = new Array();
+		for(var i = 0; i < allLines.length -1; i++)
+		{
+			var curLine = allLines[i].split("|");
+			if(curLine[1] == "1")
+				cleanLines.push(allLines[i]);
+		}
+		
+		/* for displaying large responses
+		var newWindow = window.open("");
+		var body = newWindow.document.body;
+		var text = "innerText" in body ? "innerText" : "textContent";
+		body[text] = cleanLines;
+		*/
+		
+		showElapsedTime(end - start, cleanLines.length - 1, true);
+		
+		for(var i = 0; i < cleanLines.length; i++)
+		{
+			var curLine = cleanLines[i];
+			var s = curLine.split("|");
+
+			var lat, lng;
+			lat = s[3];
+			lng = s[4];
+			
+			var html = ""; 
+			
+			for(var is = 5; is < s.length; is++) 
+			{ 
+				html += s[is] + "</br>"; 
+			} 
+			
+			addMarker(lat, lng, html);
+		}
+		map.setViewBounds(group.getBounds());
+	}
+	
+	var geocallback = function(response)
+	{
+		end = performance.now();
+		currentCount++;
+		if(count == currentCount)
+		{
+			showElapsedTime((end - start), count, false);
+			map.setViewBounds(group.getBounds());
+		}
+		
+		var lat, 
+			lng;
+		
+		if(response && response.Response && response.Response.View[0] && response.Response.View[0].Result[0] && response.Response.View[0].Result[0].Place && response.Response.View[0].Result[0].Place.Locations[0])
+		{
+			lat = response.Response.View[0].Result[0].Place.Locations[0].DisplayPosition.Latitude;
+			lng = response.Response.View[0].Result[0].Place.Locations[0].DisplayPosition.Longitude;
+		}
+		else if(response && response.Response && response.Response.View[0] && response.Response.View[0].Result[0] && response.Response.View[0].Result[0].Location && response.Response.View[0].Result[0].Location.DisplayPosition)
+		{
+			lat = response.Response.View[0].Result[0].Location.DisplayPosition.Latitude;
+			lng = response.Response.View[0].Result[0].Location.DisplayPosition.Longitude;
+		}
+	
+		var address; 
+		if(response && response.Response && response.Response.View[0] && response.Response.View[0].Result[0] && response.Response.View[0].Result[0].Location)
+		{
+			address = response.Response.View[0].Result[0].Location.Address;
+		}
+		else if(response && response.Response && response.Response.View[0] && response.Response.View[0].Result[0] && response.Response.View[0].Result[0].Place)
+		{
+			address = response.Response.View[0].Result[0].Place.Locations[0].Address;
+		}
+		
+		if(address)
+		{
+		
+			var html = "";
+			if(address.Label)
+				html += address.Label + "</br>";
+			if(address.HouseNumber)
+				html += address.HouseNumber + "</br>";
+			if(address.Street)
+				html += address.Street + "</br>";
+			if(address.PostalCode)
+				html += address.PostalCode + "</br>";
+			if(address.City)
+				html += address.City + "</br>";
+			if(address.County)
+				html += address.County + "</br>";
+			if(address.State)
+				html += address.State + "</br>";
+			if(address.Country)
+				html += address.Country + "</br>";
+			addMarker(lat,lng, html);
+		}
+	}
+	
+	function addMarker(lat, lng, html)
+	{
+		if(lat && lng)
+		{
+			if(icon == null)
+				icon = new H.map.Icon(svg);
+			
+			var m = new H.map.Marker({
+				lat: lat,
+				lng: lng
+			});
+			
+			m.$html = html;
+			
+			m.addEventListener("pointerdown", function(e)
+			{
+				if(currentBubble)
+					ui.removeBubble(currentBubble);
+				
+				var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+
+				currentBubble = new H.ui.InfoBubble(pos, { content: "<h5>" + e.target.$html + "</h5>" });
+				ui.addBubble(currentBubble);
+			});
+			
+			group.addObject(m);
+		}
+	}
+	
+	var getDuration = function(ms){
+		var hours, minutes, seconds, x;
+		x = ms / 1000;
+		seconds = Math.floor(x % 60);
+		x /= 60;
+		minutes = Math.floor(x % 60);
+		x /= 60;
+		hours = Math.floor(x % 24);
+
+		if(hours == 0 && minutes == 0 && seconds == 0)
+			return ms.toFixed(2) + " ms";
+		else if(hours == 0 && minutes == 0)
+			return seconds + " sec";
+		else if(hours == 0)  
+			return minutes+":"+seconds;
+		else    
+			return hours+":"+minutes+":"+seconds;
+	}
+
+	
+	var svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" width="40px" height="60px" viewBox="0.644 4.83 40 60" style="enable-background:new 0.644 4.83 40 60;" xml:space="preserve">' +
+			'<g>' + 
+			'<path style="fill:none;" d="M3.088,10.069v26.352c0,2.838,1.53,4.672,4.369,4.672h18.868L22.5,52.426c0.938,0.318,1.781,0.844,2.467,1.528l12.854-12.861V5.852H7.457C4.619,5.852,3.088,7.233,3.088,10.069z" />' +
+			'<path style="fill:#FFFFFF;" d="M21.174,53.161c-0.231-0.03-0.468-0.052-0.708-0.052c-2.949,0-5.349,2.398-5.349,5.349c0,2.947,2.4,5.348,5.349,5.348s5.349-2.4,5.349-5.348c0-1.106-0.339-2.137-0.916-2.992" />' +
+			'<path style="fill:#FFFFFF;" d="M20.466,58.458l3.779-3.782c-0.576-0.574-1.284-1.016-2.071-1.281L20.466,58.458z" />' +
+			'<path style="fill:#A6B0BB;" d="M22.174,53.395c0.787,0.267,1.495,0.707,2.071,1.281l0.722-0.722c-0.686-0.685-1.528-1.21-2.467-1.528L22.174,53.395z" />' +
+			'<path style="fill:#A6B0BB;" d="M24.898,55.467c0.579,0.854,0.916,1.885,0.916,2.991c0,2.948-2.399,5.349-5.349,5.349s-5.349-2.4-5.349-5.349c0-2.949,2.4-5.348,5.349-5.348c0.24,0,0.477,0.021,0.708,0.052l0.332-0.981c-0.34-0.055-0.686-0.092-1.04-0.092c-3.513,0-6.371,2.857-6.371,6.37s2.857,6.37,6.371,6.37c3.513,0,6.371-2.857,6.371-6.37c0-1.389-0.452-2.671-1.209-3.72L24.898,55.467z" />' +
+			'<path style="fill:#A6B0BB;" d="M24.898,55.467l0.729-0.729l12.917-12.924l0.3-0.3v-0.422V5.852V4.831h-1.022H7.457c-3.477-0.001-5.39,1.86-5.39,5.238v26.352c0,3.513,2.065,5.694,5.39,5.694h17.445l-3.396,10.065l-0.332,0.981 M37.821,41.093L24.967,53.954l-0.722,0.722l-3.779,3.782l1.708-5.063l0.326-0.969l3.824-11.333H7.457c-2.838,0-4.369-1.835-4.369-4.672V10.069c0-2.836,1.53-4.218,4.369-4.218h30.365V41.093z" />' +
+			'</g>' +
+			'<circle style="fill:#FFFFFF;" cx="20.465" cy="58.458" r="5.348" />' +
+			'<g>' +
+			'<g>' +
+			'<polygon style="fill:#237DA0;" points="26.324,41.093 24.746,45.715 36.41,42.668 37.821,41.093" />' +
+			'<path style="fill:#45A3DB;" d="M37.821,41.093V5.852H7.457c-2.838,0-4.369,1.382-4.369,4.219v26.352c0,2.838,1.53,4.673,4.369,4.673h30.365V41.093z" />' +
+			'</g>' +
+			'</g>' +
+			'<g>' +
+			'<path style="fill:none;" d="M3.098,10.07v26.349c0,2.839,1.53,4.674,4.368,4.674h18.868l-3.823,11.333c0.938,0.318,1.781,0.843,2.468,1.527l12.854-12.86V5.852H7.466C4.629,5.852,3.098,7.232,3.098,10.07z" />' +
+			'<path style="fill:#FFFFFF;" d="M21.185,53.161c-0.231-0.032-0.468-0.054-0.708-0.054c-2.949,0-5.35,2.401-5.35,5.351c0,2.948,2.401,5.347,5.35,5.347c2.948,0,5.349-2.398,5.349-5.347c0-1.108-0.338-2.138-0.915-2.991" />' +
+			'<path style="fill:#FFFFFF;" d="M20.477,58.458l3.778-3.782c-0.574-0.575-1.284-1.016-2.07-1.281L20.477,58.458z" />' +
+			'<path style="fill:#A6B0BB;" d="M22.185,53.395c0.786,0.267,1.496,0.706,2.07,1.281l0.724-0.723c-0.687-0.685-1.53-1.209-2.468-1.527L22.185,53.395z" />' +
+			'<path style="fill:#A6B0BB;" d="M24.91,55.469c0.577,0.853,0.914,1.881,0.914,2.989c0,2.948-2.4,5.349-5.349,5.349c-2.949,0-5.35-2.4-5.35-5.349c0-2.947,2.401-5.348,5.35-5.348c0.24,0,0.476,0.019,0.709,0.053l0.33-0.981c-0.339-0.057-0.684-0.094-1.038-0.094c-3.514,0-6.371,2.859-6.371,6.371c0,3.514,2.857,6.371,6.371,6.371c3.513,0,6.37-2.857,6.37-6.371c0-1.389-0.452-2.671-1.209-3.72L24.91,55.469z" />' +
+			'<path style="fill:#A6B0BB;" d="M24.91,55.469l0.728-0.73l12.916-12.924l0.301-0.3v-0.422V5.852V4.83h-1.021H7.466c-3.474,0-5.389,1.861-5.389,5.24v26.349c0,3.515,2.065,5.696,5.389,5.696h17.445l-3.396,10.067l-0.33,0.981 M37.832,41.093l-12.854,12.86l-0.724,0.723l-3.779,3.782l1.709-5.063l0.326-0.969l3.823-11.333H7.466c-2.837,0-4.368-1.835-4.368-4.674V10.07c0-2.838,1.531-4.219,4.368-4.219h30.366V41.093L37.832,41.093z" />' +
+			'</g>' +
+			'<circle style="fill:#FFFFFF;" cx="20.477" cy="58.294" r="5.348" />' +
+			'<polygon style="fill:#45A3DB;" points="20.466,58.458 36.22,42.542 24.746,45.715 " />' +
+			'</svg>';
+	
+</script>
+

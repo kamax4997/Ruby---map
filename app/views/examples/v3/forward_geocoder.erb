@@ -1,0 +1,416 @@
+<% content_for :title, "Forward Geocoder" %>
+
+ <%= stylesheet_link_tag "forward-geocoder-style" %>
+	<div id="appContainer">
+		<div id="wrapper">
+
+			<div id="left-col">
+				<div class="info-box">
+					<div class="form-horizontal">
+						<div class="form-group">
+						<h4>Geocoder Request</h4>
+						</div>
+
+						<div class="form-group">
+                			<div class="col-xs-5"><p class="form-control-static">Query Type</p></div>
+							<div class="col-xs-7">
+								<select name="queryType" id="fid_queryType" size="1" class="form-control">
+									<option value="freeformAddressInput" selected="selected"> Freeform Address Input</option>
+									<option value="qualifiedAddressInput"> Qualified Address Input</option>
+								</select>
+							</div>
+						</div>
+
+						<hr>
+
+						<!-- Parameter input -->
+			            <div class="form-group">   
+			                <div class="col-md-12">
+		                		<div id="Geocode">
+		                			<div class="form-group">
+			                			<div class="col-xs-5"><p class="form-control-static">Seach Text</p></div>
+										<div class="col-xs-7"><textarea type="text" class="form-control" id="searchTextInput" onkeyup="autocompleteSuggestion($(this).val())"></textarea>
+											<div id="suggestionDiv" style="display: block;position: absolute;background-color: #ffffff;font-size: 12px;border-style: solid;border-width: 1px;z-index:9999 "></div>
+											<!-- style="display: block;top: 118.004px;left: 105.008px;position: absolute;background-color: #ecf1f3;font-size: 13px;border-style: solid;border-width: 1px;" -->
+										</div>
+									</div>
+		                			<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">Country</p></div>
+										<div class="col-xs-7"><input type="text" class="form-control" id="countryInput"></div>
+									</div>
+
+
+									<div id="qualifiedAddressInput" style="display: none;">
+										<div class="form-group">
+											<div class="col-xs-5"><p class="form-control-static">Country Focus</p></div>
+											<div class="col-xs-7"><input type="text" class="form-control" id="countryFocusInput"></div>
+										</div>
+										<div class="form-group">
+											<div class="col-xs-5"><p class="form-control-static">State</p></div>
+											<div class="col-xs-7"><input type="text" class="form-control" id="stateInput"></div>
+										</div>
+										<div class="form-group">
+											<div class="col-xs-5"><p class="form-control-static">County</p></div>
+											<div class="col-xs-7"><input type="text" class="form-control" id="countyInput"></div>
+										</div>
+										<div class="form-group">
+											<div class="col-xs-5"><p class="form-control-static">City</p></div>
+											<div class="col-xs-7"><input type="text" class="form-control" id="cityInput"></div>
+										</div>
+										<div class="form-group">
+											<div class="col-xs-5"><p class="form-control-static">Postal Code</p></div>
+											<div class="col-xs-7"><input type="text" class="form-control" id="postalCodeInput"></div>
+										</div>
+										<div class="form-group">
+											<div class="col-xs-5"><p class="form-control-static">District</p></div>
+											<div class="col-xs-7"><input type="text" class="form-control" id="districtInput"></div>
+										</div>
+										<div class="form-group">
+											<div class="col-xs-5"><p class="form-control-static">Street</p></div>
+											<div class="col-xs-7"><input type="text" class="form-control" id="streetInput"></div>
+										</div>
+										<div class="form-group">
+											<div class="col-xs-5"><p class="form-control-static">House Number</p></div>
+											<div class="col-xs-7"><input type="text" class="form-control" id="houseNumberInput"></div>
+										</div>
+									</div>
+
+									<!-- TODO implement this functionality -->
+<!-- 		                			<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">mapview</p></div>
+										<div class="col-xs-7"><div class="checkbox"><label><input type="checkbox" value="false" id="mapviewBoolean"></label></div></div>
+		                			</div>
+		                			<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">prox</p></div>
+										<div class="col-xs-7 checkbox"><label><input type="checkbox" value="false" id="proxBoolean"></label></div>
+		                			</div> -->
+		                			<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">Additional Data</p></div>
+										<div class="col-xs-7"><button class="btn btn-default" data-toggle="modal" data-target="#myModal">edit</button></div>
+		                			</div>
+		                			<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">Language</p></div>
+										<div class="col-xs-7" >
+											    <select name="language" id="fid_language" size="1" class="form-control">
+													<option value="">(no selection)</option>
+													<option value="ar-AE"> Arabic (ar-AE)</option>
+													<option value="zh-CN"> Chinese Simplified (zh-CN)</option>
+													<option value="zh-TW"> Chinese Traditional (zh-TW)</option>
+													<option value="en-US" selected="selected"> English (en-US)</option>
+													<option value="fr-FR"> French (fr-FR)</option>
+													<option value="de-DE"> German (de-DE)</option>
+													<option value="it-IT"> 	Italian (it-IT)</option>
+													<option value="ko-KR"> Korean (ko-KR)</option>
+													<option value="pl-PL"> Polish (pl-PL)</option>
+													<option value="ru-RU"> Russian (ru-RU)</option>
+													<option value="es-ES"> Spanish (es-ES)</option>
+													<option value="tr-TR"> Turkish (tr-TR)</option>
+												</select>
+											</div>
+		                			</div>
+		                			<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">Political View</p></div>
+										<div class="col-xs-7" >
+										    <select name="politicalview" id="fid_politicalview" size="1" class="form-control">
+												<option value="" selected="selected">(no selection)</option>
+												<option value="ARE"> ARE: Abu Musa Island, Tunb Islands</option>
+												<option value="ARG"> ARG: Argentina</option>					
+												<option value="EGY"> EGY: Halaib Triangle	</option>
+												<option value="IND"> IND: India</option>
+												<option value="ISR"> ISR: Israel view on East Jerusalem</option>
+												<option value="KEN"> KEN: Ilemi Triangle</option>
+												<option value="MAR"> MAR:Western Sahara</option>
+												<option value="PAK"> PAK: Pakistan</option>
+												<option value="RUS"> RUS: Crimea, Kuril Islands (Shikotan, Iturup, Habomai, and Kunashir)</option>
+												<option value="TUR"> TUR: Southern Cyprus</option>
+												<option value="VNM"> VNM: Vietnam</option>
+											</select>
+										</div>
+		                			</div>
+		                			<div class="form-group">
+			                			<div class="col-xs-12">
+			                				<button class="btn btn-success pull-right" onclick="submit()">Submit</button>
+			                			</div>
+		                			</div>
+		                		</div>
+			                </div>
+			            </div>
+
+			            <hr>
+
+			            <div class="form-group">
+			            	<div class="col-md-12">
+			          			<h6> Control Attributes</h6>
+			            		<div id="control_attributes">
+			            			<div class="form-group">
+			                			<div class="col-xs-5"><p class="form-control-static">Response Attributes</p></div>
+										<div class="col-xs-7">
+											<select name="responseattributes" id="fid_responseattributes" size="5" multiple="multiple" class="form-control">
+												<option>all</option>
+												<option>none</option>
+												<option>parsedRequest</option>
+												<option> performedSearch</option>
+												<option>matchQuality </option>
+												<option> matchType </option>
+												<option>matchCode </option>
+											</select>
+										</div>
+									</div>
+									<div class="form-group">
+			                			<div class="col-xs-5"><p class="form-control-static">Location Attributes</p></div>
+										<div class="col-xs-7">
+											<select name="locationattributes" id="fid_locationattributes" size="5" multiple="multiple" class="form-control">
+												<option>all</option>
+												<option>none</option>
+												<option> address </option>
+												<option> mapReference </option>
+												<option> mapView </option>
+												<option> additionalData </option>
+												<option> addressNames </option>
+												<option> addressNamesBilingual </option>
+												<option> addressDetails </option>
+												<option> adminIds </option>
+												<option> streetDetails </option>
+												<option> linkInfo </option>
+												<option> adminInfo </option>
+											</select>
+										</div>
+									</div>
+									<div class="form-group">
+			                			<div class="col-xs-5"><p class="form-control-static">Address Attributes</p></div>
+										<div class="col-xs-7">
+											<select name="addressattributes" id="fid_addressattributes" size="5" multiple="multiple" class="form-control">
+												<option>all</option>
+												<option>none</option>
+												<option> country </option>
+												<option> state </option>
+												<option> county </option>
+												<option> city </option>
+												<option> district </option>
+												<option> street </option>
+												<option> houseNumber </option>
+												<option> postalCode </option>
+												<option> addressLines </option>
+												<option> additionalData </option>
+											</select>
+										</div>
+									</div>
+			            		</div>
+			            	</div>
+			            </div>
+
+			            <hr>
+
+			            <div class="form-group">
+			            	<div class="col-md-12">
+			          			<h6>Control Bahavior</h6>
+			            		<div id="control_behavior">
+			            			<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">Max Results</p></div>
+										<div class="col-xs-7"><input type="text" class="form-control" id="maxResultsInput" value="20"></div>
+									</div>
+									<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">Page Information</p></div>
+										<div class="col-xs-7"><input type="text" class="form-control" id="pageInfoInput" value=""></div>
+									</div>
+									<div class="form-group">
+										<div class="col-xs-5"><p class="form-control-static">Gen</p></div>
+										<div class="col-xs-7"><input type="text" class="form-control" id="genInput" value="8"></div>
+									</div>
+			            		</div>
+			            	</div>
+			            </div>
+					</div>
+				</div>
+			</div>
+
+			<!-- map container -->
+			<div id="middle-col">
+				<div id="mapContainer" style="width: calc(100% - 620px); height: calc(100% - 35px); position: absolute; top: 0; left: 310px; overflow:hidden"></div>
+			</div>
+
+			<!-- Result Column -->
+			<div id="rightmost-col">
+				<div class="info-box">
+					<div class="form-horizontal">
+						<div class="form-group">
+						<h4>Geocoder Result</h4>
+						</div>
+						<div class="form-group">
+                			<div class="col-xs-12">
+                				<button class="btn btn-default" onclick="displayFullResponse()">Show Geocoder Response</button>
+                			</div>
+            			</div>
+			            <div class="form-group">   
+			                <div class="col-md-12">
+		                		<div class="form-group border-bottom-grey">
+		                			<div class="col-xs-2 border-right-grey"><p>No.</p></div>
+		                			<div class="col-xs-10"><p>Location Details</p></div>
+		                		</div>
+		                		<div id="results"></div>
+			                </div>
+			            </div>
+					</div>
+				</div>
+			</div>
+			
+		</div>
+
+		<!-- Segment showing full Geocoder URL -->
+		<div id="urlRequestContainer">
+			<div class="form-horizontal">
+				<div class="form-group">
+					<div class="col-xs-2" style="text-align: right;color: white;"><label class="form-control-static">Geocoder Api Call</label></div>
+					<div class="col-xs-8"><input type="text" class="form-control" id="apiCallUrl" style="width:100%;margin-top:2px;"></div>
+					<div class="col-xs-2"><button class="btn btn-default query-btn" onclick="ajaxCallBegin($('#apiCallUrl').val()) ">Query</button>
+				</div>
+			</div>			
+		</div>
+
+		<!-- Additional Data Modal -->
+		<div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+		  <div class="modal-dialog" role="document">
+		    <div class="modal-content">
+		      <div class="modal-header">
+		        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+		        <h4 class="modal-title" id="myModalLabel">Additional Data</h4>
+		      </div>
+		      <div class="modal-body">
+		        <div class="row">
+		          <div class="col-xs-6">
+		          	<div class="row">
+						<div class="col-xs-10"><p >Crossing Streets</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="crossingStreetsCheck"></label></div></div>
+        			</div>
+        			<div class="row">
+						<div class="col-xs-10"><p >Preserve Unit Designators</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="preserveUnitDesignatorsCheck"></label></div></div>
+        			</div>
+        			<div class="row">
+						<div class="col-xs-10"><p>Country 2</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="country2Check"></label></div></div>
+        			</div>
+        			<div class="row">
+						<div class="col-xs-10"><p>Flexible Admin Values</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="flexibleAdminValuesCheck"></label></div></div>
+        			</div>
+        			<div class="row">
+						<div class="col-xs-10"><p>Normalize Names</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="normalizeNamesCheck"></label></div></div>
+        			</div>
+		          </div>
+		          <div class="col-xs-6">
+		          	<div class="form-group">
+						<div class="col-xs-10"><p >Include Zip Add On</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="includeZipAddOnCheck"></label></div></div>
+        			</div>
+        			<div class="form-group">
+						<div class="col-xs-10"><p>Include Child POIs</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="includeChildPOIsCheck"></label></div></div>
+        			</div>
+        			<div class="form-group">
+						<div class="col-xs-10"><p>Include Routing Information</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="includeRoutingInformationCheck"></label></div></div>
+        			</div>
+        			<div class="form-group">
+						<div class="col-xs-10"><p>Include Distance Markers</p></div>
+						<div class="col-xs-2"><div class="checkbox"><label><input type="checkbox" value="false" id="includeDistanceMarkersCheck"></label></div></div>
+        			</div>
+		          </div>
+		        </div>
+
+		        <br/>
+
+		        <div class="row">
+					<div class="col-xs-5"><p>Additional Address Provider</p></div>
+					<div class="col-xs-7"><input type="text" class="form-control" id="additionalAddressProviderInput"></div>
+				</div>
+
+				<div class="row">
+					<div class="col-xs-5"><p>House Number Mode</p></div>
+					<div class="col-xs-7" >
+						    <select name="language" id="fid_houseNumberMode" size="1" class="form-control">
+								<option value="" selected="selected">(no selection)</option>
+								<option value="extrapolation"> Extrapolation</option>
+								<option value="fallback"> Fallback</option>
+								<option value="streetlevel">Street Level</option>
+							</select>
+						</div>
+    			</div>
+
+				<div class="row">
+					<div class="col-xs-5"><p>Intersection Snap Tolerance</p></div>
+					<div class="col-xs-7"><input type="text" class="form-control" id="intersectionSnapToleranceInput"></div>
+				</div>
+
+				<div class="row">
+					<div class="col-xs-5"><p>Address Range Squeeze Offset</p></div>
+					<div class="col-xs-7"><input type="text" class="form-control" id="addressRangeSqueezeOffsetInput"></div>
+				</div>
+
+				<div class="row">
+					<div class="col-xs-5"><p>Address Range Squeeze Factor</p></div>
+					<div class="col-xs-7"><input type="text" class="form-control" id="addressRangeSqueezeFactorInput"></div>
+				</div>
+				<div class="row">
+					<div class="col-xs-5"><p>Include Shape Level</p></div>
+					<div class="col-xs-7" >
+						    <select name="language" id="fid_includeShapeLevel" size="1" class="form-control">
+								<option value="" selected="selected">(no selection)</option>
+								<option value="country"> Country</option>
+								<option value="state">State</option>
+								<option value="county">County</option>
+								<option value="city">City</option>
+								<option value="district">Disctrict</option>
+								<option value="postalcode">Postal Code</option>
+								<option value="default">Default</option>
+							</select>
+						</div>
+    			</div>
+    			<div class="row">
+					<div class="col-xs-5"><p>Restrict Level</p></div>
+					<div class="col-xs-7" >
+						    <select name="language" id="fid_restrictLevel" size="1" class="form-control">
+								<option value="" selected="selected">(no selection)</option>
+								<option value="country"> Country</option>
+							</select>
+						</div>
+    			</div>
+    			<div class="row">
+					<div class="col-xs-5"><p>Suppress Street Type</p></div>
+					<div class="col-xs-7" >
+						    <select name="language" id="fid_suppressStreetType" size="1" class="form-control">
+								<option value="" selected="selected">(no selection)</option>
+								<option value="unnamed"> Unnamed</option>
+							</select>
+						</div>
+    			</div>
+		      </div>
+		      <div class="modal-footer">
+		        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+		      </div>
+		    </div>
+		  </div>
+		</div>
+	</div>
+
+	<!-- Json Modal -->
+		<div class="modal fade" id="jsonResultModal" tabindex="-1" role="dialog" aria-labelledby="jsonResultLabel">
+		  	<div class="modal-dialog" role="document">
+		    	<div class="modal-content">
+		     		<div class="modal-header">
+				        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+				        <h4 id="jsonModalTitle" class="modal-title" id="myModalLabel">JSON Response</h4>
+			      	</div>
+			      	<div class="modal-body">
+				        <div class="row">
+				          <div class="col-xs-12">
+				          	<pre id="json"></pre>
+				          </div>
+			          	</div>
+		          	</div>
+	          	</div>
+			</div>
+		</div>
+	</div>
+	<%= javascript_include_tag "forward-geocoder" %>

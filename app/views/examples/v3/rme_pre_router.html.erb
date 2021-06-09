@@ -1,0 +1,390 @@
+<%= javascript_include_tag "jszip.min.js" %>
+
+<% content_for :title, "RME as pre-router demo" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>
+		Drag & drop a trace file (CSV, GPX or NMEA) into below box, or draw a trace by clicking into the map or choose an example:
+		<input id="example1" class="btn btn-default btn-sm" type="button" value="Rome GPX"      onclick="loadFromFile('sample_rome.gpx'     );"/>
+        <input id="example2" class="btn btn-default btn-sm" type="button" value="Sheffield CSV" onclick="loadFromFile('sample_sheffield.csv');"/><br/>
+		<textarea id="tracetextarea" class="form-control" rows="10" onchange="refreshTraces()"></textarea>
+		<input id="submittracebutton" class="btn btn-default btn-sm" type="button" value="Submit"/>
+		to <input type="text" id="rmeUrl" value="https://rme.api.here.com/2/matchroute.json?routemode=car" autocomplete="off" size="50">
+		<br>
+		<input id="submitToRouterBtnW" disabled=true class="btn btn-default btn-sm" type="button" value="Compare with HLP Router(Waypoints)" onclick="route('waypoints')"/>
+		<input id="submitToRouterBtnL" disabled=true class="btn btn-default btn-sm" type="button" value="Compare with HLP Router(LinkIds)" onclick="route('linkIds')"/>
+		<textarea id="warningstextarea" class="form-control" rows="20">Warnings in the response...</textarea>
+	</p>
+</div>
+
+<div id="mapContainer"></div>
+<script type="text/javascript">
+
+	// author wobecker (C) HERE 2014 - 2016
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	var secure = (location.protocol === 'https:') ? true : false; // check if the site was loaded via secure connection
+
+	var mapContainer = document.getElementById('mapContainer');
+	var platform = new H.service.Platform({	app_code: app_code,	app_id: app_id,	useHTTPS: secure });
+	var	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+	var	map = new H.Map(mapContainer, maptypes.normal.map, { center: new H.geo.Point(52.11, 0.68), zoom: 5 });
+
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width()); // Do not draw underneath control panel
+
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map)); // add behavior control
+	var ui = H.ui.UI.createDefault(map, maptypes); // add UI
+
+	platform.configure(H.map.render.panorama.RenderEngine); // setup the Streetlevel imagery
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var	objContainer = new H.map.Group();
+
+	var submitTrace = function () {
+		objContainer.removeAll();
+		document.getElementById("warningstextarea").value = '';
+		var zip = new JSZip();
+		zip.file("temp.zip", document.getElementById('tracetextarea').value);
+		var content = zip.generate({type : "base64" , compression: "DEFLATE", compressionOptions : {level:6} });
+		// if there is an app_id specified in the URL then use it, otherwise use the default
+		var url = document.getElementById('rmeUrl').value + "&file=" + encodeURIComponent(content);
+        var appIdRegEx= /[\?&]app_id=/i;
+        var appCodeRegEx= /[\?&]app_code=/i;
+        if( url.search( appIdRegEx ) === -1 && url.search( appCodeRegEx ) === -1 ) {
+			if( ! url.endsWith( "&" ) ) url= url.concat( "&" );
+            url= url.concat( "app_id=" + app_id + "&app_code=" + app_code );                
+        }
+        if( ( url.search( appIdRegEx ) >= 0 && url.search( appCodeRegEx ) < 0 ) || ( url.search( appIdRegEx ) < 0 && url.search( appCodeRegEx ) >= 0 ) ) {
+            alert('If you provide credentials in the RME URL field, please provide both app_id AND app_code.');                
+            return;
+        }
+		getJSONP(url, gotRouteMatchResponse);
+	};
+	document.getElementById('submittracebutton').onclick = submitTrace;
+
+	map.addEventListener('tap', function (currentEvent) {
+		var traceTextArea = document.getElementById('tracetextarea');
+		if (traceTextArea.value.lastIndexOf('SEQNR,\tLATITUDE,\tLONGITUDE', 0) != 0) traceTextArea.value = 'SEQNR,\tLATITUDE,\tLONGITUDE';
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+		addPin((Math.round(lastClickedPos.lat * 100000.0) / 100000.0) , (Math.round(lastClickedPos.lng * 100000.0) / 100000.0));
+		var numLines = traceTextArea.value.split(/\r*\n/).length;
+		document.getElementById('tracetextarea').value += "\n" + (numLines - 1) + ",\t" + (Math.round(lastClickedPos.lat * 100000.0) / 100000.0) + ",\t" + (Math.round(lastClickedPos.lng * 100000.0) / 100000.0);
+		//submitTrace();
+	});
+
+	var markerGroup = new H.map.Group();
+	function addPin(lat, lng){
+		markerGroup.addObject(new H.map.Marker(new H.geo.Point(lat, lng)));
+		map.addObject(markerGroup);
+	}
+	
+	document.getElementById('tracetextarea').addEventListener(
+			'dragover', function handleDragOver(evt) {
+				evt.stopPropagation();
+				evt.preventDefault();
+				evt.dataTransfer.dropEffect = 'copy';
+			},
+		false
+	);
+
+	$('#tracetextarea').bind('input propertychange', function() {
+		clearMap();
+		document.getElementById('tracetextarea').value.split(/\r*\n/).forEach(function(line, lineno){
+			if(lineno>0 && line.trim()!=''){//ignore the first line (col header) and blank lines
+				addPin(line.split(',')[1].trim(),line.split(',')[2].trim());
+			}
+		});
+	});
+	
+	document.getElementById('tracetextarea').addEventListener(
+		'drop', function(evt) {
+			evt.stopPropagation();
+			evt.preventDefault();
+			var files = evt.dataTransfer.files;
+			var file = files[0];
+			var r = new FileReader();
+			r.onload = function(e) { 
+				document.getElementById('tracetextarea').value = r.result;
+				submitTrace();
+			}
+			r.readAsText(file);
+		},
+		false
+	);
+	
+	function refreshTraces(){
+		clearMap();
+		clearRoute();
+		document.getElementById('tracetextarea').value.split(/\r*\n/).forEach(function(line, lineno){
+			if(lineno>0 && line.trim()!=''){//ignore the first line (col header) and blank lines
+				addPin(line.split(',')[1].trim(),line.split(',')[2].trim());
+			}
+		});
+	}
+
+
+	var rmeRouteLinks = "";
+	var rmeWaypoints = "";
+	
+	var gotRouteMatchResponse = function (respJsonObj) {
+		if (respJsonObj.error != undefined || respJsonObj.faultCode != undefined || respJsonObj.type) {
+			document.getElementById('warningstextarea').value += 'Error: ' + respJsonObj.message + ': ' + respJsonObj.responseCode +'\n';
+			return;
+		}
+		// draw the route
+		var routeLinks = respJsonObj.RouteLinks;
+		rmeRouteLinks = routeLinks;
+		for (var l = 0; l < routeLinks.length; l++) {
+			var coords1 = routeLinks[l].shape.split(" ");
+			var coords2 = new H.geo.Strip();
+			for (var c = 0; c < coords1.length; c += 2)
+				coords2.pushLatLngAlt(parseFloat(coords1[c]), parseFloat(coords1[c + 1]), null);
+			objContainer.addObject(new H.map.Polyline(coords2, {zIndex: 3, style: {lineWidth: 8, strokeColor: "rgba(18, 65, 145, 0.7)", lineJoin: "round"}}));
+		}
+
+		// draw the original and the matched trace points
+		tracePoints = respJsonObj.TracePoints;
+		rmeWaypoints = tracePoints;
+		for (var l = 0; l < tracePoints.length; l++) {
+			var p = tracePoints[l];
+			objContainer.addObject(new H.map.Marker(new H.geo.Point(p.lat, p.lon), {icon: createIcon("#000000", l)}));
+			objContainer.addObject(new H.map.Marker(new H.geo.Point(p.latMatched, p.lonMatched), {icon: createIcon("#00FF00", l)}));
+		}
+
+		map.addObject(objContainer);
+		map.setViewBounds(objContainer.getBounds());
+		// should display the warnings … warnings = respJsonObj.Warnings;  if (warnings.length > 0) …
+		mapVersion = respJsonObj.mapVersion; // RME's map version. Use it to cross reference with PDE.
+
+		var warningsArea = document.getElementById("warningstextarea");
+		if(respJsonObj.Warnings.length === 0) {
+			warningsArea.value += 'No Warnings.';
+		} else {
+			for(var d = 0; d < respJsonObj.Warnings.length; d++) {
+				if(0 !== d) warningsArea.value += '\n';
+				warningsArea.value += respJsonObj.Warnings[d].text + '\n';
+			}
+		}
+		//enable comparision with HLP Router
+		document.getElementById('submitToRouterBtnW').disabled=false;
+		document.getElementById('submitToRouterBtnL').disabled=false;
+	};
+
+	var currentRouteStrip = new H.geo.Strip();
+	var routeGroup = new H.map.Group();
+	function route(type){
+	
+		
+		var waypointParam = "";
+		//construct waypoints
+		var waypointcount = 0;
+		if(type=='waypoints'){
+			var shapeCount = 0;
+			rmeRouteLinks.forEach(function (link, i){
+				var shapes = link.shape.split(" ");
+				if(shapes.length==2){
+					waypointParam += '&waypoint'+shapeCount+'='+encodeURIComponent('geo!'+shapes[0]+',')
+					waypointParam += shapes[1];
+					
+				}else{
+					var midpoint = shapes.length/2;
+					var latindex, lonindex;
+					if(Math.abs(midpoint % 2)==0){//even
+						latindex = midpoint;
+						lonindex = midpoint+1;
+					}if(Math.abs(midpoint % 2)==1){//odd
+						latindex = midpoint-1;
+						lonindex = midpoint;
+					}
+					waypointParam += '&waypoint'+shapeCount+'='+encodeURIComponent('geo!'+shapes[latindex]+',')
+					waypointParam += shapes[lonindex];
+				}
+				shapeCount++;
+			});
+		}else if(type=='linkIds'){
+			rmeRouteLinks.forEach(function (link, i){
+				waypointParam += '&waypoint'+i+'='+encodeURIComponent('link!'+(link.linkId>0?'+':'')+link.linkId);
+		});
+		}
+		
+		var urlRoutingReq = "https://route.api.here.com/routing/7.2/calculateroute.json?jsonAttributes=1"+
+							waypointParam +
+						"&departure=now&routeattributes=sh,lg&legattributes=li&linkattributes=length,fc,rt,rd&mode=fastest;" +
+						getParams(document.getElementById('rmeUrl').value).routemode + ";traffic:disabled&app_id=" + app_id + "&app_code=" + app_code+ "&jsoncallback=gotRoutingResponse";
+
+						
+		var req = $.ajax({
+			url: urlRoutingReq, 
+			dataType: "jsonp",
+			contentType: "application/javascript",
+			jsonpCallback: 'gotRoutingResponse',
+			timeout: 5000 
+		});
+
+		req.error(function (jqXHR, textStatus, errorThrown) {
+			document.getElementById('warningstextarea').value += 'Could not get a successful response from Router, Possibly route is too long\n';
+		});
+		
+		
+		
+		/*script = document.createElement("script");
+		script.src = urlRoutingReq;
+		try{
+			document.body.appendChild(script);
+		}catch(e){
+			document.getElementById('warningstextarea').value += e+"\n";
+		}*/
+		
+	}
+	
+	
+	function clearMap(){
+		try
+		{
+			if(objContainer){
+				objContainer.removeAll();
+			}
+			if(markerGroup){
+				try{
+					map.removeObject(markerGroup);
+				}catch(e){
+				}
+				
+				markerGroup = new H.map.Group();
+			}
+			
+		}
+		catch (e)
+		{
+			// this can happen if the group contains elements but they did not got added to the map
+			// we do nothing.
+		}
+	}
+	
+	function clearRoute(){
+		if(routeGroup){
+				try{
+					map.removeObject(routeGroup);
+				}catch(e){
+				}
+				routeGroup = new H.map.Group();
+			}
+	}
+	
+	var firstpoint = "", lastpoint;
+	// parse the routing response
+	var gotRoutingResponse = function (respJsonRouteObj)
+	{
+		if (respJsonRouteObj.error != undefined)
+		{
+			document.getElementById('warningstextarea').value += respJsonRouteObj.error+"\n";
+			return;
+		}
+
+		if (respJsonRouteObj.type != undefined && respJsonRouteObj.type =="ApplicationError")
+		{
+			document.getElementById('warningstextarea').value += respJsonRouteObj.details+"\n";
+			return;
+		}
+		
+		clearRoute();
+		firstpoint = "";
+		respJsonRouteObj.response.route[0].leg.forEach(function(legItem){
+				legItem.link.forEach(function(linkItem){
+					var strip = new H.geo.Strip();
+					linkItem.shape.forEach(function (shapeItem){
+						strip.pushLatLngAlt.apply(strip, 
+						shapeItem.split(',').map(function(item) { 
+							return parseFloat(item); 
+						}))
+					});
+					if(firstpoint=="")firstpoint = strip.b[0]+","+ strip.b[1];
+					lastpoint= strip.b[ strip.b.length-3]+","+ strip.b[ strip.b.length-2];
+					var link = new H.map.Polyline(strip,
+					{
+						style:
+						{
+							lineWidth: 7,
+							strokeColor: "rgba(251, 254, 93, 0.68)",
+							lineJoin: "round"
+						}
+					});
+					link.setArrows({color:"rgba(255, 254, 253, 0.1)",width:2,length:3,frequency: 4});
+					routeGroup.addObject(link);
+				});
+		});
+		//addPin(firstpoint.split(",")[0],firstpoint.split(",")[1]);
+		//addPin(lastpoint.split(",")[0],lastpoint.split(",")[1]);
+		//markerGroup.addObject(new H.map.Marker(new H.geo.Point(lat, lng)));
+		markerGroup.addObject(new H.map.Marker(new H.geo.Point(firstpoint.split(",")[0],firstpoint.split(",")[1]), {icon: createFirstLastMarker("red", 1)}));
+		markerGroup.addObject(new H.map.Marker(new H.geo.Point(lastpoint.split(",")[0],lastpoint.split(",")[1]), {icon: createFirstLastMarker("red", 2)}));
+		map.addObject(markerGroup);
+		// zoom to route
+		map.addObject(routeGroup);
+		map.setViewBounds(routeGroup.getBounds());
+
+	}
+	
+	function getParams(url){
+        var regex = /[?&]([^=#]+)=([^&#]*)/g,
+            params = {},
+            match;
+        while(match = regex.exec(url)) {
+            params[match[1]] = match[2];
+        }
+        return params;
+    }
+	
+	var loadFromFile = function (filename) {
+		var req = new XMLHttpRequest();
+		req.open('GET', '/sample_data/' + filename);
+		req.onreadystatechange = function() {
+			if (req.readyState != XMLHttpRequest.DONE) return;
+			document.getElementById('tracetextarea').value = req.responseText;
+			submitTrace();
+		}
+		req.send();
+	}
+	
+	var createIcon = function (color, text) {
+		var div = document.createElement("div");
+		var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="16px">' +
+			'<line x1="14"  y1="26" x2="14" y2="9" stroke="' + color + '"/>' +
+			'<text font-size="10" x="14" y="8" text-anchor="middle" fill="' + color + '">' + text + '</text>' +
+			'</svg>';
+		div.innerHTML = svg;
+		return new H.map.Icon(svg, {anchor: {x : 14, y : 16}});
+	};
+	
+	var createFirstLastMarker = function (color, text) {
+		var svg = '<svg version="1.0" xmlns="http://www.w3.org/2000/svg" width="300.000000pt" height="300.000000pt" viewBox="0 0 300.000000 300.000000" preserveAspectRatio="xMidYMid meet"> <g transform="translate(0.000000,300.000000) scale(0.100000,-0.100000)" fill="#FA7000" stroke="none"> <path class="node" id="node1" d="M210 2052 c0 -4 290 -297 645 -652 l645 -645 645 645 c355 355 645 648 645 652 0 5 -580 8 -1290 8 -710 0 -1290 -3 -1290 -8z"></path></g><g transform="translate(0.000000,300.000000) scale(0.100000,-0.100000)" fill="#9C9C9C" stroke="none"></g></svg>';
+		return new H.map.Icon(svg, {size:{w: 40, h: 40},anchor: {x : 24, y : 26}});
+	};
+
+	function getJSONP(url, callback) {
+		var cbnum = "s" + getJSONP.counter++;
+		var cbname = "getJSONP." + cbnum;
+		url += "&callback=" + cbname;
+		var script = document.createElement("script");
+		getJSONP[cbnum] = function(response) {
+			try {
+				callback(response);
+			}
+			finally {
+				delete getJSONP[cbnum];
+				script.parentNode.removeChild(script);
+			}
+		};
+		script.src = url;
+		script.onerror = function(data)	{
+			alert("Could not connect to RME.\nCheck connectivity and trace size.");
+		}
+		document.body.appendChild(script);
+	} getJSONP.counter = 0;
+
+	if (!String.prototype.trim) {
+	  String.prototype.trim = function () {
+		return this.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '');
+	  };
+}
+</script>

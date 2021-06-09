@@ -1,0 +1,94 @@
+<% content_for :title, "Checking CORS for HERE Services" %>
+
+<script src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.1.1.min.js"></script>
+
+<div>
+<br><br>
+
+<label class="control-label col-sm-4" style="color:lightgray" for="protocol">Protocol:</label>
+<select id="protocol" class="form-control">
+	<option value="http">http</option>
+	<option value="https"selected="true">https (needed if page is loaded via https)</option>
+</select>
+<br>
+<label class="control-label col-sm-4" style="color:lightgray" for="method">Method:</label>
+<select id="method" class="form-control">
+	<option value="GET" selected="true">GET</option>
+	<option value="POST">POST</option>
+	<option value="OPTIONS">OPTIONS</option>
+</select>
+<br>
+<label class="control-label col-sm-4" style="color:lightgray" for="host">Host (DNS name only):</label>
+<input id="host" class="form-control" type="text" value="wse.api.here.com" placeholder="Put a hostname here">
+<br>
+<label class="control-label col-sm-4" style="color:lightgray" for="endpoint">Base Url:</label>
+<input id="endpoint" class="form-control" type="text" value="/2/findsequence.json?" placeholder="base url">
+<br>
+<label class="control-label col-sm-4" style="color:lightgray" for="content">Parameters:</label>
+<textarea id="content" class="form-control" rows="4" placeholder="Bunch of parameters">mode=fastest;car;traffic:disabled;&start=DuisburgRuhrort%3B51.4541%2C6.7406&departure=2016-10-14T07:30:00%2b02:00&restTimes=disabled&end=DuisburgHafen%3B51.4576%2C6.7717&destination0=Gelsenkirchen%3B51.5053%2C7.1016&destination1=ZecheZollverein%3B51.486%2C7.0459&destination2=KokereiZollverein%3B51.49016%2C7.03141&destination3=MuehlheimRuhrHbf%3B51.432%2C6.886&destination4=BochumRathaus%3B51.4832%2C7.2186&destination5=DortmundHbf%3B51.5169%2C7.4605&destination6=Bochum%3B51.4732%2C7.1771&destination7=EssenGrugapark%3B51.4304%2C7.0011&destination8=Herne%3B51.537974%2C7.217826&destination9=Bottrop%3B51.51936%2C6.95109&improveFor=TIME</textarea>
+<input type="button" id="start" value="GO!!!" onclick="dosend()"></input>
+<br>
+<label class="control-label col-sm-4" style="color:lightgray" for="response">Response:</label><br>
+<label id="responsecode" style="color:lightgray" for="response">-</label>
+<!-- <p id="responsecode"></p>-->
+<textarea id="response" class="form-control" rows="12"></textarea>
+
+<script type="text/javascript">
+	function dosend() {
+	
+		var actual_app_id= app_id_cors;
+		var actual_app_code= app_code_cors;
+		
+		// clear the result area
+		document.getElementById("response").value= "";
+		document.getElementById("responsecode").innerHTML = "-";
+		document.getElementById("responsecode").style.color = "lightgray"; 
+
+		
+		// get ingredients for the url and build id
+		var protocol = document.getElementById('protocol').value;
+		var method = document.getElementById('method').value;
+		var host = document.getElementById('host').value;
+		var endpoint = document.getElementById('endpoint').value;
+		var content = document.getElementById('content').value;
+		var url= protocol + "://" + host + endpoint + "app_id=" + actual_app_id + "&app_code=" + actual_app_code;
+		
+		if( method === "GET" ) url = url + "&" + content;
+	
+		var oReq = new XMLHttpRequest();
+
+		console.log(method);
+		console.log(url);		
+		oReq.open(method, url );
+		if( method === "POST" ) oReq.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+		oReq.onreadystatechange = function() {
+		
+				if(this.readyState == 4 ) {
+					if (this.status >= 200 && this.status <= 399) {
+					
+						document.getElementById("responsecode").innerHTML = this.status;
+						document.getElementById("responsecode").style.color = "green"; 
+						if (this.status == 200) {
+							document.getElementById("response").value = oReq.responseText;
+						}	
+					}	else if (this.status >= 400) {
+						document.getElementById("response").value = "FAIL:\r\n\r\n" + oReq.responseText;
+						document.getElementById("responsecode").innerHTML = this.status;
+						document.getElementById("responsecode").style.color = "red"; 				
+					}
+				}
+			
+			    
+		};
+		if( method === "POST" ) {
+			console.log("posting");
+			oReq.send(content);
+		} else {
+			console.log("\"gett\"ing");
+			oReq.send();
+		}
+	}	
+	
+</script>
+</div>
+

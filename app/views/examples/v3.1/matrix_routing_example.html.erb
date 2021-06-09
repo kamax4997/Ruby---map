@@ -1,0 +1,639 @@
+
+<%= javascript_include_tag "moment" %>
+<%= javascript_include_tag "moment-range" %>
+<%= javascript_include_tag "jszip.min" %>
+<%= javascript_include_tag "gpx-parser" %>
+<%= javascript_include_tag "date-time-parser" %>
+
+<% content_for :title, "Matrix Routing example" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p id="mapReleaseTxt">After route calculation, additional info is retrieved from PDE Web Service and displayed. </p>
+	<div class="form-horizontal">
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="start">Start:</label>
+			<div class="col-sm-9">
+				<input type="text" class="form-control input-wide" id="start" value="Select by long click on the Map/ paste Lat/Lng" onkeydown="if (event.keyCode == 13) go();">
+			</div>
+		</div>
+		
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="dest0">Destination1:</label>
+			<div class="col-sm-9">
+				<input type="text" class="form-control input-wide" id="dest0" value="Select by long click on the Map" onkeydown="if (event.keyCode == 13) go();">
+			</div>
+		</div>
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="dest1">Destination2:</label>
+			<div class="col-sm-9">
+				<input type="text" class="form-control input-wide" id="dest1" value="Select by long click on the Map" onkeydown="if (event.keyCode == 13) go();">
+			</div>
+		</div>
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="dest2">Destination3:</label>
+			<div class="col-sm-9">
+				<input type="text" class="form-control input-wide" id="dest2" value="Select by long click on the Map" onkeydown="if (event.keyCode == 13) go();">
+			</div>
+		</div>
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="vehicletype">Vehicle Type:</label>
+			<div class="col-sm-9">
+				<select class="form-control input-wide" name="vehicletype" id="vehicletype" size="1" onchange="handleTruck();">
+					<option value="1" selected>Automobiles</option>
+					<option value="2">Buses</option>
+					<option value="4">Taxis</option>
+					<option value="8">Car Pools</option>
+					<option value="16">Pedestrian</option>
+					<option value="32">Trucks</option>
+					<option value="64">deliveries</option>
+					<option value="128">emergency vehicles</option>
+					<option value="256">Through Traffic</option>
+					<option value="512">Motorcycles</option>
+					<option value="1024">Road Trains</option>
+				</select>
+			</div>
+		</div>
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="date">Departure:</label>
+			<div class="col-sm-9">
+				<input type="date" id="date" value="">
+				<input type="time" id="time"value="">
+			</div>
+		</div>
+		<div id="truckoptions" style="display:none">
+			<div class="form-group">
+				<label class="control-label col-sm-3" for="date">Trailer:</label>
+				<div class="col-sm-9">
+					<input class="form-control input-wide" type="number" min="0" max="999" step="1" value="0" id="trailer">
+				</div>
+			</div>
+			<div class="form-group">
+				<label class="control-label col-sm-3" for="truck_weight">Truck Weight (tons):</label>
+				<div class="col-sm-9">
+					<input class="form-control input-wide" type="number" min="0" max="999" step="0.1" value="0" id="truck_weight">
+				</div>
+			</div>
+			<div class="form-group">
+				<label class="control-label col-sm-3" for="length">Length (meters):</label>
+				<div class="col-sm-9">
+					<input class="form-control input-wide" type="number" min="0" max="999" step="0.1" value="0" id="length">
+				</div>
+			</div>
+			<div class="form-group">
+				<label class="control-label col-sm-3" for="expl_dang_material">Dangerous Material:</label>
+				<div class="col-sm-9 checkbox">
+					<input type="checkbox" name="expl_dang_material" id="expl_dang_material">
+				</div>
+			</div>
+		</div>
+		<input type="submit" id="routeButton" class="btn btn-default btn-sm" value="Calculate Matrix of routes">
+		<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+		<div>HLP Service releases which are used in this demo:</div>
+		<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+	</div>
+	
+	<div id="dvTable">
+	</div>
+
+	<table id="TABLE" border="1" style="border-collapse: collapse;" cellpadding="8"> </table>
+
+</div>
+
+<div id="mapContainer"></div>
+
+<script>
+	
+	
+	function addColumOnClick(tableId){
+		var tableCols="#"+tableId+" td";
+		console.log(tableCols);
+		
+		 $(tableCols).hover(function() {
+        $(this).css('cursor','pointer');
+    });
+
+		
+		$(tableCols).click(function() {     
+
+			var column_num = parseInt( $(this).index() ) + 1;
+			var row_num = parseInt( $(this).parent().index() )+1;
+			console.log(column_num + ","+ row_num);
+			
+			$("#result").html( "Row_num =" + row_num + "  ,  Column_num ="+ column_num ); 
+			if(row_num == 2 && column_num == 2){
+				group.removeAll();
+				calculateRouteDirect(pointA, pointD0);
+			}
+			else if(row_num == 2 && column_num == 3){
+				group.removeAll();
+				calculateRouteDirect(pointA, pointD1);
+			}
+			else if(row_num == 2 &&  column_num == 4){
+				group.removeAll();
+				calculateRouteDirect(pointA, pointD2);
+			}
+			else if(row_num == 3 &&  column_num == 3){
+				group.removeAll();
+				calculateRouteDirect(pointD0, pointD2);
+			}
+			else if(row_num == 3 &&  column_num == 4){
+				group.removeAll();
+				calculateRouteDirect(pointD0, pointD2);
+			}
+			else if(row_num == 4 &&  column_num == 2){
+				group.removeAll();
+				calculateRouteDirect(pointD1, pointD0);
+			}
+			else if(row_num == 4 &&  column_num == 4){
+				group.removeAll();
+				calculateRouteDirect(pointD1, pointD2);
+			}
+			else if(row_num == 5 &&  column_num == 2){
+				group.removeAll();
+				calculateRouteDirect(pointD2, pointD0);
+			}
+			else if(row_num == 5 && column_num == 3){
+				group.removeAll();
+				calculateRouteDirect(pointD2, pointD1);
+			}
+			
+			  
+		});
+		
+	}
+	
+</script>
+
+<script type="text/javascript">
+
+	/*
+	author domschuette
+	(C) HERE 2014
+	*/
+	
+	/*
+	author PrakashChamarthy
+	(C) HERE 2016
+	*/
+	
+	var pointA = new H.geo.Point(50.11208,8.68342);
+	var pointD0 = new H.geo.Point(52.51607,13.37699);
+	var pointD1 = new H.geo.Point(53.55375,9.9918);
+	var pointD2 = new H.geo.Point(48.13642,11.57755);
+	var tableData = new Array();
+	// position of route destination
+	var pointB;
+
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		apikey: api_key,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.vector.normal.map, {
+		center: new H.geo.Point(52.11, 0.68),
+		zoom: 5,
+		pixelRatio: window.devicePixelRatio || 1
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// add long click in map event listener
+	map.addEventListener('longpress', handleLongClickInMap);
+
+	var geocoder = platform.getGeocodingService(),
+		router = platform.getRoutingService(),
+		group = new H.map.Group(),
+		layers = null;
+		
+		
+	map.addObject(group);
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+	
+	//add JS API Release information
+	releaseInfoTxt.innerHTML+="<br />JS API: 3."+ H.buildInfo().version;
+	
+	//add MRS Release information
+	loadMRSVersionTxt();
+	
+	var urlMatrixRoutingReq;
+
+
+	var	routeButton = document.getElementById("routeButton"),
+		start = document.getElementById("start"),
+		dest0 = document.getElementById("dest0"),
+		dest1 = document.getElementById("dest1"),
+		dest2 = document.getElementById("dest2"),
+		date = document.getElementById("date"),
+		time = document.getElementById("time"),
+		trucks = document.getElementById("trucks"),
+		truckOptions = document.getElementById("truckoptions"),
+		mapReleaseTxt = document.getElementById("mapReleaseTxt"),
+		
+		//group = new H.map.Group(),
+		now = moment(),
+		truck = false,
+		currentBubble,
+		startMarker,
+		destMarker,
+		type,
+		bLongClickUseForStartPoint0 = true; // for long click in map we toggle start/destination;
+		bLongClickUseForDestPoint0 = false;
+		bLongClickUseForDestPoint1 = false;
+		bLongClickUseForDestPoint2 = false;
+		bLongClickUseForDestPoint3 = false;
+		
+	date.value = now.format("YYYY-MM-DD");
+	time.value = now.format("HH:mm");
+	start.value ="Frankfurt";
+	dest0.value = "Berlin";
+	dest1.value = "Hamburg";
+	dest2.value = "Munich";
+
+	var handleTruck = function()
+	{
+		if(document.getElementById("vehicletype").value == "32")
+		{
+			truck = true;
+			truckOptions.style.display = "block";
+		}
+		else
+		{
+			truck = false;
+			truckOptions.style.display = "none";
+		}
+	}
+	
+	var releaseRoutingShown=false;
+	
+	/********************************************************
+	Start/Destination selectin via LongClick in map
+	********************************************************/
+	function handleLongClickInMap(currentEvent)
+	{
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+
+		if(bLongClickUseForStartPoint0)
+		{
+			map.addObject(group);
+			var line1 = "" + lastClickedPos.lat + "," + lastClickedPos.lng;
+			var line2 = "DEST";
+			start.value = line1;
+			pointA = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+			
+			if(startMarker !=  null)
+			{
+				markerGroup.removeObject(startMarker);
+			}
+			startMarker = new H.map.Marker(pointA,
+				{
+					icon: createIconMarker(line1, line2)
+				});
+			group.addObject(startMarker);
+			bLongClickUseForStartPoint0 = false;
+			bLongClickUseForDestPoint0 = true;
+		}
+		else
+		{
+			if(bLongClickUseForDestPoint0){
+			var line1 = "" + lastClickedPos.lat + "," + lastClickedPos.lng;
+			var line2 = "1";
+			dest0.value = line1;
+			pointB = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+			bLongClickUseForDestPoint1 = true;
+			bLongClickUseForDestPoint0 = false;
+			}
+			
+			else if(bLongClickUseForDestPoint1){
+			var line1 = "" + lastClickedPos.lat + "," + lastClickedPos.lng;
+			var line2 = "1";
+			dest1.value = line1;
+			pointB = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+			bLongClickUseForDestPoint2 = true;
+			bLongClickUseForDestPoint1 = false;
+			}
+			
+			else if(bLongClickUseForDestPoint2){
+			var line1 = "" + lastClickedPos.lat + "," + lastClickedPos.lng;
+			var line2 = "1";
+			dest2.value = line1;
+			pointB = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+			bLongClickUseForStartPoint0 = true;
+			bLongClickUseForDestPoint2 = false;
+			}
+			
+			if(destMarker !=  null)
+			{
+				markerGroup.removeObject(destMarker);
+			}
+			destMarker = new H.map.Marker(pointB,
+			{
+					icon: createIconMarker(line1, line2)
+				});
+			group.addObject(destMarker);
+			//bLongClickUseForStartPoint = true;
+			go();
+		}
+	}	
+
+	routeButton.onclick = function ()
+	{
+		go();
+	};
+
+	var go = function()
+	{
+		group.removeAll();
+		
+		depature = date.value + "T" + time.value + ":00";
+		//group = new H.map.Group();
+		feedbackTxt.innerHTML = "Routing from: " + start.value + " to " + dest0.value + " ...";
+		geocode(start.value, 0);
+		geocode(dest0.value, 1);
+		geocode(dest1.value, 2);
+		geocode(dest2.value, 3);
+		console.log("Firing the URL for matrix routing");
+		
+		var now = new Date().getTime();
+		while(new Date().getTime() < now + 4000){ /* do nothing */ } 
+		console.log(pointA);
+
+		urlMatrixRoutingReq = ["https://matrix.route.api.here.com/routing/7.2/calculatematrix.json?start0=",
+									pointA.lat,
+									",",
+									pointA.lng,
+									"&start1=",
+									pointD0.lat,
+									",",
+									pointD0.lng,
+									"&start2=",
+									pointD1.lat,
+									",",
+									pointD1.lng,
+									"&start3=",
+									pointD2.lat,
+									",",
+									pointD2.lng,
+									"&destination0=",
+									pointD0.lat,
+									",",
+									pointD0.lng,
+									"&destination1=",
+									pointD1.lat,
+									",",
+									pointD1.lng,
+									"&destination2=",
+									pointD2.lat,
+									",",
+									pointD2.lng,
+
+									"&mode=fastest;",
+									(truck ? "truck" : "car"),
+									"&matrixattributes=none,summary,indices&summaryattributes=traveltime,distance&app_id=",
+									app_id,
+									"&app_code=",
+									app_code,
+									"&jsoncallback=gotMatrixResponse"].join(""); 
+		console.log(urlMatrixRoutingReq);
+									
+		var script = document.createElement("script");
+		script.src = urlMatrixRoutingReq;
+		document.body.appendChild(script);
+		
+	}
+
+	
+	var geocode = function(searchTerm,type)
+	{
+		console.log("! "+searchTerm);
+		geocoder.search(
+			{
+				searchText: searchTerm
+			},
+			function(result) {
+				if(result.Response.View[0].Result[0].Location != null)
+				{
+					pos = result.Response.View[0].Result[0].Location.DisplayPosition;
+				}
+				else
+				{
+					pos = result.Response.View[0].Result[0].Place.Locations[0].DisplayPosition;
+				}
+				
+				if(result.Response.View[0].Result[0].Location != null)
+				{
+				address = result.Response.View[0].Result[0].Location.Address;
+				}
+				else
+				{
+				address = result.Response.View[0].Result[0].Place.Locations[0].Address;
+				}
+
+				if(type==0)
+				{
+					
+					pointA = new H.geo.Point(pos.Latitude, pos.Longitude);
+					
+				}
+				
+				else if(type==1)
+				{
+					pointD0 = new H.geo.Point(pos.Latitude, pos.Longitude);
+					
+				}
+				
+				
+				else if(type==2)
+				{
+	
+					pointD1 = new H.geo.Point(pos.Latitude, pos.Longitude);
+					
+				}
+				
+				else if(type==3)
+				{
+	
+					pointD2 = new H.geo.Point(pos.Latitude, pos.Longitude);
+					
+				}
+				
+						//add Geocoder Release information
+				//loadGeocoderVersionTxt();
+
+			},
+			function(error) {
+				alert(error);
+			}
+		);
+		
+		
+	}
+	
+
+	var calculateRouteDirect = function(start, destination)
+	{
+		console.log(destination);
+		var urlRoutingReq = "https://route.api.here.com/routing/7.2/calculateroute.json?jsonAttributes=1&waypoint0="+
+			start.lat + "," + start.lng + "&waypoint1="+destination.lat+","+ destination.lng +"&departure=" + depature +"&routeattributes=sh,lg&legattributes=li&linkattributes=nl,fc&mode=fastest;" +
+			(truck ? "truck" : "car") + ";traffic:enabled&app_id=" + app_id + "&app_code=" + app_code+ "&jsoncallback=gotRoutingResponse";
+
+			line1 = start.lat + " " + start.lng;
+			line2="";
+		marker = new H.map.Marker(start,
+					{
+						icon: createIconMarker(line1, line2)
+					});
+
+					group.addObject(marker);
+					
+		line1 = destination.lat + " " + destination.lng;
+		line2="";
+		marker = new H.map.Marker(destination,
+					{
+						icon: createIconMarker(line1, line2)
+					});
+
+					group.addObject(marker);
+		
+		
+		script = document.createElement("script");
+		script.src = urlRoutingReq;
+		document.body.appendChild(script);
+	}
+	
+	var gotMatrixResponse = function (respJsonMatrixObj)
+	{
+		// WILL BE IMPLEMENTED
+		if(respJsonMatrixObj){
+	//	console.log(JSON.stringify(respJsonMatrixObj));
+		}
+		
+	tableData.push(["", "Destination1", "Destination2", "Destination3"]);
+    tableData.push(["Start","Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[0].summary.distance , "Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[1].summary.distance,"Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[2].summary.distance]);
+    tableData.push(["Destination1","Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[3].summary.distance , "Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[4].summary.distance,"Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[5].summary.distance]);
+    tableData.push(["Destination2","Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[6].summary.distance , "Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[7].summary.distance,"Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[8].summary.distance]);
+    tableData.push(["Destination3","Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[9].summary.distance , "Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[10].summary.distance,"Dist (Meters): </br>" + respJsonMatrixObj.response.matrixEntry[11].summary.distance]);
+
+	
+	var table = document.getElementById("TABLE");
+	table.innerHTML = "";
+	var columnCount = tableData[0].length;
+	
+	var row = table.insertRow(-1);
+    for (var i = 0; i < columnCount; i++) {
+        var headerCell = document.createElement("TH");
+        headerCell.innerHTML = tableData[0][i];
+        row.appendChild(headerCell);
+    }
+ 
+    //Add the data rows.
+    for (var i = 1; i < tableData.length; i++) {
+        row = table.insertRow(-1);
+        for (var j = 0; j < columnCount; j++) {
+            var cell = row.insertCell(-1);
+            cell.innerHTML = tableData[i][j];
+       		
+        }
+    }
+
+	var dvTable = document.getElementById("dvTable");
+    dvTable.innerHTML = "";
+    dvTable.appendChild(table);
+	
+	addColumOnClick("TABLE");
+	tableData = [];
+		
+	}
+
+	// parse the routing response
+	var gotRoutingResponse = function (respJsonRouteObj)
+	{
+		if (respJsonRouteObj.error != undefined)
+		{
+			alert (respJsonRouteObj.error);
+			feedbackTxt.innerHTML = respJsonRouteObj.error;
+			return;
+		}
+		//add Routing Release number if not already done
+		if (releaseRoutingShown == false){
+			releaseInfoTxt.innerHTML+="<br />HLP Routing: "+respJsonRouteObj.response.metaInfo.moduleVersion;
+			routerMapRelease = respJsonRouteObj.response.metaInfo.mapVersion;
+			mapReleaseTxt.innerHTML = "HLP Routing Service based on "+routerMapRelease+ " map release";
+			releaseRoutingShown = true;
+		}
+
+
+		var strip = new H.geo.LineString(),
+		shape = respJsonRouteObj.response.route[0].shape,
+		i,
+		l = shape.length;
+
+		for(i = 0; i < l; i++)
+		{
+			strip.pushLatLngAlt.apply(strip, shape[i].split(',').map(function(item) { return parseFloat(item); }));
+		}
+
+		var polyline = new H.map.Polyline(strip,
+			{
+				style:
+				{
+					lineWidth: 5,
+					strokeColor: "#B22222",
+					lineJoin: "round"
+				}
+			});
+
+			group.addObject(polyline);
+
+			
+	}
+
+	var validateVehicleType = function(vehicleTypeMask)
+	{
+		var myMask = parseInt(document.getElementById("vehicletype").value);
+		//! TODO remove "plus one" and "truck if" after fixed is ready in service
+		if(truck)
+			vehicleTypeMask = parseInt(vehicleTypeMask) + 1;
+		return ((vehicleTypeMask & myMask) == myMask);
+	}
+
+
+
+	//--- Helper - Create Start / Destination marker
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_Line;
+
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line1);
+		svgMarker = svgMarker.replace(/__width__/g, line1.length * 5 + 20);
+		svgMarker = svgMarker.replace(/__widthAll__/g, line1.length * 4 + 200);
+
+		return new H.map.Icon(svgMarker, {
+			anchor: new H.math.Point(24, 57)
+		});
+	}
+
+	//Helper create svg for speeds
+
+
+</script>
+	</body>
+</html>

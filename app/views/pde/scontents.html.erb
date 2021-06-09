@@ -1,0 +1,31 @@
+
+<% content_for :title, "Platform Data Extension" %>
+
+<div class="subheader">Static contents in <%= params[:region] %> [<%= params[:release] %>] </div>
+
+<table class="pde_table" cellpadding="4" cellspacing="0" border="1" width="90%">
+	<thead>
+		<tr>
+			<th width="15%">Content</th>
+			<th width="70%">Attributes</th>
+			<th width="15%">Referencing Layers</th>
+		</tr>
+	</thead>
+	<tbody id="maps_table_body">
+
+		<% @json.each do |scontent| %>
+			<tr>
+				<% parameters = "?" + "region=" + params[:region] + "&release=" + params[:release]+ "&url_root=" + params[:url_root] %>
+
+				<td><%= link_to scontent['name'], "/pde/scontent" + parameters + "&content=" + scontent['name'] %></td>
+				<td><%= scontent['attributes'].join(", ") %></td>
+				<td><%= raw(scontent['referencingLayers'].map{ |layer| link_to layer, "/pde/layer" + parameters + "&layer=" + layer }.join(", ")) %></td>
+			</tr>
+		<% end %>
+
+		<% if @json.empty? %>
+			<tr><td colspan="3" class="empty">No static content for this layer</td></tr>
+		<% end %>
+
+	</tbody>
+</table>

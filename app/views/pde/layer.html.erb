@@ -1,0 +1,54 @@
+
+<% content_for :title, "Platform Data Extension" %>
+
+<div class="subheader">Layer [<%= params[:layer] %>] </div>
+
+
+<p class="content-text"><%= raw(@json['description'].gsub('<table ', '<table class="pde_table"')) %></p>
+<p class="content-text"><b>Level for tile requests: <%= @json['tileRequestsLevel']%></b></p>
+<table class="pde_table" cellpadding="4" cellspacing="0" border="1" width="90%">
+	<thead>
+		<tr>
+			<th width="30%">Attribute</th>
+			<th width="70%">Description</th>
+		</tr>
+	</thead>
+	<tbody>
+
+		<% @json['attributes'].each do |attribute, description| %>
+			<tr>
+				<td><%= attribute %></td>
+				<td><%= raw(description) %></td>
+			</tr>
+		<% end %>
+
+	</tbody>
+</table>
+
+<p class="content-text">Sample tile requests:
+	<% parameters = "region=" + params[:region] + "&release=" + params[:release]+ "&url_root=" + params[:url_root] %>
+	<% sampleTypes = ["json", "txt"] %>
+	<% if @json['tileX'].to_s != "-1" %>
+		<% sampleTypes.each do |sampleType| %>
+			<%=
+				link_to sampleType,
+					[
+						"https://" + params[:url_root] + "/1/tile." + sampleType + "?",
+						"&layer=" + params[:layer],
+						"&level=" + @json['tileRequestsLevel'].to_s,
+						"&tilex=" + @json['tileX'].to_s,
+						"&tiley=" + @json['tileY'].to_s,
+						"&" + parameters,
+						"&app_id=" + Rails.application.config.app_id,
+						"&app_code=" + Rails.application.config.app_code
+				].join("\n") + "\n", 
+				:class=>"pde"
+			%>
+			<% end %>
+		<% else %>
+			<%=
+				"Layer is empty." + "\n"
+			%>
+		<% end %>
+
+</p>

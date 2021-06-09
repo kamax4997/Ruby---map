@@ -1,0 +1,152 @@
+<% content_for :title, "Using Proxy Urls" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+      /**
+       * (C) HERE 2017
+       */
+
+      // Check whether the environment should use hi-res maps.
+      var hidpi = ("devicePixelRatio" in window && devicePixelRatio > 1);
+
+      // check if the site was loaded via secure connection
+      var secure = (location.protocol === 'https:') ? true : false;
+
+	 // the proxy just forwards to the url being passed after "?"
+ 	 var proxy = "http://tcs.it.here.com/Proxy?";
+
+	  // url and host details
+	  var urlScheme = secure ? "https" : "http";
+	  var trafficAPI = "https://traffic.api.here.com";
+	  var baseMapTile = ".base.maps.api.here.com";
+	  var arielMapTile = ".aerial.maps.api.here.com";
+	  var trafficMapTile = ".traffic.maps.api.here.com";
+	  var baseTilePath = "base";
+	  var satTilePath = "ariel";
+	  var trafficTilePath = "tiletraffic";
+	  var serverCount=0;
+	  
+	  /*create traffic service*/
+	 var host=proxy.replace("http://","")+trafficAPI;
+	 var trafficUrl=new H.service.Url(urlScheme,host,"",{app_id:app_id, app_code:app_code},null);
+	 var trafficService= new H.service.TrafficIncidentsService({ baseUrl : null,subDomain:""});
+	 trafficService.configure(app_id,app_code,false,true,trafficUrl);
+	 var incidentsProvider = new H.service.TrafficIncidentsProvider(trafficService);
+	 var incidentsLayer = new H.map.layer.MarkerTileLayer(incidentsProvider); 
+	  
+	  /*create default tile layers*/
+	  var entries = {
+			normal: {
+			 map: createTileLayer(baseTilePath,'/maptile/2.1/maptile/newest/normal.day'),
+			 xbase: createTileLayer(baseTilePath,'/maptile/2.1/xbasetile/newest/normal.day'),
+			 base:  createTileLayer(baseTilePath,'/maptile/2.1/basetile/newest/normal.day'),
+			 transit: createTileLayer(baseTilePath,'/maptile/2.1/maptile/newest/normal.day.transit'),
+			 base:  createTileLayer(baseTilePath,'/maptile/2.1/labeltile/newest/normal.day'),			 
+			 traffic: createTileLayer(trafficTilePath,'/maptile/2.1/traffictile/newest/normal.day')
+			},
+			satellite: {
+				xbase: createTileLayer(satTilePath,'/maptile/2.1/xbasetile/newest/hybrid.day'),
+				base: createTileLayer(satTilePath,'/maptile/2.1/basetile/newest/hybrid.day'),
+				map: createTileLayer(satTilePath,'/maptile/2.1/maptile/newest/hybrid.day'),
+				label: createTileLayer(satTilePath,'/maptile/2.1/labeltile/newest/hybrid.day'),
+				traffic: createTileLayer(trafficTilePath,'/maptile/2.1/traffictile/newest/hybrid.day')
+			},
+			terrain: {
+				label: createTileLayer(satTilePath,'/maptile/2.1/labeltile/newest/terrain.day'),
+				map: createTileLayer(satTilePath,'/maptile/2.1/maptile/newest/terrain.day'),
+				base: createTileLayer(satTilePath,'/maptile/2.1/basetile/newest/terrain.day'),
+				xbase: createTileLayer(satTilePath,'/maptile/2.1/xbasetile/newest/terrain.day'),
+				traffic: createTileLayer(trafficTilePath,'/maptile/2.1/traffictile/newest/terrain.day')
+			},
+			incidents: incidentsLayer
+	};
+	
+	
+	
+	var map = new H.Map(document.getElementById("mapContainer"),
+          entries.normal.map, {
+            center: new H.geo.Point(50.11171,8.68958),
+            zoom: 14,
+            pixelRatio: hidpi ? 2 : 1
+    });
+
+    // Enable the map event system
+    var mapevents = new H.mapevents.MapEvents(map);
+
+    // Enable map interaction (pan, zoom, pinch-to-zoom)
+    var behavior = new H.mapevents.Behavior(mapevents);
+
+    // Enable the default UI.
+    var ui = H.ui.UI.createDefault(map, entries);
+    // Listen to the window resize event to resize the map accordingly. 
+    window.addEventListener("resize", function() {
+      map.getViewPort().resize();
+    });
+	
+	
+	/**
+	 * Server Count between 1-4
+	 */
+	function getServerCount(){
+		if(serverCount > 3){
+			serverCount = 0;
+		}
+		serverCount=serverCount+1;
+		return serverCount;
+	}
+	
+	/**
+	 * Create Tile layer url based on passed type and mapscheme
+	 * @param {Object} type
+	 * @param {Object} mapscheme
+	 */
+	function createTileLayer(type,mapscheme){
+		
+		var baseUrl="";
+		switch(type){
+			case baseTilePath : baseUrl = [ urlScheme, "://", getServerCount(),baseMapTile].join("");
+						  break;
+			case satTilePath : baseUrl = [ urlScheme, "://", getServerCount(),arielMapTile].join("");
+						  break;
+			case trafficTilePath : baseUrl = [ urlScheme, "://", getServerCount(),trafficMapTile].join("");
+						  break;
+			
+		}
+		
+		
+		var tileProvider = new H.map.provider.ImageTileProvider({
+        label: "Map Provider",
+        descr: "",
+        min: 0,
+        max: 20,
+        getURL: function(col, row, level) {
+            return [
+			  proxy,
+              baseUrl,
+			  mapscheme,
+			  "/",
+              level,
+			   "/", 
+			   col, 
+			   "/", 
+			   row, 
+			   "/256/png8?", 
+			   hidpi ? "?ppi=300" : ""  ,
+			   "&app_id=",
+               app_id,
+               "&app_code=",
+               app_code].join("");
+        }
+      });
+
+      var tileLayer = new H.map.layer.TileLayer(tileProvider);
+	  return tileLayer;
+	}
+	
+</script>

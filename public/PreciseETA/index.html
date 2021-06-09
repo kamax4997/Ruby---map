@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<!-- VERSION 0.2.23 -->
+
+<head>
+
+	<meta charset="utf-8">
+	<meta name="title" content="Name of the project" />
+	<meta name="viewport" content="width=device-width, user-scalable=no" />
+
+	<!-- Styles -->
+	<link rel="stylesheet" type="text/css" href="./css/bootstrap.min.css">
+	<link rel="stylesheet" type="text/css" href="./css/legend.css" />
+	<link rel="stylesheet" type="text/css" href="./css/styles.css" />
+
+
+	<!-- External libraries -->
+	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.3.0/d3.js"></script>
+	<script type="text/javascript" src="https://code.jquery.com/jquery-2.2.3.min.js"></script>
+	<script type="text/javascript" src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
+	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/1.1.1/chroma.min.js"></script>
+	<script type="text/javascript" src="https://tcs.ext.here.com/PreciseETA/degaframework/libs/moment.min.js"></script>
+
+	<!-- HERE JS Libs -->
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-clustering.js"></script>
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-data.js"></script>
+
+	<!-- Data Lens JS -->
+	<script src="https://js.datalens.api.here.com/2.0/mapsjs-datalens.js"></script>
+
+
+	<!-- Degaframework -->
+	<script type="text/javascript" src="./degaframework/app-core.js"></script>
+	<script type="text/javascript" src="./degaframework/geoinsights.js"></script>
+	<script type="text/javascript" src="./degaframework/math.js"></script>
+	<script type="text/javascript" src="./degaframework/map.js"></script>
+	<script type="text/javascript" src="./degaframework/drawing.js"></script>
+	<script type="text/javascript" src="./degaframework/label.js"></script>
+	<script type="text/javascript" src="./degaframework/cover.js"></script>
+	<script type="text/javascript" src="./degaframework/routing.js"></script>
+	<script type="text/javascript" src="./degaframework/geocoder.js"></script>
+	<script type="text/javascript" src="./degaframework/traffic.js"></script>
+	<script type="text/javascript" src="./degaframework/weather.js"></script>
+	<script type="text/javascript" src="./degaframework/isoline.js"></script>
+	<script type="text/javascript" src="./degaframework/pde-manager.js"></script>
+
+	<!-- App -->
+	<script type="text/javascript" src="./js/scripts.js"></script>
+
+	<title>Calculating a Precise Time of Arrival</title>
+
+</head>
+
+
+<body>
+
+	<div class="loading"></div>
+	<div class="info-bubble">
+		<div class="title"></div>
+		<div class="description"></div>
+		<div class="eta"></div>
+		<div class="arrow-down"></div>
+		<div class="weather-icon"></div>
+	</div>
+
+	<div id="basemap"></div>
+
+	<!-- CONTROLS -->
+	<div class="controls">
+
+		<div class="group">
+
+			<div class="origin">
+				<div class="marker-icon origin"></div>
+				<input id="routing-origin" type="text" class="inplace-textfield" placeholder="Origin" value="New York" />
+			</div>
+
+			<div class="destination">
+				<div class="marker-icon dest"></div>
+				<input id="routing-dest" type="text" class="inplace-textfield" placeholder="Destination" value="Boston" />
+			</div>
+
+		</div>
+
+		<div class="group">
+			<div class="title"><span class="more"></span> Route settings</div>
+			<div class="warning">Unable to resolve route with the current configuration, please change few settings and try again.</div>
+
+			<div class="switcher">
+				<label class="switch">
+          <input class="traffic" type="checkbox">
+          <div class="slider round"></div>
+          <div class="label">Avoid traffic</div>
+        </label>
+			</div>
+
+			<div class="switcher">
+				<label class="switch">
+          <input class="tunnels" type="checkbox">
+          <div class="slider round"></div>
+          <div class="label">Avoid  tunnels</div>
+        </label>
+			</div>
+
+			<div class="switcher">
+				<label class="switch">
+          <input class="motorways" type="checkbox">
+          <div class="slider round"></div>
+          <div class="label">Avoid motorways</div>
+        </label>
+			</div>
+
+			<div class="switcher">
+				<label class="switch">
+          <input class="frozen" type="checkbox">
+          <div class="slider round"></div>
+          <div class="label">Avoid frozen roads</div>
+        </label>
+			</div>
+
+			<div class="switcher">
+				<label class="switch">
+          <input class="tolls" type="checkbox">
+          <div class="slider round"></div>
+          <div class="label">Avoid tollroads</div>
+        </label>
+			</div>
+
+		</div>
+
+		<div class="group">
+			<div class="btn-calculate">Calculate Route</div>
+		</div>
+	</div>
+
+	<!-- Stats -->
+	<div class="stats">
+
+		<!-- Car switch -->
+		<div class="group">
+			<div class="title">Vehicle type</div>
+			<div class="car-switcher">
+				<label class="car-switch">
+          <input class="istruck" type="checkbox" />
+          <div class="car-slider round"></div>
+          <div class="car-icon"></div>
+          <div class="truck-icon"></div>
+        </label>
+			</div>
+		</div>
+
+		<div class="group">
+			<div class="title">Total Distance</div>
+			<div class="dist amount">—</div>
+		</div>
+		<div class="group">
+			<div class="title">CO2 Emissions</div>
+			<div class="co2 amount">—</div>
+		</div>
+	</div>
+
+	<div class="group">
+		<div class="herelogo" id="herelogo"></div>
+	</div>
+
+	<!-- LEGEND -->
+	<div class="legend-wrapper minimize">
+		<div class="show-hide-button minimize"></div>
+		<div class="legend">
+
+			<div class="content">
+
+				<div class="row">
+					<div class="col-md-12">
+						<div class="chart-title">Estimated vs. Precise time of arrival</div>
+					</div>
+				</div>
+
+				<!--  
+        <div class="row switchers">
+          <div class="col-md-offset-2 col-md-2 col-sm-3 col-xs-6">
+            <div class="switcher">
+              <label class="switch">
+                <input class="trafficflow" type="checkbox" checked>
+                <div class="trafficflow-slider slider round"></div>
+                <div class="traffic-l label">Traffic</div>
+              </label>
+            </div>
+          </div>
+          <div class="col-md-2 col-sm-3 col-xs-6">
+            <div class="switcher">
+              <label class="switch">
+                <input class="weather" type="checkbox" checked>
+                <div class="weather-slider slider round"></div>
+                <div class="weather-l label">Weather</div>
+              </label>
+            </div>
+          </div>
+          <div class="col-md-2 col-sm-3 col-xs-6">
+            <div class="switcher">
+              <label class="switch">
+                <input class="slopes" type="checkbox" checked>
+                <div class="slopes-slider slider round"></div>
+                <div class="slopes-l label">Slopes</div>
+              </label>
+            </div>
+          </div>
+          <div class="col-md-2 col-sm-3 col-xs-6">
+            <div class="switcher">
+              <label class="switch">
+                <input class="curves" type="checkbox" checked>
+                <div class="curves-slider slider round"></div>
+                <div class="curves-l label">Curves</div>
+              </label>
+            </div>
+          </div>
+        </div>
+        -->
+				<div class="delays">
+					<div class="label-l">Traffic <span class="traffic-l">—</span></div>
+					<div class="label-l">Weather <span class="weather-l">—</span></div>
+					<div class="label-l">Curves <span class="curves-l">—</span></div>
+					<div class="label-l">Slopes <span class="slopes-l">—</span></div>
+				</div>
+				<div class="row elevation-chart">
+					<div class="col-md-12">
+						<svg class="linegraph"></svg>
+					</div>
+				</div>
+
+				<div class="duration">
+					<div class="eta-duration">Estimated <span class="time">—</span></div>
+					<div class="pta-duration">Precise <span class="time">—</span></div>
+					<div class="diff-duration">Difference <span class="time">—</span></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+</body>
+
+<footer>
+</footer>

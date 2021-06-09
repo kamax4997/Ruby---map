@@ -1,0 +1,62 @@
+<% content_for :title, "Simple HERE Map Display" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+	<tr>
+		<td>HLP Service releases which are used in this demo:</td>
+		<td>
+			<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;" value="Used Service Releases:/n"></div>
+		</td>
+	</tr>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2019
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		apikey: api_key,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers();
+	
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.raster.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: window.devicePixelRatio || 1,
+		engineType: H.map.render.RenderEngine.EngineType.P2D
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	behavior.disable(H.mapevents.Behavior.Feature.FRACTIONAL_ZOOM);
+
+	ui.removeControl('zoom');
+	ui.addControl('zoom', new H.ui.ZoomControl({
+		fractionalZoom: false,
+		alignment: H.ui.LayoutAlignment.RIGHT_BOTTOM
+	}));
+	
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+</script>

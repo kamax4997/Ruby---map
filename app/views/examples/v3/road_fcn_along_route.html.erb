@@ -1,0 +1,290 @@
+<% content_for :title, "Displays FC1 and FC2 on Route and calculate Distance" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p id="mapReleaseTxt">After route calculation, additional info is retrieved from PDE Web Service and displayed.</p>
+	<table border="0">
+		<tr>
+			<td>Start</td>
+			<td><input class='form-control' type='text' id='start' size='50' value='Frankfurt am Main'></td>
+		</tr>
+		<tr>
+			<td>Destination</td>
+			<td>
+				<input class='form-control' type='text' id='dest' size='50' value='Eschborn' onkeydown="if (event.keyCode == 13) routeButton.onclick();">
+				<input class="btn btn-default btn-sm" type="submit" id="routeButton" value="Calculate Route">
+			</td>
+		</tr>
+	</table>
+	<div id="fcpanel" style="display: none; margin: 5px 0">
+		<table border="0">
+			<tr>
+				<td><span class="colorbox" style="margin-left: 5px; background: #990000"></span>FC 1</td>
+				<td id="fc1"><span class="colorbox" style="margin-left: 5px; background: #990000"></span></td>
+			</tr>
+			<tr>
+				<td><span class="colorbox" style="margin-left: 5px; background: #009900"></span>FC2</td>
+				<td id="fc2"><span class="colorbox" style="margin-left: 5px; background: #009900"></span></td>
+			</tr>
+			<tr>
+				<td><span class="colorbox" style="margin-left: 5px; background: #00FF00"></span>FC1 and FC2</td>
+				<td id="fc1andfc2"><span class="colorbox" style="margin-left: 5px; background: #00FF00"></span></td>
+			</tr>
+			<tr>
+				<td><span class="colorbox" style="margin-left: 5px; background: #000000"></span>complete</td>
+				<td id="complete"><span class="colorbox" style="margin-left: 5px; background: #000000"></span></td>
+			</tr>
+
+		</table>
+	</div>
+</div>
+
+<div id="mapContainer"></div>
+
+
+<script>
+	/*
+		author dom schuette
+		(C) HERE 2018
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	geocoder = platform.getGeocodingService(),
+	router = platform.getRoutingService(),
+	group = new H.map.Group(),
+	map = new H.Map(mapContainer, maptypes.normal.map,
+	{
+		center: center,
+		zoom: zoom
+	}
+	);
+
+	map.addObject(group);
+
+	// add behavior control
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+	// add UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	// add long click in map event listener
+	map.addEventListener('longpress', handleLongClickInMap);	
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var	routeButton   = document.getElementById("routeButton");
+	var	start         = document.getElementById("start");
+	var	dest          = document.getElementById("dest");
+
+	var pointA;
+	var pointB;
+	var routeBBox;
+	var bLongClickUseForStartPoint = true,
+		startMarker =  null, 
+		destMarker = null;
+
+	/********************************************************
+	Start/Destination selectin via LongClick in map
+	********************************************************/
+	function handleLongClickInMap(currentEvent)
+	{
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+
+		if(bLongClickUseForStartPoint)
+		{
+			map.addObject(group);
+			var line1 = "" + lastClickedPos.lat + "," + lastClickedPos.lng;
+			var line2 = "0";
+			start.value = line1;
+			pointA = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+			if(startMarker !=  null)
+			{
+				group.removeObject(startMarker);
+			}
+			startMarker = new H.map.Marker(pointA,
+				{
+					icon: createIconMarker(line1, line2)
+				});
+			group.addObject(startMarker);
+			bLongClickUseForStartPoint = false;
+		}
+		else
+		{
+			var line1 = "" + lastClickedPos.lat + "," + lastClickedPos.lng;
+			var line2 = "1";
+			dest.value = line1;
+			pointB = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng)
+			if(destMarker !=  null)
+			{
+				group.removeObject(destMarker);
+			}
+			destMarker = new H.map.Marker(pointB,
+				{
+					icon: createIconMarker(line1, line2)
+				});
+			group.addObject(destMarker);
+			bLongClickUseForStartPoint = true;
+			routeButton.onclick();
+		}
+	}	
+
+	
+	// 1. User pressed button --> Geocode start address
+	routeButton.onclick = function ()
+	{
+		// clean up
+		group.removeAll();
+		geocode(start.value, true);
+	};
+
+	// 2. Start address geocoded --> Geocode destination address  --> route
+	var geocode = function(searchTerm, start)
+	{
+		geocoder.search(
+		{
+			searchText: searchTerm,
+			additionaldata: "Country2,true"
+		},
+		function(result) {
+			if(result.Response.View[0].Result[0].Location != null)
+			{
+				pos = result.Response.View[0].Result[0].Location.DisplayPosition;
+				address = result.Response.View[0].Result[0].Location.Address;
+			}
+			else
+			{
+				pos = result.Response.View[0].Result[0].Place.Locations[0].DisplayPosition;
+				address = result.Response.View[0].Result[0].Place.Locations[0].Address;
+			}
+
+			if(start)
+			pointA = new H.geo.Point(pos.Latitude, pos.Longitude);
+			else
+			pointB = new H.geo.Point(pos.Latitude, pos.Longitude);
+
+			line1 = pos.Latitude + " " + pos.Longitude;
+			line2 = address.Label ? address.Label : "";
+
+			marker = new H.map.Marker(start ? pointA : pointB,
+			{
+				icon: createIconMarker(line1, line2)
+			});
+
+			group.addObject(marker);
+
+			if(start) {
+				// Geocode destination.
+				geocode(dest.value, false);
+				} else {
+
+				/// Calculate route.
+				calculateRouteDirect(pointA, pointB);
+			}
+		},
+		function(error) {
+			alert(error);
+		}
+		);
+	}
+
+	// 3. Route calculation start
+	var calculateRouteDirect = function(start, destination){
+		// do JSONP here
+		urlRoutingReq = "https://route.api.here.com/routing/7.2/calculateroute.json?jsonAttributes=1&waypoint0="+ start.lat + "," + start.lng + "&waypoint1="+destination.lat+","+ destination.lng +
+		"&alternatives=1&departure=2014-04-01T15%3A04%3A34.698Z&requestid=sampleRequest&language=en-US&representation=overview&routeattributes=sc,sm,sh,bb,lg,no,shape&legattributes=li&linkattributes=sh,nl,fc,le&instructionformat=html&mode=fastest;car;traffic:enabled&app_id="+app_id+"&app_code="+app_code+"&jsoncallback=gotRoutingResponse";
+
+		script = document.createElement("script");
+		script.src = urlRoutingReq;
+		document.body.appendChild(script);
+
+	}
+	
+	var styles = new Array();
+	styles.push({ lineWidth: 3, strokeColor: "#000000", lineJoin: "round" });
+	styles.push({ lineWidth: 3, strokeColor: "#990000", lineJoin: "round" });
+	styles.push({ lineWidth: 3, strokeColor: "#009900", lineJoin: "round" });
+
+	// parse the routing response
+	var gotRoutingResponse = function (respJsonRouteObj)
+	{
+		if (respJsonRouteObj.error != undefined)
+		{
+			alert (respJsonRouteObj.error);
+			feedbackTxt.innerHTML = respJsonRouteObj.error;
+			return;
+		}
+		var distanceFC1 = 0, 
+			distanceFC2 = 0,
+			distanceFC1AndFC2 = 0,
+			distanceComplete = 0;
+			
+		var links = respJsonRouteObj.response.route[0].leg[0].link;
+		for (var i = 0; i < links.length; i++)	{
+			var strip = new H.geo.Strip(),			
+				shape = links[i].shape;
+				
+			for (var j = 0; j < shape.length; j++)
+			{
+				var point = shape[j].split(",");
+				strip.pushLatLngAlt(parseFloat(point[0]), parseFloat(point[1]), 0);
+			}
+			
+			var style = styles[0], 
+				length = links[i].length
+				fc = links[i].functionalClass;
+			
+			if(fc == 1)
+			{
+				distanceFC1 += length;
+				distanceFC1AndFC2 += length;
+				style = styles[fc];
+			}
+			else if(fc == 2)
+			{
+				distanceFC2 += length;
+				distanceFC1AndFC2 += length;
+				style = styles[fc];
+			}
+			distanceComplete += length;
+			
+			var polyline = new H.map.Polyline(strip, { style: style });
+			group.addObject(polyline);
+		}
+		document.getElementById("fcpanel").style.display = 'block';
+		document.getElementById("fc1").innerText = distanceFC1 / 1000 + " km";
+		document.getElementById("fc2").innerText = distanceFC2 / 1000 + " km";
+		document.getElementById("fc1andfc2").innerText = distanceFC1AndFC2 / 1000 + " km";
+		document.getElementById("complete").innerText = distanceComplete / 1000 + " km";
+	}
+		
+
+	//--- Helper - Create Start / Destination marker
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_Line;
+
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line2);
+		svgMarker = svgMarker.replace(/__width__/g, line2.length  *4 );
+		svgMarker = svgMarker.replace(/__widthAll__/g, line2.length  *4 + 80);
+
+		return new H.map.Icon(svgMarker, {
+			anchor: new H.math.Point(24, 57)
+		});
+
+	};
+</script>

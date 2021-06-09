@@ -1,0 +1,91 @@
+<% content_for :title, "Map Tools" %>
+<% require "digest" %>
+<div class="wrapper">
+<div id="tabs">
+<ul>
+    <li><a  href="#tabs-1">Official Release</a></li>
+    <li><a  href="#tabs-2">CI release</a></li>
+    <li><a  href="#tabs-3">Documentation</a></li>
+	<li><a  href="#tabs-4">RDF Installer</a></li>
+	<li><a  href="#tabs-5">RDF Clipper</a></li>
+  </ul>
+
+<div id="tabs-1" >
+	<p>
+<div class="subheader">Latest release on top</div>
+<ul class="list-no-style">
+    <% @maptools_version.each do |file| 
+		link = "/maptools/distributions/"
+	%>
+        <li class="hvr-overline-reveal"><%= link_to File.basename(file), link + File.basename(file) %></li>
+    <% end %>
+</ul>
+</p>
+</div>
+
+<div id="tabs-2">
+	<p>
+<div class="subheader" >Daily Continuous Integration Release, Latest release on top.<br>
+Naming Convention : Map_Tools_ci_subversion_YYYYMMDD.zip
+</div>
+<ul class="list-no-style">
+	    <% @maptools_versions_ci.each do |file| 
+			link_ci = "/maptools/ci/";
+		%>
+        <li class="hvr-overline-reveal"><%= link_to File.basename(file),link_ci + File.basename(file) %>
+
+		</li>
+    <% end %>
+</ul>
+</p>
+</div>
+
+<div id="tabs-3">
+  <p>
+    <div class="subheader" >Documentation for MapTools and Relase Notes for the latest build.</div>
+    <ul class="list-no-style">
+      <% @maptools_docs.each do |file| 
+        link_docs = "/maptools/docs/";
+        %>
+        <li class="hvr-overline-reveal"><%= link_to File.basename(file),link_docs + File.basename(file) %>
+        </li>
+      <% end %>
+   </ul>
+  </p>
+</div>
+
+<div id="tabs-4">
+  <p>
+    <div class="subheader" >RDF Installer builds.</div>
+    <ul class="list-no-style">
+      <% @rdf_installer.each do |file| 
+        link_installer = "/maptools/rdfinstaller/";
+        %>
+        <li class="hvr-overline-reveal"><%= link_to File.basename(file),link_installer + File.basename(file) %>
+        </li>
+      <% end %>
+   </ul>
+  </p>
+</div>
+
+<div id="tabs-5">
+  <p>
+    <div class="subheader" >RDF Clipper builds.</div>
+    <ul class="list-no-style">
+      <% @rdf_clipper.each do |file| 
+        link_clipper = "/maptools/rdfclipper/";
+        %>
+        <li class="hvr-overline-reveal"><%= link_to File.basename(file),link_clipper + File.basename(file) %>
+        </li>
+      <% end %>
+   </ul>
+  </p>
+</div>
+
+</div>
+</div>
+ <script>
+  $( function() {
+    $( "#tabs" ).tabs();
+  } );
+  </script>

@@ -1,0 +1,55 @@
+<% content_for :title, "Street Level Imagery" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<div>HLP Service releases which are used in this demo:</div>
+	<div id="releaseInfoTxt" style="left:0; top:0; z-index: 0;"></div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript" charset="UTF-8">
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	var platform = new H.service.Platform({
+		useHTTPS: secure,
+		app_id: app_id,
+		app_code: app_code
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+	// Configure the panorama engine
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.panorama, {
+		center: new H.geo.Point(51.500882478430874, -0.12245097197592261),
+		zoom: 20,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	//add JS API Release information
+	releaseInfoTxt.innerHTML+="JS API: 3."+ H.buildInfo().version;
+
+	//add MRS Release information
+	loadMRSVersionTxt();
+
+	window.setTimeout("enablePanorama()", 500);
+
+	enablePanorama = function()
+	{
+		map.setEngineType(H.Map.EngineType.PANORAMA);
+	}
+
+</script>

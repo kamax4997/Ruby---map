@@ -1,0 +1,80 @@
+<% content_for :title, "Accessibility Cloud Demo" %>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2019
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+			app_id: app_id,
+			app_code: app_code,
+			useHTTPS: secure
+		}),
+		defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+		currentBubble
+	;
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: new H.geo.Point(48.14123127852872, 11.594027019178185),
+		zoom: 12,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+	// setup the Streetlevel imagery
+	platform.configure(H.map.render.panorama.RenderEngine);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+	var cleService = platform.getCustomLocationService();
+
+	// create tile provider and layer that displays CLE layer
+	var provider = new mapsjs.service.extension.customLocation.TileProvider(cleService, 
+		{
+			layerId: 'ACCESSIBILITYCLOUD'
+		}, 
+		{
+			resultType: H.service.extension.TileProvider.ResultType.MARKER, 
+			min: 12
+		}
+	);
+
+	var layer = new mapsjs.map.layer.MarkerTileLayer(provider);
+	map.addLayer(layer);
+
+	map.addEventListener('tap', function(ev) {
+		var row;
+		if (ev.target !== map)
+		{
+			if(currentBubble)
+				ui.removeBubble(currentBubble);
+			var html =  '<div><p style="font-family:Arial,sans-serif; font-size:12px;">' + ev.target.getData().getCell('NAME') + '</p></div>';
+				html +=  '<div><p style="font-family:Arial,sans-serif; font-size:12px;">Wheelchair access: ' + ev.target.getData().getCell('WHEELCHAIR') + '</p></div>';
+				html +=  '<div><p style="font-family:Arial,sans-serif; font-size:12px;">' + '<a target="_blank" href="' + ev.target.getData().getCell('INFOPAGEURL') +'">Visit Info Page</a></p></div>';
+
+			var pos = map.screenToGeo(ev.currentPointer.viewportX, ev.currentPointer.viewportY);
+
+			currentBubble = new H.ui.InfoBubble(pos, { content: html });
+			ui.addBubble(currentBubble);
+		}
+	});
+
+</script>

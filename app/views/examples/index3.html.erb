@@ -1,0 +1,99 @@
+<% content_for :title, "TCS examples" %>
+<div class="content-block" style="margin-top: 49px;">
+	<div class="wrapper">
+		<div class="subheader bb" style="display: block;">
+			<p>These examples are provided by HERE Technical Customer Support to demonstrate features of the JS API and the Platform Web services.</p>
+		</div>
+		<div class="form-group">
+			<div class="search-container form-inline">
+				<select id="operator-select" class="form-control">
+					<option value="and" selected="selected">AND</option>
+					<option value="or">OR</option>
+				</select>
+				<input class="form-control" type="text" id="search" placeholder="Add text to filter results (geocoder, marker etc.)">
+			</div>
+		</div>
+	</div>
+	
+	<div class="container">
+		<% @examples_json['examples'].each_with_index do |example,index| %>
+			<div id="item<% index %>" class="hvr2-overline-reveal hvr2-overline-reveal-min-height" data-type="<%= example['description'] + example['tags'] %>">
+				<%= link_to(
+					image_tag("examples/" + example['filename'] + ".png", :class => "thumb") + example['description'],
+					image_url("/examples/v3/" + example['filename']),
+					:target => '_blank') %>
+			</div>
+		<% end %>
+</div>
+
+<script>
+	/**
+	* Searches relevant examples based on the input search text.
+	*/
+
+	function search() {
+		// Get all examples
+		var examples = $('.container div');
+
+		// Define space regexp replacement
+		var spaceReplacement = $operator.val() === 'or' ? '.*)|(.*' : '.*';
+
+		// Define regular expression pattern
+
+		var pattern = '(.*' + $.trim($search.val()).replace(/ /g, spaceReplacement) + '.*)';
+
+		// Define regular expression
+		var regExp = new RegExp(pattern, 'i');
+		
+		// For each example
+		examples.each(function(index)
+		{
+			var example = $(examples[index])[0];
+			example.classList.toggle('hide', true);
+		});
+		
+		examples.each(function(index)
+		{
+			// Retrieve example description + tags
+			var description = $(examples[index]).data('type'), example = $(examples[index])[0];
+				
+			// data-type matches if the example description cell text contains the search text
+			var matches = description.search(regExp) > -1 || description.split(' ').reverse().join(' ').search(regExp) > -1;
+
+			if(matches)
+				example.classList.remove('hide');
+		});
+	};
+	
+	/*
+	var delay = (function(){
+		var timer = 0;
+			return function(callback, ms){
+				clearTimeout (timer);
+				timer = setTimeout(callback, ms);
+			};
+	})();*/
+
+	var $search;
+	// Get the search input as a JQuery object
+	$search = $('#search');
+	$operator = $('#operator-select');
+
+
+	// Add listeners
+	/*$('input').keyup(function() {
+		delay(function() { search(); }, 1000 );
+	});
+	$operator.on('change', search);*/
+
+	var
+	  streamKey = Kefir.fromEvents($('input'), 'keyup'),
+	  streamOperatorOr = Kefir.fromEvents($operator, 'change'),
+	  mergedStreams = Kefir.merge([streamKey, streamOperatorOr]);
+	
+	mergedStreams.onValue(search);
+
+
+	// Focus on the search input
+	$search.focus();
+</script>

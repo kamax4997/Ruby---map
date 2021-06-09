@@ -1,0 +1,1068 @@
+<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-core.js" ></script>
+<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script> 
+<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-clustering.js"></script>
+<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-data.js"></script>
+<%= javascript_include_tag "center-utils.js" %>
+<%= javascript_include_tag "pde-layer-provider.js" %>
+<%= javascript_include_tag "custom-location-extension-2.js" %>
+<%= javascript_include_tag "jszip.min.js" %>
+<%= javascript_include_tag "wellknown.js" %>
+
+
+<% content_for :title, "CLE modify EV Charging POI status" %>
+<style>
+  li {
+    list-style-type: square;
+    font-size: medium;
+  }
+
+  a.speed-record {
+    color: #00ACDC;
+    text-decoration: underline;
+  }
+
+  .speed-record {
+    font-size: small;
+    padding: 0.1em;
+  }
+
+  table.speed-record td {
+    padding: 0.4em;
+    border: 1px solid white
+  }
+
+</style>
+<div class="ctrl-panel">
+  <span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+
+  <p>Demonstrates the <b>real time update of CLE content</b> and its usage. Static PDE EV Charging POI are loaded and their free connectors status is stored/updated in CLE and visualized.</p>
+  <p>After starting the simulation, several electic vehicles are driving from destination to destination. During driving their battery empties. At a charge of 50% the vehicles search for EV charging
+    <b>POIs along their isoline route</b> to re-charge. They select a EV POI and <b>reserve a free connector via CLE modify functionality</b>. After re-charging the vehicles continue towards their original destination and release the blocked
+    EV POI connectior again via CLE modify functionality.</p>
+  <p>Legend Vehicle:</br>
+    <div style="background-color: darkgray;">
+      <span style="font-weight: normal;color:#4CFF3F;">Driving Vehicle</span>: Battery empties in <span style="font-weight: normal;color:#FBFF11;">yellow</span></br>
+      <span style="font-weight: normal;color:#FBFF11;">Yellow Battery with</span> <span style="font-weight: normal;color:#39FE7F;">'?'</span>: Vehicle searches for EV POI along the isoline route</br>
+      <span style="font-weight: normal;color:#FF4B14;">Red Battery</span>: Electric capacity is getting low</br>
+      <span style="font-weight: normal;color:#477EFF;">Blue Vehicle</span>: Vehicle is re-charging</br>
+     </div>
+  </p>
+  <p>Legend Route:</br>
+    <div style="background-color: darkgray;">
+      <span style="font-weight: normal;color:#124191;">Blue</span>: Vehicle driving normal towards destination</br>
+      <span style="font-weight: normal;color:#FBFF11;">Yellow</span>: Vehicle detours from route to drive towards reserved connector</br>
+    </div>
+  </p>
+  <p>Legend Marker:</br>
+    <div style="background-color: darkgray;">
+      <span style="font-weight: normal;color:#00FF00;">Green Marker with number</span>: Electric Charging POI with their maximum free connectors</br>
+      <span style="font-weight: normal;color:#FF6A00;">Orange Marker</span>: Vehicle reserved a free connector at this station</br>
+      <span style="font-weight: normal;color:#FF0000;">Red Marker</span>: All connectors are reserved, no free connector available.</p>
+    </div>
+  </p>
+  <div class="form-group" id="clefields" >
+      <label class="control-label col-sm-4" for="layerId">Custom Layer Id:</label>
+      <div class="col-sm-8">
+          <input class="form-control input-wide" type="text" value="JSEVDEMO17" id="layerId">
+      </div>
+      <label class="control-label col-sm-4" for="cleendpoint">CRE Endpoint:</label>
+      <div class="col-sm-8">
+          <input class="form-control input-wide" type="text" id="cleendpoint" value="https://cle.api.here.com"/>
+      </div>
+      <label class="control-label col-sm-4" for="appId">app_id</label>
+      <div class="col-sm-8">
+          <input class="form-control input-wide" type="text" id="appId" value=""/>
+      </div>
+      <label class="control-label col-sm-4" for="appCode">app_code</label>
+      <div class="col-sm-8">
+          <input class="form-control input-wide" type="text" id="appCode" value=""/>
+      </div>
+
+    <label class="control-label col-sm-4" for="startButton">No EV POIs/Changed LayerId?</label>
+    <div class="col-sm-8">
+      <input class="btn btn-default btn-sm" type="button" id="startButton" value="Refresh Demo Layer" onclick="refreshDemoLayer()">
+    </div>
+    <label class="control-label col-sm-4" for="simulateRouteButton">Show EV Vehicles:</label>
+    <div class="col-sm-8">
+      <input type="submit" id="simulateRouteButton" value="Start Vehicle Simulation" class="btn btn-default btn-sm" onClick="startStopVehicleSimulation();" disabled>
+    </div>
+  </div>
+  <p><input type=hidden id="pdeendpoint" value="https://pde.api.here.com" autocomplete="off"/></p>
+  
+
+  
+
+ <div class="form-group">
+      <label for="logArea">Request/Response Log:</label><input class="btn btn-default btn-xs" type="button" id="startButton" value="Clear" onclick="clearLog()">
+      <textarea class="form-control" id="logArea" cols="52" rows="10" autocomplete="off"></textarea>
+  </div>
+</div>
+
+<div id="mapContainer"></div>
+<div id="pageblock"></div>
+<div id="spinner"></div>
+<script type="text/javascript">
+
+  (function setValuesFromUrl() {
+    var indexOf = window.location.href.indexOf('?');
+    if (indexOf < 0) return;
+    var vars = window.location.href.slice(indexOf + 1).split('&');
+
+    for (var i = 0; i < vars.length; i++) {
+      nameVal = vars[i].split('=');
+      if (!nameVal[0]) continue;
+      document.getElementById(nameVal[0]).value = decodeURIComponent(nameVal[1]);
+    }
+  })();
+
+  var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+  var platform = new H.service.Platform({
+    useHTTPS: (location.protocol === 'https:') ? true : false,
+    app_id: app_id,
+    app_code: app_code
+  });
+  maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+  var greyTileLayer = platform.getMapTileService({type: 'base'}).createTileLayer('maptile', 'normal.day.grey', hidpi ? 512 : 256, 'png8', null);
+  var map = new H.Map(document.getElementById('mapContainer'), greyTileLayer, {
+    center: {lat: 52.51668, lng: 13.39921},
+    zoom: 14,
+    pixelRatio: hidpi ? 2 : 1
+  });
+  var bboxEvPoiFromPDE = new H.geo.Rect(52.56, 13.17, 52.47, 13.62);
+  var mapevents = new H.mapevents.MapEvents(map);
+  var behavior = new H.mapevents.Behavior(mapevents);
+  var ui = H.ui.UI.createDefault(map, maptypes);
+  window.addEventListener('resize', function () {
+    map.getViewPort().resize();
+  });
+  var cle = platform.ext.getCustomLocationService( document.getElementById('cleendpoint').value, 'https://maps.gfe.api.here.com/1');
+  // update POIs regularly
+  var updatePoiStatus = null;
+  var bSimulationRunning = false;
+  var logArea = document.getElementById('logArea');
+  logArea.log = function (str) {
+        logArea.value += str + '\n';
+        logArea.scrollTop = logArea.scrollHeight;
+    };    
+    logArea.delim = function () {
+        logArea.log("--------------------------------------------------");
+    };
+    logArea.strongDelim = function () {
+        logArea.log("=================================================");
+    };
+    var detailsBubble = null;
+    var infoBubbles = {};
+    var deliveryTruckIcons = [];
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat100.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat90.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat80.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat70.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat60.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat50.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat40.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat30.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat20.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat10.png'));
+    deliveryTruckIcons.push(new H.map.Icon('/assets/icons/markerTruckBat00.png'));
+    var searchEvPoiTruckIcon = new H.map.Icon('/assets/icons/markerTruckSearch.png');
+    var chargingTruckIcon = new H.map.Icon('/assets/icons/markerTruckCharging.png');
+
+  // store for all ev poi markers
+  var poiMarkers = {};
+  var vehicles = [];
+  var initialBbox =  map.getViewBounds();
+  
+  // register to delete layer on closing
+  $(document).ready(function(){
+        $(window).bind("unload", function() { 
+            console.log('Deleting CLE layer on unload.');
+            cle.deleteLayer(getCurrLayerId(), null);
+            return ""; 
+        });
+    });
+
+  // start of demo: upload EV pois from PDE to CLE
+  //refreshDemoLayer();
+
+  /**
+    Fetches all EV Charging stations from PDE for given bbox
+  */ 
+  function loadEvChargingStationsFromPde(bbox) {
+  var service = platform.getPlatformDataService();
+  var listMarkers = [];
+  var listExistingPos = [];
+  
+  // Create a search request object fir the EVCHARGING_POI layer with the bounding box of the polyline
+  var req = new mapsjs.service.extension.platformData.SearchRequest(service, bbox, [
+  {
+    layer: 'EVCHARGING_POI',
+    level: 13
+  }
+  ]);
+
+  // event listener stores Platform Data Extension data in CLE
+  req.addEventListener('data', function(ev) {
+    var table = ev.data,
+        row,
+        geometry,
+        i = table.getRowCount()
+        ;
+
+    while(i--) { 
+      row = table.getRow(i);
+      geometry = row.getCell('geometry');
+      var name = row.getCell('NAMES').substring(5);
+      poiId = row.getCell('POI_ID');
+      linkId = row.getCell("LINK_ID");
+      connectorType = row.getCell("CONNECTORTYPE").split('|');
+      
+      maxConnCount = connectorType.length; 
+      freeConnCount = maxConnCount;
+      var pos = {lat: geometry[0][0], lng: geometry[0][1]};
+      if(listExistingPos.includes(geometry[0][0]+'|'+geometry[0][1])) {
+        continue;
+      } else {
+        listExistingPos.push(geometry[0][0]+'|'+geometry[0][1]);
+      }
+      var marker = new mapsjs.map.Marker(pos, {icon: createIconMarker(freeConnCount, maxConnCount)});
+      marker.$POI_ID = poiId;
+      marker.$LINK_ID = linkId;
+      marker.$NAME = name;
+      marker.$FREE_CONNECTOR_COUNT = freeConnCount;
+      marker.$MAX_CONNECTOR_COUNT  = maxConnCount; 
+      marker.$NAME  = name; 
+      marker.addEventListener('tap', function (e) {
+        var content = '<h5>EV POI</br>' + e.target.$NAME + '</br>Free: ' + e.target.$FREE_CONNECTOR_COUNT + '</br>Max: ' + e.target.$MAX_CONNECTOR_COUNT + '</h5>';
+        if(detailsBubble !== null)
+        {
+            detailsBubble.close();
+            ui.removeBubble(detailsBubble);
+        }
+        detailsBubble = new H.ui.InfoBubble(e.target.getPosition(), {content: content});
+        ui.addBubble(detailsBubble);
+        e.stopPropagation();
+        e.preventDefault();
+      }); 
+      poiMarkers[linkId + '|' + poiId] = marker;
+      listMarkers.push(marker);
+      map.addObject(marker);
+    }
+  });
+
+  req.addEventListener('end', function() {
+  // upload pois to CLE with some extra status column
+    uploadEvChargingStationsToCle(listMarkers);
+  });
+
+  req.send();
+}
+
+/**
+  Initial upload of all EV charging stations to CLE to add dynamic content
+*/
+function uploadEvChargingStationsToCle(listEvPoiMarkers) {
+  logArea.log( 'Uploading EV POIs to CLE layer ' + getCurrLayerId() + '...' );
+  var file = [];
+  file.push('POI_ID\tLINK_ID\tFREE_CON\tMAX_CON\tNAME\twkt');
+  for(var u = 0; u < listEvPoiMarkers.length; u++) {
+    file.push('' + listEvPoiMarkers[u].$POI_ID + '\t' + listEvPoiMarkers[u].$LINK_ID + '\t' + listEvPoiMarkers[u].$FREE_CONNECTOR_COUNT + '\t' + listEvPoiMarkers[u].$MAX_CONNECTOR_COUNT + '\t' + listEvPoiMarkers[u].$NAME + '\t' + 'POINT(' + listEvPoiMarkers[u].getPosition().lng + ' ' + listEvPoiMarkers[u].getPosition().lat + ')');
+  }
+
+  var content = file.join('\n');
+  //cle.uploadLayer( getCurrLayerId(), content, true, onInitialCleUpload );
+  uploadToCLE(getCurrLayerId(), content, onInitialCleUpload, null, null, false);
+}
+
+
+function uploadToCLE(layerId, content, callback, progress){
+		var formData = new FormData();
+		var wktFile = new Blob([content], { type: 'plain/text' });
+    formData.append('file', wktFile,'multipart.wkt');
+		restAPICaller("CLE", "upload", formData, "&layer_id="+layerId, callback, null, null, progress);
+	}
+
+/**
+  Callback for initial CLE layer upload
+*/
+function onInitialCleUpload( url, resp, err ) {
+  //logArea.log( "Request:" );
+  //logArea.log( url );
+  //logArea.delim();
+  if (err) {
+      logArea.log( 'ERROR!: '+ resp.issues[0].message + '['+resp.error_id+']' );
+  } else {
+      logArea.log( 'Successfully uploaded EV POIs to CLE layer ' + getCurrLayerId() );
+      document.getElementById("simulateRouteButton").disabled = false;
+  }
+}
+
+// start vehicle simulation
+function startStopVehicleSimulation()
+{
+  if(!bSimulationRunning)
+  {
+    startRequestingEvPOIStatusFromCLELayer();
+    startVehicleSimulation();
+  }
+  else
+  {
+    stopRequestingEvPOIStatusFromCLELayer();
+    stopVehicleSimulation();
+  }
+}
+
+// Helper for ev poi update simulation start
+function startRequestingEvPOIStatusFromCLELayer()
+{
+  //start updating EV POI on map display
+  logArea.log( 'Start simulation of multiple EV Vehicles');
+  bSimulationRunning = true;
+  document.getElementById("simulateRouteButton").value = "Stop Simulation";
+  if(updatePoiStatus == null) {
+    updatePoiStatus = new PoiUpdater('asdf');
+  }
+  updatePoiStatus.isUpdating = true;
+  updatePoiStatus.update();
+}
+
+function startVehicleSimulation()
+{
+  if(vehicles.length == 0) {
+    var maxBatteryStatusForThisVehicle = 3.5;
+    // init vehicles
+    for(var i = 0; i < 2; i++) {
+    var batteryMarkers = [];
+      for(var u = 0; u < 11; u++) {
+        batteryMarkers.push(new H.map.Marker({ lat: 0, lng: 0 }, { icon: deliveryTruckIcons[u] }));
+      }
+      var searchMarker = new H.map.Marker({ lat: 0, lng: 0 }, { icon: searchEvPoiTruckIcon });
+      var chargingMarker = new H.map.Marker({ lat: 0, lng: 0 }, { icon: chargingTruckIcon });
+      var veh = new Vehicle(batteryMarkers, searchMarker, chargingMarker, maxBatteryStatusForThisVehicle, 'B-HE ' + (i + 1));
+      
+      vehicles.push(veh);
+
+      // modify the max battery status for each vehicle so that they do not stop at same time and search for EV POI
+      maxBatteryStatusForThisVehicle = maxBatteryStatusForThisVehicle - 0.2;
+      if(maxBatteryStatusForThisVehicle < 1.9) {
+        maxBatteryStatusForThisVehicle = 3.5;
+      }
+
+    }
+  }
+  // start simulation of vehicles
+  for(var u = 0; u < vehicles.length; u++) {
+    vehicles[u].isWalking = true;
+    vehicles[u].drive();
+  }
+}
+
+// Helper for  ev poi update simulation stop
+function stopRequestingEvPOIStatusFromCLELayer()
+{
+  // stop updatea of EV POI on map display
+  bSimulationRunning = false;
+  document.getElementById("simulateRouteButton").value = "Start Vehicle Simulation";
+  if(updatePoiStatus)
+  {
+    updatePoiStatus.stop();
+  }
+}
+
+function stopVehicleSimulation()
+{
+  // stop simulation
+  for(var u = 0; u < vehicles.length; u++) {
+    vehicles[u].stop();
+  }
+}
+
+//Helper create svg for EV POI
+var createIconMarker = function (freeConnCount, maxConnCount) {
+  var svgMarker = '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="36px">' +
+                  '<path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 28 13 28 C 16.3 28 19' +
+                  ' 29.3 19 31 Z" fill="#000" fill-opacity=".2"/>' +
+                  '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 19.5 3.8 21.9 L 13 31 L 22.2' +
+                  ' 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="#fff"/>' +
+                  '<path d="M 13 2.2 C 6 2.2 2.3 7.2 2.1 12.8 C 2.1 16.1 3.1 18.4 5.2 20.5 L 13 28.2 L 20.8 20.5 C' +
+                  ' 22.9 18.4 23.8 16.2 23.8 12.8 C 23.6 7.07 20 2.2 13 2.2 Z" fill="__FILLCOLOR__"/>' +
+                  '<text font-size="12" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" x="10" y="19">__NO__</text>' +
+                  '</svg>';
+
+  svgMarker = svgMarker.replace(/__NO__/g, freeConnCount);
+  if(freeConnCount == maxConnCount) {
+    svgMarker = svgMarker.replace(/__FILLCOLOR__/g, "#00FF00");
+  } else if(freeConnCount < maxConnCount && freeConnCount > 0) {
+    svgMarker = svgMarker.replace(/__FILLCOLOR__/g, "#FF6A00");
+  } else if(freeConnCount == 0) {
+    svgMarker = svgMarker.replace(/__FILLCOLOR__/g, "#FF0000");
+  } else {
+    var u = 0;
+    u++;
+  }
+
+  return new H.map.Icon(svgMarker);
+}
+
+/**
+  Generates and returns new layer id
+*/
+function getCurrLayerId() {
+  return document.getElementById('layerId').value;
+}
+
+/**
+  Refresh demo layer
+*/
+function refreshDemoLayer() {
+  // load ev pois from PDE
+  loadEvChargingStationsFromPde(bboxEvPoiFromPDE);
+}
+var items = [
+  new H.geo.Point(52.507020,13.395485),
+  new H.geo.Point(52.500933,13.363741),
+  new H.geo.Point(52.507007,13.363005),
+  new H.geo.Point(52.502266,13.388278),
+  new H.geo.Point(52.509972,13.383386),
+  new H.geo.Point(52.515208,13.396110),
+  new H.geo.Point(52.515306,13.382969),
+  new H.geo.Point(52.517090,13.387797),
+  new H.geo.Point(52.519146,13.406122),
+  new H.geo.Point(52.523672,13.400614),
+  new H.geo.Point(52.522280,13.356368),
+  new H.geo.Point(52.519356,13.340218),
+  new H.geo.Point(52.507603,13.351841),
+  new H.geo.Point(52.505853,13.386388),
+  new H.geo.Point(52.523873,13.387804)
+];
+/**
+  Generates random coordinate within set bbox
+*/
+function getRandomCoordinateWithinBbox() {
+  var point = items[Math.floor(Math.random()*items.length)];
+  return point;
+}
+
+/**
+  Clears log text
+*/
+function clearLog() {
+     logArea.value = "";
+}
+
+/**
+  Update of EV POIs status on map
+*/
+var PoiUpdater = function ()
+{
+  this.isUpdating = true;
+  var that = this;
+  this.update = function ()
+  {
+    // get CLE layer content and update marker status
+    //cle.searchAll(getCurrLayerId(), options, that.onEvPoiLayerUpdate);
+    var params = {
+			layer_id: getCurrLayerId(),
+      filter: '',
+      geom: 'none'
+		};
+		restAPICaller("CLE", "searchAll", params, null, that.onEvPoiLayerUpdate, null, null, false);
+    //searchAll(, options, );
+  };
+
+  this.onEvPoiLayerUpdate = function(resp, err) {
+    if(err == null) {
+      for(var u = 0; u < resp.geometries.length; u++) {
+        poiId = resp.geometries[u].attributes.POI_ID;
+        linkId = resp.geometries[u].attributes.LINK_ID;
+        freeConCount = resp.geometries[u].attributes.FREE_CON;
+        var marker = poiMarkers[linkId + '|' + poiId];
+        if(marker != null && marker.$FREE_CONNECTOR_COUNT != freeConCount) {
+         marker.$FREE_CONNECTOR_COUNT = freeConCount;
+         marker.setIcon(createIconMarker(freeConCount, marker.$MAX_CONNECTOR_COUNT));
+        }
+      }
+    }
+    if(that.isUpdating == true) {
+      that.timeout = setTimeout(that.update, 1000);
+    }
+  };
+
+  this.stop = function ()
+  {
+    clearTimeout(that.timeout);
+    that.isUpdating = false;
+  };
+};
+
+var Vehicle = function (batteryMarkers, searchEvPoiMarker, chargingMarker, maxBatteryCapacityMeter, veh_id)
+{
+  // markers for status display
+  this.batteryMarkers = batteryMarkers;
+  this.searchEvPoiMarker = searchEvPoiMarker;
+  this.chargingMarker = chargingMarker;
+  this.detailsBubble = null;
+  // battery status
+  this.currBatteryStatus = 0;
+  this.maxBatteryCapacityMeter = maxBatteryCapacityMeter; // in meter
+  this.currBatteryCapacityMeter = this.maxBatteryCapacityMeter;
+  this.maxDetourDistanceMeterForEvPOI = 2000; //  in meter
+
+  // id
+  this.veh_id = veh_id;
+
+  // simulation helpers
+  this.isWalking = true;  
+  this.iSimulationIsAtLinkPosition = 0;
+  this.iSimulationIsAtLinkShapePosition = 0;
+  this.markerGroup = new H.map.Group();
+  this.linkGroup = new H.map.Group();
+  this.mode = VEHICLE_MODE.CALCULATE_NEW_ROUTE;
+  map.addObject(this.linkGroup);
+  map.addObject(this.markerGroup);
+  this.charging = false;
+  // route
+  this.listLinksOnRoute = [];
+  this.posCurrPosition = null;
+  this.posFinalRouteDest = null;
+
+  var that = this;
+
+  // parse the routing response
+  this.gotNewVehicleRoute = function (resp, err)
+  {
+    if (err != undefined)
+    {
+      if(err.message.indexOf('No start link permits access') != -1 || err.message.indexOf('through traffic restric') != -1 ) {
+        that.posCurrPosition = null;
+      }
+      that.mode = VEHICLE_MODE.NO_ROUTE_FOUND;
+      that.timeout = setTimeout(that.drive, 50);
+      return;
+    }
+
+    that.parseRouteLinksFromResponse(resp, "rgba(18, 65, 145, 0.7)");    
+
+    that.mode = VEHICLE_MODE.DRIVING;
+    that.timeout = setTimeout(that.drive, 10);
+    return;
+  };
+
+  this.parseRouteLinksFromResponse = function (resp, linkColor, retainOldRoute)
+  {
+    // remove old links
+    that.listLinksOnRoute = [];
+    if(!retainOldRoute){
+      that.linkGroup.removeAll();
+    }
+
+    that.iSimulationIsAtLinkPosition = 0;
+    that.iSimulationIsAtLinkShapePosition = 0;
+
+    // create route link objects and initialize marker
+    for(var n = 0; n < resp.response.route[0].leg.length; n++) {
+      for(var m = 0; m < resp.response.route[0].leg[n].link.length; m++)
+      {
+        var strip = new H.geo.Strip(),
+        shape = resp.response.route[0].leg[n].link[m].shape,
+        i,
+        l = shape.length/2;
+
+        for(i = 0; i <= l; i+=2)
+        {
+          strip.pushPoint(new H.geo.Point(shape[i], shape[i+1]));
+          if(m == 0 && i == 0) {
+            that.batteryMarkers[that.currBatteryStatus].setPosition(new H.geo.Point(shape[i], shape[i+1]));
+            that.markerGroup.addObject(that.batteryMarkers[that.currBatteryStatus]);
+          }
+        }
+
+        var link = new H.map.Polyline(strip,{
+            style:{
+              lineWidth: 4,
+              strokeColor: linkColor,
+              lineJoin: "round"
+            }
+          });
+          link.setArrows({color:"#F00F",width:2,length:3,frequency: 4});
+          link.$linkId = resp.response.route[0].leg[n].link[m].linkId;
+          link.$linkShape = shape;
+          link.$linkExpense = resp.response.route[0].leg[n].link[m].consumption;
+          link.$linkPositionOnRoute = m;
+          //save in sequential list
+          that.listLinksOnRoute.push(link);
+
+          that.linkGroup.addObject(link);
+      }
+    }
+  };
+  this.noRouteFound = function(){
+    that.mode == VEHICLE_MODE.NO_ROUTE_FOUND;
+  };
+  this.gotNewEvPoiIsolineAlongRoute = function (resp, err)
+  {
+    if (err != undefined)
+    {
+      if(err.message.indexOf('No start link permits access') != -1 || err.message.indexOf('through traffic restric') != -1 ) {
+        that.posCurrPosition = null;
+      }
+      that.mode = VEHICLE_MODE.NO_ROUTE_FOUND;
+      that.timeout = setTimeout(that.drive, 50);
+      return;
+    }
+    var totalDistance = resp.response.route[0].summary.distance;
+    var distanceDrivenOnRoute = 0;
+    var linksOnRoute = {};
+    // save link length
+    for(var n = 0; n < resp.response.route[0].leg[0].link.length; n++) {
+      var link = new Object();
+      link.LINK_ID = resp.response.route[0].leg[0].link[n].linkId;
+      // link ids are published with direction - searchresult has them without
+      if(link.LINK_ID < 0) {
+        link.LINK_ID = link.LINK_ID *  -1;
+      }
+      distanceDrivenOnRoute = distanceDrivenOnRoute + (totalDistance / resp.response.route[0].leg[0].link.length * n); //TODO: fix after PFE-5603 is done
+      link.DISTANCE_ON_ROUTE = distanceDrivenOnRoute;
+      linksOnRoute[link.LINK_ID] = link;
+    }
+
+    var evBestFitPoi = null;
+    for(var m = 0; m < resp.response.route[0].searchResult.geometries.length; m++) {
+      var freeCon = parseInt(resp.response.route[0].searchResult.geometries[m].attributes.FREE_CON);
+      if(freeCon > 0) {
+        var evPoi = new Object();
+        evPoi.distanceToReach = resp.response.route[0].searchResult.geometries[m].distanceToReach;
+        evPoi.junctionLinkId = resp.response.route[0].searchResult.geometries[m].junctionLinkId;
+        if(linksOnRoute[evPoi.junctionLinkId] == null) {
+         continue;
+        }
+        evPoi.totalDistanceToReach = linksOnRoute[evPoi.junctionLinkId].DISTANCE_ON_ROUTE + evPoi.distanceToReach;
+        evPoi.geom = parseWKT(resp.response.route[0].searchResult.geometries[m].geometry);
+        evPoi.attributes = resp.response.route[0].searchResult.geometries[m].attributes;
+        if(evBestFitPoi == null || evBestFitPoi.totalDistanceToReach > evPoi.totalDistanceToReach) {
+          evBestFitPoi = evPoi;
+        } 
+      }
+    }
+
+    if(evBestFitPoi != null) {
+      // block connector at this EV POI
+      var changes = 'GEOMETRY_ID\tFREE_CON\r\n' + evBestFitPoi.attributes.GEOMETRY_ID + '\t' + (parseInt(freeCon) - 1);
+      logArea.log('Vehicle ' + that.veh_id + ' update CLE layer and reserve Connector @ EV POI ' + evBestFitPoi.attributes.NAME);
+      //cle.modifyLayer(getCurrLayerId(), 'update', changes, that.modifyCleLayerCallback);
+
+      that.chargingMarker.$evPoi = evBestFitPoi;
+
+      // calculate route to this EV POI
+      var params = "&jsonAttributes=1&waypoint0="+
+      that.posCurrPosition.lat + "," + that.posCurrPosition.lng + "&waypoint1=" + evBestFitPoi.geom.coordinates[1] +"," + evBestFitPoi.geom.coordinates[0] +
+      "&departure=now&routeAttributes=sh,lg&legAttributes=li&linkAttributes=length,fc&mode=fastest;" +
+      "car" + ";traffic:disabled";
+      var routeReqObj = {};
+      routeReqObj['waypoint0'] = that.posCurrPosition.lat + "," + that.posCurrPosition.lng;
+      routeReqObj['waypoint1'] = evBestFitPoi.geom.coordinates[1] +"," + evBestFitPoi.geom.coordinates[0];
+      routeReqObj.mode = 'fastest;car;traffic:disabled';
+			routeReqObj.departure = 'now';
+      routeReqObj.driver_cost='5';
+      routeReqObj.customconsumptiondetails='speed,0,1.7,10,1.4,30,1.1,50,1.0,70,1.1,100,1.2,120,1.4,140,1.8;ascent,50.0;descent,25.0';
+      //cle.calculateRoute(params, that.gotNewRerouteToEvPoiForRecharging);
+      restAPICaller("CRE", "calculateRoute", routeReqObj, null, that.gotNewRerouteToEvPoiForRecharging, that.noRouteFound, null, false);
+      return;
+    } else {
+      // vehicle runs out of battery but no EV POI nearby. Restarting simulation
+      logArea.log('Vehicle ' + that.veh_id + ' runs out of battery but no EV POI nearby. Restarting simulation.');
+      that.mode = VEHICLE_MODE.NO_ROUTE_FOUND;
+      that.timeout = setTimeout(that.drive, 50);
+      return;
+    }
+
+  };
+
+  this.gotNewRerouteToEvPoiForRecharging = function (resp, err)
+  {
+    if (err != undefined)
+    {
+      if(err.message.indexOf('No start link permits access') != -1 || err.message.indexOf('through traffic restric') != -1 ) {
+        that.posCurrPosition = null;
+      }
+      that.mode = VEHICLE_MODE.NO_ROUTE_FOUND;
+      that.timeout = setTimeout(that.drive, 50);
+      return;
+    }
+
+    that.parseRouteLinksFromResponse(resp, "rgba(255, 250, 0, 1.0)", true);
+    var content = '<h5>' + 'Taking detour for Charging' + '</h5>';
+    if(that.detailsBubble !== null)
+    {
+        that.detailsBubble.close();
+        ui.removeBubble(that.detailsBubble);
+    }
+    that.detailsBubble = new H.ui.InfoBubble(that.posCurrPosition, {content: content});
+    that.mode = VEHICLE_MODE.DRIVE_TO_CHARGING;
+    // EV POI found - driving there - change marker
+    that.batteryMarkers[that.currBatteryStatus].setPosition(that.posCurrPosition);
+    that.markerGroup.addObject(that.batteryMarkers[that.currBatteryStatus]);
+    that.markerGroup.removeObject(that.searchEvPoiMarker);
+    that.timeout = setTimeout(that.drive, 50);
+    return;
+  };
+
+  this.modifyCleLayerCallback = function (resp, err)
+  {
+    // ok
+  };
+
+  // drives along route
+  this.drive = function ()
+  {
+    if(that.isWalking == false) {
+      return;
+    }
+    /******************************************************************
+                  VEHICLE_MODE.CALCULATE_NEW_ROUTE
+    *******************************************************************/
+    if(that.mode == VEHICLE_MODE.CALCULATE_NEW_ROUTE) {
+      that.listLinksOnRoute = [];
+      that.linkGroup.removeAll();
+
+      if(that.posCurrPosition == null) {    
+         that.posCurrPosition = getRandomCoordinateWithinBbox();
+      }
+      that.posFinalRouteDest = getRandomCoordinateWithinBbox();
+
+      //logArea.log('Vehicle ' + that.veh_id + ' calculate new route to destination.');
+
+      // calculate route
+      var params = "&jsonAttributes=1&waypoint0="+
+      that.posCurrPosition.lat + "," + that.posCurrPosition.lng + "&waypoint1=" + that.posFinalRouteDest.lat +"," + that.posFinalRouteDest.lng +
+      "&departure=now&routeAttributes=sh,lg&legAttributes=li&linkAttributes=length,fc&mode=fastest;" +
+      "car" + ";traffic:disabled";
+      var routeReqObj = {};
+      routeReqObj['waypoint0'] = that.posCurrPosition.lat + "," + that.posCurrPosition.lng;
+      routeReqObj['waypoint1'] = that.posFinalRouteDest.lat +"," + that.posFinalRouteDest.lng;
+      routeReqObj.mode = 'fastest;car;traffic:disabled';
+			routeReqObj.departure = 'now';
+      routeReqObj.driver_cost='5';
+      routeReqObj.customconsumptiondetails='speed,0,1.7,10,1.4,30,1.1,50,1.0,70,1.1,100,1.2,120,1.4,140,1.8;ascent,50.0;descent,25.0';
+      //cle.calculateRoute(params, that.gotNewRerouteToEvPoiForRecharging);
+      restAPICaller("CRE", "calculateRoute", routeReqObj, null, that.gotNewVehicleRoute, that.noRouteFound, null, false);
+      //cle.calculateRoute(params, that.gotNewVehicleRoute);
+    }
+    /******************************************************************
+                  VEHICLE_MODE.CONTINUE_TOWARDS_DESTINATION
+    *******************************************************************/
+    else if(that.mode == VEHICLE_MODE.CONTINUE_TOWARDS_DESTINATION) {
+      //logArea.log('Vehicle ' + that.veh_id + ' calculate new route to destination.');
+
+      // calculate route
+      var params = "&jsonAttributes=1&waypoint0="+
+      that.posCurrPosition.lat + "," + that.posCurrPosition.lng + "&waypoint1=" + that.posFinalRouteDest.lat +"," + that.posFinalRouteDest.lng +
+      "&departure=now&routeAttributes=sh,lg&legAttributes=li&linkAttributes=length,fc&mode=fastest;" +
+      "car" + ";traffic:disabled";
+       var routeReqObj = {};
+      routeReqObj['waypoint0'] = that.posCurrPosition.lat + "," + that.posCurrPosition.lng;
+      routeReqObj['waypoint1'] = that.posFinalRouteDest.lat +"," + that.posFinalRouteDest.lng;
+      routeReqObj.mode = 'fastest;car;traffic:disabled';
+			routeReqObj.departure = 'now';
+			routeReqObj.driver_cost='5';
+      routeReqObj.customconsumptiondetails='speed,0,1.7,10,1.4,30,1.1,50,1.0,70,1.1,100,1.2,120,1.4,140,1.8;ascent,50.0;descent,25.0';
+      //cle.calculateRoute(params, that.gotNewRerouteToEvPoiForRecharging);
+      restAPICaller("CRE", "calculateRoute", routeReqObj, null, that.gotNewVehicleRoute, that.noRouteFound, null, false);
+      //cle.calculateRoute(params, that.gotNewVehicleRoute);
+    }
+    /******************************************************************
+                  VEHICLE_MODE.DRIVING or DRIVE_TO_CHARGING
+    *******************************************************************/
+    else if(that.mode == VEHICLE_MODE.DRIVING || that.mode == VEHICLE_MODE.DRIVE_TO_CHARGING) {
+      that.timeout = setTimeout(that.drive, 50);
+
+      // Get the next coordinate from the route and set the marker to this coordinate
+      var currLink = that.listLinksOnRoute[that.iSimulationIsAtLinkPosition];
+      if(currLink == null) {
+        // init not yet done
+        return;
+      }
+      var shape = currLink.$linkShape;
+      for(var i = 0; i<shape.length/2; i+=2){
+        var lat = shape[i];
+        var lon = shape[i+1];
+        that.posCurrPosition = new H.geo.Point(lat, lon);
+        that.batteryMarkers[that.currBatteryStatus].setPosition(that.posCurrPosition);
+      }
+      
+
+      if (that.iSimulationIsAtLinkPosition === that.listLinksOnRoute.length - 1) {
+        that.iSimulationIsAtLinkPosition = 0;
+        that.iSimulationIsAtLinkShapePosition = 0;
+        if(that.mode == VEHICLE_MODE.DRIVING) {
+          that.mode = VEHICLE_MODE.CALCULATE_NEW_ROUTE;
+          //logArea.log('Vehicle ' + that.veh_id + ' reached destination. Fetching new route...');
+        }
+        else if(that.mode == VEHICLE_MODE.DRIVE_TO_CHARGING) {
+         
+          // switch to re-charging mode
+          that.mode = VEHICLE_MODE.CHARGING;
+          that.chargingMarker.setPosition(that.posCurrPosition);
+          //TODO: set icon with moving truck
+          that.markerGroup.addObject(that.chargingMarker);
+          that.markerGroup.removeObject(that.batteryMarkers[that.currBatteryStatus]);
+          //logArea.log('Vehicle ' + that.veh_id + ' now recharges its batteries...');
+        }
+        return;
+      }
+
+      if(that.iSimulationIsAtLinkShapePosition > shape.length)
+      {
+        // step to next link
+        that.iSimulationIsAtLinkPosition += 1;
+        that.iSimulationIsAtLinkShapePosition = 0;
+
+        // recalculate battery power remaining and set correct marker
+        that.currBatteryCapacityMeter -= currLink.$linkExpense;
+        var batStatus = 0;
+        var capacity = that.maxBatteryCapacityMeter;
+        while (capacity - (that.maxBatteryCapacityMeter / 10) > that.currBatteryCapacityMeter) {
+          capacity -= (that.maxBatteryCapacityMeter / 10) ;
+          batStatus++;
+        }
+        if(batStatus > that.batteryMarkers.length - 1) {
+            that.mode = VEHICLE_MODE.BATTERY_EMPTY;
+            return;
+        }
+        if(that.mode != VEHICLE_MODE.DRIVE_TO_CHARGING && batStatus == 6) {
+          that.mode = VEHICLE_MODE.SEARCH_FOR_EV_POI;
+          return;
+        }
+        if(batStatus != that.currBatteryStatus) {
+          that.batteryMarkers[batStatus].setPosition(that.posCurrPosition);
+          that.markerGroup.addObject(that.batteryMarkers[batStatus]);
+          that.markerGroup.removeObject(that.batteryMarkers[that.currBatteryStatus]);
+          that.currBatteryStatus = batStatus;
+        }
+      }
+      that.iSimulationIsAtLinkShapePosition += 2;
+    } 
+    /******************************************************************
+                  VEHICLE_MODE.SEARCH_FOR_EV_POI
+    *******************************************************************/
+    else if(that.mode == VEHICLE_MODE.SEARCH_FOR_EV_POI) {
+      //logArea.log('Vehicle ' + that.veh_id + ' runs out of juice - searching for EV POI along route isoline.');
+      // change marker to indicate that vehicle searches for a EV POI
+      that.searchEvPoiMarker.setPosition(that.posCurrPosition);
+      that.markerGroup.addObject(that.searchEvPoiMarker);
+      that.markerGroup.removeObject(that.batteryMarkers[that.currBatteryStatus]);
+      // clear route to final destination cause vehicle needs to charge first
+      that.listLinksOnRoute = [];
+      //that.linkGroup.removeAll();
+      
+      var content = '<h5>' + 'Searching for EV Charging stations' + '</h5>';
+      if(that.detailsBubble !== null)
+      {
+          that.detailsBubble.close();
+          ui.removeBubble(that.detailsBubble);
+      }
+      that.detailsBubble = new H.ui.InfoBubble(that.posCurrPosition, {content: content});
+      ui.addBubble(that.detailsBubble);
+      // get ev pois along the route isoline
+      var options = {
+        max_detour_distance: that.maxDetourDistanceMeterForEvPOI,
+        waypoint0: that.posCurrPosition.lat + "," + that.posCurrPosition.lng,
+        waypoint1: that.posFinalRouteDest.lat + "," + that.posFinalRouteDest.lng,
+        geom: 'local',
+        layer_ids: getCurrLayerId()
+      };
+      restAPICaller("CLE", "searchRouteIsoline", options, null, that.gotNewEvPoiIsolineAlongRoute, that.noRouteFound, null, false);
+      //cle.searchRouteIsoline(getCurrLayerId(), options, that.gotNewEvPoiIsolineAlongRoute);
+    }
+    /******************************************************************
+                  VEHICLE_MODE.BATTERY_EMPTY
+    *******************************************************************/
+    else if(that.mode == VEHICLE_MODE.BATTERY_EMPTY) {
+      //logArea.log('Vehicle ' + that.veh_id + ' out of juice - restart simulation');
+      // reset simulation
+      that.listLinksOnRoute = [];
+      that.linkGroup.removeAll();
+      that.currBatteryCapacityMeter = that.maxBatteryCapacityMeter;
+      that.currBatteryStatus = 0;
+      that.markerGroup.removeAll();
+
+      // update reserved EV POI connector
+      if(that.chargingMarker.$evPoi != null) {
+        var evPoi = that.chargingMarker.$evPoi;
+        var newConCount = parseInt(evPoi.attributes.FREE_CON) + 1;
+        if(newConCount > parseInt(evPoi.attributes.MAX_CON)) {
+          newConCount = parseInt(evPoi.attributes.MAX_CON);
+        }
+        var changes = 'GEOMETRY_ID\tFREE_CON\r\n' + evPoi.attributes.GEOMETRY_ID + '\t' + newConCount;
+        logArea.log('Vehicle ' + that.veh_id + ' out of juice - restart simulation. Update CLE layer and releases the Connector @ EV POI ' + evPoi.attributes.NAME);
+        cle.modifyLayer(getCurrLayerId(), 'update', changes, that.modifyCleLayerCallback);
+      }
+      that.mode = VEHICLE_MODE.CALCULATE_NEW_ROUTE;
+      that.timeout = setTimeout(that.drive, 1000);
+      return;
+    }
+    /******************************************************************
+                  VEHICLE_MODE.CHARGING
+    *******************************************************************/
+    else if(that.mode == VEHICLE_MODE.CHARGING) {
+      that.timeout = setTimeout(that.drive, 100); 
+      that.listLinksOnRoute = [];
+      //that.linkGroup.removeAll();
+      if((that.currBatteryCapacityMeter + 100) < that.maxBatteryCapacityMeter) {
+        that.currBatteryCapacityMeter += 100;
+        if(!that.charging){
+          var content = '<h5>' + 'Charging...' + '</h5>';
+          if(that.detailsBubble !== null)
+          {
+              that.detailsBubble.close();
+              ui.removeBubble(that.detailsBubble);
+          }
+          that.detailsBubble = new H.ui.InfoBubble(that.posCurrPosition, {content: content});
+          ui.addBubble(that.detailsBubble);
+          that.charging = true;
+        }
+      } else if((that.maxBatteryCapacityMeter - that.currBatteryCapacityMeter) > 0) {
+         that.currBatteryCapacityMeter = that.maxBatteryCapacityMeter;
+         that.currBatteryStatus = 0;
+      } else {
+        that.detailsBubble.close();
+        ui.removeBubble(that.detailsBubble);
+        // fully charged
+        var evPoi = that.chargingMarker.$evPoi;
+        var newConCount = parseInt(evPoi.attributes.FREE_CON) + 1;
+        if(newConCount > parseInt(evPoi.attributes.MAX_CON)) {
+          newConCount = parseInt(evPoi.attributes.MAX_CON);
+        }
+        var changes = 'GEOMETRY_ID\tFREE_CON\r\n' + evPoi.attributes.GEOMETRY_ID + '\t' + newConCount;
+        logArea.log('Vehicle ' + that.veh_id + ' update CLE layer and releases the Connector @ EV POI ' + evPoi.attributes.NAME);
+        cle.modifyLayer(getCurrLayerId(), 'update', changes, that.modifyCleLayerCallback);
+        
+        that.mode = VEHICLE_MODE.CONTINUE_TOWARDS_DESTINATION;
+        that.charging = false;
+        that.batteryMarkers[that.currBatteryStatus].setPosition(that.posCurrPosition);
+        that.markerGroup.addObject(that.batteryMarkers[that.currBatteryStatus]);
+        that.markerGroup.removeObject(that.chargingMarker);
+        that.chargingMarker.$evPoi = null;
+      }
+      return;
+    }
+    /******************************************************************
+                  VEHICLE_MODE.NO_ROUTE_FOUND
+    *******************************************************************/
+    else if(that.mode == VEHICLE_MODE.NO_ROUTE_FOUND) {
+      // find next destination
+      that.mode = VEHICLE_MODE.CALCULATE_NEW_ROUTE;
+      that.timeout = setTimeout(that.drive, 100);
+    }
+  };
+
+  // stops driving
+  this.stop = function ()
+  {
+    clearTimeout(that.timeout);
+    that.isWalking = false;
+  };
+};
+
+var VEHICLE_MODE = {
+  CALCULATE_NEW_ROUTE :     {value: 0, name: "Calculate new route"}, 
+  DRIVING:                  {value: 1, name: "Driving on route"}, 
+  SEARCH_FOR_EV_POI:        {value: 2, name: "Search for EV POI"}, 
+  DRIVE_TO_CHARGING:        {value: 3, name: "Driving to EV POI"}, 
+  CHARGING:                 {value: 4, name: "Charging at EV POI"}, 
+  CONTINUE_TOWARDS_DESTINATION: {value: 5, name: "Continue driving on route"}, 
+  NO_ROUTE_FOUND :          {value: 98, name: "No route found"},
+  BATTERY_EMPTY :           {value: 99, name: "Battery empty"}
+};
+
+
+	//////////REST API CALLERS
+
+	var restHelper = {
+      CLE: {
+				hostname: document.getElementById('cleendpoint'),
+				resources: {
+					searchAll: {
+						path: '/2/search/all.json',
+						method: 'GET'
+					},
+          searchRouteIsoline: {
+						path: '/2/search/routeisoline.json',
+						method: 'GET'
+					},
+					upload: {
+						path: '/2/layers/upload.json',
+						method: 'POST'
+					}
+				}
+			},
+			CRE: {
+				hostname: document.getElementById('cleendpoint'),
+				resources: {
+					calculateRoute: {
+						path: '/2/calculateroute.json',
+						method: 'GET'
+					}
+				}
+			},
+			CRE_MULTIVEHICLE: {
+				hostname: document.getElementById('cleendpoint'),
+				resources: {
+					calculateroutemultivehicle: {
+						path: '/2/calculateroutemultivehicle.json',
+						method: 'GET'
+					}
+				}
+			}
+  };	
+
+	var restAPICaller = function(service, resource, params, queryParams, callbackOnSuccess, callbackOnFailure, metaInfo, progressShow) {
+		if(progressShow)Spinner.showSpinner();
+		var url = (restHelper[service].hostname.value)+(restHelper[service].resources[resource].path);
+		url += "?app_id="   + document.getElementById('appId').value || app_id;
+		url += "&app_code=" + document.getElementById('appCode').value ||app_code;
+    if(queryParams)url += queryParams;
+		$.ajax({
+			url: url,
+			dataType: "json",
+			async: true,
+			type: restHelper[service].resources[resource].method,
+			data: params,
+			success: function(data){
+					if(progressShow)Spinner.hideSpinner();
+					callbackOnSuccess(data, metaInfo);
+				},
+			contentType: (restHelper[service].resources[resource].method=='POST')?false:'application/json',
+			processData: (restHelper[service].resources[resource].method=='POST')?false:true,
+			method: restHelper[service].resources[resource].method,
+			error: function(xhr, status, e) {
+				if(progressShow)Spinner.hideSpinner();
+				if(service==="CRE")
+					callbackOnFailure();
+				if(service === "CRE_MULTIVEHICLE"){
+					//calculateroutemultivehicle.json returns multiple responses in the same response therefore the errors must be handled differnetly
+					callbackOnFailure();
+					return;
+				}
+				var errorObj = "";
+				if(xhr.responseJSON && xhr.responseJSON.issues){
+					errorObj = xhr.responseJSON.issues;
+				}else if(xhr.responseJSON && xhr.responseJSON.errors){
+					errorObj = xhr.responseJSON.errors;
+				}
+				var errorResp = (errorObj[0] || {
+					"message": "unknown error occured"
+				});
+				console.log(errorResp.message);
+				alert(errorResp.message);
+			}
+		});
+  };
+
+
+
+
+
+
+</script>

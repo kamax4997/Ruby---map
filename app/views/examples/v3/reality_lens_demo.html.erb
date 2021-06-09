@@ -1,0 +1,1466 @@
+<% content_for :title, "Reality Lens Demo" %>
+<%= javascript_include_tag "piexif" %>
+<%= javascript_include_tag "geographiclib" %>
+<%= javascript_include_tag "rlens-0.34.6.min" %>
+
+
+	<!-- <script type="text/javascript" src="http://54.236.88.41/v/0.34.6/rlens-0.34.6.min.js"></script> -->
+
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-core.js" ></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>	
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-clustering.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-data.js"></script>
+
+	<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css">
+
+	<!-- <link rel="shortcut icon" type="image/x-icon" href="https://tcs.ext.here.com/assets/favicon-4ed4f91c12b44375a0ceb77cc4261ff3849cc0c8929cc5029ba834244d59c1b2.ico" />  -->
+	
+<!-- 	<link rel="shortcut icon" type="image/x-icon" href="/assets/favicon-4ed4f91c12b44375a0ceb77cc4261ff3849cc0c8929cc5029ba834244d59c1b2.ico" /> -->
+	
+	<!-- <script src="https://tcs.ext.here.com/assets/application-380efa06caef3c59ba16c79abc2c8d7857b007601bcc627af02f14600a2bb207.js" data-turbolinks-track="true"></script> -->
+
+<!-- 	<link rel="stylesheet" media="screen" href="https://tcs.ext.here.com/assets/application-18942c38bfc2ce0e1f6272fdc963e364ba15aff13198ecbcacfce26b6d56f314.css" data-turbolinks-track="true" />
+ -->			
+
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+	
+	<!-- PIEXIF  -->
+	<!-- <script type="text/javascript" src="https://tcs.ext.here.com/assets/piexif-79f904f06a5d513d1bda4bf206ab3d4717718685825c83af43341f8dd95c655f.js"></script> -->
+	
+	<!-- Azimuth  -->
+
+	
+		<link rel="shortcut icon" type="image/x-icon" href="/assets/favicon-4ed4f91c12b44375a0ceb77cc4261ff3849cc0c8929cc5029ba834244d59c1b2.ico" />
+		<link rel="stylesheet" media="screen" href="/assets/application-18942c38bfc2ce0e1f6272fdc963e364ba15aff13198ecbcacfce26b6d56f314.css" data-turbolinks-track="true" />
+		<script src="/assets/application-22d20a53d9d06867935fde482ae956baadc1b44d69bf4dd8cc706e2cb114eedf.js" data-turbolinks-track="true"></script>
+		<meta name="csrf-param" content="authenticity_token" />
+		<meta name="csrf-token" content="NgvQPT8otVbQQHvxXCmXKPjlctz7NiXlN9PJneuVIU6uA3DQy/WMB//Ga2MBCzsRpoOaeQURI1wgTppkmCSvVQ==" />
+	
+	
+	
+	
+    <title>RL SDK: Capturing Snapshots</title>
+    <style>
+      body {
+        font-family: Verdana, Geneva, Arial, Helvetica, sans-serif;
+        font-size: small;
+        margin: 0;
+        overflow: hidden;
+      }
+	  
+
+	  
+    #RL_Container {
+	position: absolute;
+	overflow:hidden;
+        <!--top:50px; -->
+		left:0;
+		width: 100%; 
+		height: 100%; 
+		z-index: 0;
+	}
+	  
+      #buttons { position: absolute; top: 60px; left: 70%; }
+      #buttons > div { margin-left: -50%; }
+      #buttons button { border-radius: 5px; }
+      #button-clear { background-color: #FF4444; color: white; }
+      #buttons .selected { background-color: #00FF00; }
+	  
+	  
+	  #screenshot_buttons { position: absolute; top: 60px; left: 45%; width: 33%;}
+
+	  
+	  #snapshot_img { width:100%; height:100%}
+	  
+      #snapshot_meta { width:100%; height:100%; background-color: rgba(255, 255, 255, 0.9); }
+
+
+
+      #sideOver {
+        position: absolute;
+        bottom:10%;
+		right:3%;
+        height: 30%;
+        width: 20%;
+		z-index:300;
+
+      }
+
+ 	  #mapContainer {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+		bottom: ;
+		top: 18px;
+		border: 1px solid black;
+		box-sizing: border-box;
+		
+      }     
+  
+	  
+	  #GeocoderLocation {
+        position: absolute;
+        z-index: 1000;
+        width: 100%;
+		top: 0px;
+        bottom:;
+        color: white;
+        background-color: rgba(0,0,0,0.8);
+      }
+	  
+    </style>
+  </head>
+
+  <body>
+
+
+	<nav class="navbar navbar-default navbar-fixed-top">
+		<div class="container-fluid">
+			<div class="navbar-header">
+				<a class="navbar-brand" href="https://tcs.ext.here.com/"><img alt="HERE logo" src="https://tcs.ext.here.com/assets/logo-1033d6001cb5194131bcf94254ed04db245506946dab93e969baca612f912504.png" width="50" height="50" /></a>
+			</div>
+			<div class="header-text">HERE Reality Lens: Geotagging images</div>
+		</div>
+	</nav>
+
+	
+
+	<div id="content-padder"></div>
+	
+			<div id="content-real">
+
+		<div class="ctrl-panel">
+			<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>				
+			<p>In this example we demonstrate how </br>to use Reality Lens (RL) product for capturing geotagged images.</p>
+			
+			<hr class="separator">
+			
+			
+			
+			<div class="form-horizontal">
+			
+				<div class="form-group">
+	
+					<div class="col-sm-9">
+						<div>Geotagging (RL) locations:</div>
+						<input type='file' id="csvFileInput" onchange='handleFiles(this.files);' accept=".csv">
+					</div>
+				</div>
+			</div>	
+			<div class="form-horizontal" id="fourSideDiv">				
+				<hr class="separator">						
+				<table style="">
+					<tr>
+						<td>No. of geotagging locations:</td>
+						<td><div id="geotagNoText" style="margin:3px; float:right; margin-right:50px"></div></td>  
+					</tr>
+				</table>
+
+				<hr class="separator">	
+				<table style="">
+					<tr>
+						<td>
+							<div id="loadRLCLPoints">
+								<input name="checkbox1" type="checkbox" id="check1" onclick="loadRLCLPoints()" > Add RL Points Layer</input>
+							</div>
+						</td>
+					</tr>
+				</table>
+				
+				<hr class="separator">	
+				<table style="">
+					<tr>
+						<td><button id="moveToNextPointId" onclick="moveToNextPoint();">Move to the next point</button></td>
+						<td><button id="moveToPrevPointId" onclick="moveToPrevPoint();">Move to the previous point</button></td>  
+					</tr>
+
+				</table>	
+				<hr class="separator">						
+				<table style="">
+					<tr>
+						<td><div id="distTextId" style="margin:3px; float:right; margin-right:50px">Distance to the Next Point:</div></td>
+						<td><div id="distTextPointText" style="margin:3px; float:right; margin-right:50px"></div></td>  
+					</tr>
+				</table>				
+				<hr class="separator">
+				<table style="">
+					<tr>
+						<td><div id="takeSnapshotsText"> Take Snapshots from point:</div></td>
+						<td><div id="pointNoText" style="margin:3px; float:right; margin-right:50px"></div></td>  
+					</tr>
+				</table>	
+
+						
+				<hr class="separator">				
+				<table style="">
+					<tr>
+						<td>							
+							<button id="changeSideButtonFrontId" onclick="changeCameraSideFront();">Front</button>							
+						</td>
+						<td>							
+							<button id="changeSideButtonRightId" onclick="changeCameraSideRight();">Right</button>							
+						</td>
+						<td>							
+							<button id="changeSideButtonBackId" onclick="changeCameraSideBack();">Back</button>							
+						</td>
+						<td>
+							<button id="changeSideButtonLeftId" onclick="changeCameraSideLeft();">Left</button>	
+						</td>
+					</tr>
+				</table>	
+			
+				<hr class="separator">
+				<div class="form-horizontal" id="fileSaveNameId">
+					<table style="">
+						<tr>
+							<td>							
+								Image file name:							
+							</td>
+							<td>							
+								<input type="text" name="textSaveName" id="textSaveNameId" value="BULACAN" />						
+							</td>
+
+						</tr>
+						<tr>
+							<td>							
+								Image file start number:							
+							</td>
+							<td>								
+								<input type="number" name="startTextSaveNo" id="startTextSaveNoId" min="1" value="1" onchange="getImageStartNo(this.value)"/>						
+							</td>
+
+						</tr>
+						<tr>
+							<td>							
+								Image saved name:							
+							</td>
+							<td>							
+								<div id="imageSavedName"> </div>						
+							</td>
+
+						</tr>
+					</table>
+				</div>	
+
+			</div>
+			<div class="form-horizontal" id="takeSnapshotButtonId">	
+				<hr class="separator">
+				<button onclick="takeSnapshot();">Take Snapshot</button>	
+			</div>
+		
+
+
+		</div>	
+		
+		<div id="RL_Container" ></div>
+
+		<div id="sideOver" >
+		  <div id="mapContainer"></div>
+		  <!--<div id="location">click on the map to change the location of street level area</div>-->
+		  <div id="GeocoderLocation" ></div>
+		</div>
+
+
+
+		<div id="buttons">
+		  <div>
+			<button id="button-navigate" onclick="setModeNavigate();" class="selected">Navigate</button>
+			<button id="button-point" onclick="setModePoint();">Point</button>
+			<button id="button-polyline" onclick="setModePolyline();">Polyline</button>
+			<button id="button-perpendicular" onclick="setModePerpendicular();">Perpendicular</button>
+			<button id="button-catenary" onclick="setModeCatenary();">Catenary</button>
+			<button id="button-polygon" onclick="setModePolygon();">Polygon</button>
+			<button id="button-clear" onclick="clearAllFeatures();">Clear All</button>
+		  </div>
+		</div>
+
+
+		<div id="screenshot_buttons">
+		  <div>
+			
+			<img id="snapshot_img" style = "display: none;"><img>
+			<textarea id="snapshot_meta" style="display:none;" rows=20></textarea>
+
+		  </div>
+		</div>
+
+</div>
+
+    <script type="text/javascript">
+      // From the perspective of this SDK, there is no technical difference between
+      //  mapped, measured, or modeled features.  Measurements are derived from fea
+      // tures. Features constructed through the Viewer are mapped against server r
+      // esident geometry. Mapped points can be supplemented with user data for the
+      //  purpose of modelling.
+      // In order to create new features, it is required to specify both an adapter
+      //  and a layer that is provided by that adapter so that the Viewer knows wha
+      // t type of geometry to construct and where it should send the feature once 
+      // it has been constructed successfully.  The type of a layer, be it point, p
+      // olyline, polygon, perpendicular, or catenary, specifies the characteristic
+      // s of the feature addition process.
+      // The RLENS.Viewer method setInputTarget is used to construct new features i
+      // n the viewer.  When the Viewer is first instantiated, it has no input targ
+      // et, therefore it is in the default state of navigation.  When an input tar
+      // get (an adapter and layer pair) is provided, the Viewer will enter into th
+      // e feature addition state and mouse based navigation is disabled.  With an 
+      // input target specified, each click of the mouse will produce a new point, 
+      // and this point will be added to the current feature.  When the feature has
+      //  accumulated enough points to be eligible for successful completion, the f
+      // eature is either completed immediately as a result of reaching the maximum
+      //  number of points allowed for that feature, or it is left open in order to
+      //  accumulate more points as it is has no maximum capacity.  This maximum po
+      // int capacity is determined by the layer type.  Each type supported by this
+      //  SDK is demonstrated with the code below.
+      // Layers are read-only by default.  A layer must be specifically marked as e
+      // ditable via the isEditable property.
+      // Layers have an array of RLENS.Styles which are used to customize the color
+      //  and icon of features where applicable.  RLENS.Features specify the index 
+      // of a style that the parent layer contains.  Only point features are curren
+      // tly the only layer type that utilizes the icon property of styles.  All la
+      // yer types respect the color.  The first style of the layer is used when cr
+      // eating new features.
+      // Polyline, perpendicular, and catenary layer types have the ability to disp
+      // laying an infobox containing measurements via the hasInfobox property.  Th
+      // e type of infobox presented will depends on the type of the layer.  The un
+      // its of the corresponding measurements are dictated by the Viewer construct
+      // or parameter function convertMetersToString.
+      // Create a new Viewer and navigate to Paris.
+	  
+	  
+	  
+	  /*
+      var viewer = new RLENS.Viewer(document.getElementById('RL_Container'), {
+        key: '505e3bb0484d605027be'
+      });
+      
+	  */
+
+      var viewer = new RLENS.Viewer(document.getElementById('RL_Container'), {
+        key: '505e3bb0484d605027be'
+      });
+
+
+	//initialise RL location
+	viewer.setLocation('14.9520084,121.0519877')
+        .then(function (location) { 
+				console.log(location); 
+			})
+        .catch(function (error) { 
+			console.error(error); 
+	});
+
+	  
+	 // Create HERE Maps as the basemap.
+	 
+	var app_id = 'M3dIQitPopj2v8vTRcrh';
+	var app_code = 'd46oCKeBhtPTZ9Q0uNIOsQ';;
+
+
+	//console.log(filenumber);
+	var startFilenumber = 1;
+	
+	//for removing the snapshot
+	var imgSource = "";
+
+	var browsedFile ="";
+
+	var Rl_lat_Array = [];
+	var Rl_lng_Array = [];
+
+	var azimuthArray = [];
+	
+	var	geotagNoText  = document.getElementById("geotagNoText" );
+
+	var	distTextId  = document.getElementById("distTextId" );
+	
+	
+	var	distTextPointText  = document.getElementById("distTextPointText" );
+	//distTextPointText = "";
+	
+	var pointNoText = document.getElementById("pointNoText");
+	
+	var sIndex = 0;
+	var moveIndex = 0;
+	
+	var rotateManager = Object();
+	var groupRotating = new H.map.Group();
+	
+	//hidden change camera change side button
+	//var	takeSnapshotsText  = document.getElementById("takeSnapshotsText" );	
+	//takeSnapshotsText.style.visibility = "hidden";
+	
+	var fourSideDiv = document.getElementById("fourSideDiv");
+	fourSideDiv.style.visibility = "hidden";
+
+	var takeSnapshotButtonId = document.getElementById("takeSnapshotButtonId");
+	takeSnapshotButtonId.style.visibility = "hidden";
+	
+	var fileSaveNameId = document.getElementById("fileSaveNameId");
+	fileSaveNameId.style.visibility = "hidden";
+
+	
+	var clusteringLayer = "";
+	
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);    
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		useHTTPS: true,
+		app_id: app_id,
+		app_code: app_code
+	}),
+		maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+
+		group = new H.map.Group(),
+		markerGroup = new H.map.Group(),
+		loadedMarkerGroup = new H.map.Group(),
+		lineGroup = new H.map.Group(),
+		clusterGroup = new H.map.Group(),
+		// Instantiate a map in the 'map' div, set the base map to normal
+		map = new H.Map(document.getElementById('mapContainer'), maptypes.normal.map, {
+		center: new H.geo.Point(14.952708, 121.052432),
+		zoom: 13,
+		pixelRatio: hidpi ? 2 : 1
+	});	  
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	// Define a variable holding SVG mark-up that defines an icon image:
+	var svgLocationMarkup = '<svg width="37" height="37" viewBox="0 0 37 37" ' + 
+		'xmlns="http://www.w3.org/2000/svg">' +
+		'<g class="location_circle"> ' + 
+		'<path class="middle_location_stroke" stroke="black" fill="#74ED26" d="M18.6 23.6A4.605 4.605 0 0 1 14 19c0-2.536 2.064-4.6 4.6-4.6 2.536 0 4.6 2.064 4.6 4.6 0 2.536-2.064 4.6-4.6 4.6m0-13.2a8.6 8.6 0 1 0 0 17.2 8.6 8.6 0 0 0 0-17.2"></path> ' + 
+		'<path class="inner_location_stroke" stroke="black" fill="#74ED26" d="M18.6 15.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6m0-.8A4.605 4.605 0 0 0 14 19c0 2.536 2.063 4.6 4.6 4.6 2.537 0 4.6-2.064 4.6-4.6 0-2.536-2.063-4.6-4.6-4.6"></path>' + 
+		'<path class="outer_location_stroke" stroke="black" fill="#74ED26" d="M18.6 10.4a8.6 8.6 0 1 1 0 17.2 8.6 8.6 0 0 1 0-17.2m0-1C13.307 9.4 9 13.707 9 19c0 5.293 4.307 9.6 9.6 9.6 5.293 0 9.6-4.307 9.6-9.6 0-5.293-4.307-9.6-9.6-9.6"></path>' +	
+		'</g></svg>';	
+	
+
+	var svgDirectionMarkup = '<svg height="32" width="32" ' + 
+	 	'xmlns="http://www.w3.org/2000/svg">' +
+		'<polygon points="16,4 4,28 16,18 28,28" style="fill:lime;stroke:black;stroke-width:2;fill-rule:nonzero;"/>'+
+		'</svg>';	
+
+		
+	var locationMarkerIcon = new H.map.Icon(svgLocationMarkup,{
+                anchor: { x: 16, y: 16 }
+            });
+	
+	
+	var marker = new H.map.Marker({lat: 0, lng: 0}, 
+	{
+		icon: locationMarkerIcon
+	});
+			
+	
+	//draw marker circle (SVG marker + text)
+	var createSvgMarkerIcon_circle = function (text, mainColor, accentColor) {
+
+		var svg =
+		'<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">' +
+			'<g>' +
+			'<circle stroke="__MAINCOLOR__" fill="__MAINCOLOR__" cx="10" cy="10" r="10" />' +
+			'<text x="10" y="14" font-size="8pt" font-family="arial" font-weight="bold" text-anchor="middle" fill="__ACCENTCOLOR__" textContent="__TEXTCONTENT__">__TEXT__</text>' +
+			'</g>' +
+			'</svg>',
+
+		
+		svg = svg.replace(/__TEXT__/g, text)
+		svg = svg.replace(/__ACCENTCOLOR__/g, accentColor)
+		svg = svg.replace(/__MAINCOLOR__/g, mainColor);
+
+		return new H.map.DomIcon(svg,{
+                anchor: { x: 20, y: 20 }
+            });
+
+	};	
+
+	// Hook the map up to the viewer so that when the viewer transitions, the map
+	//  re-centers.
+	viewer.on('transitionStop', function (e) {
+
+		loc = e.location.geodesic;
+		latitude = loc.lat;
+		longitude = loc.lon;
+
+		var coordLat =  loc.lat;
+		var coordLon = loc.lon;
+
+		map.setCenter({lat: coordLat, lng: coordLon});
+		map.setZoom(16);
+
+		document.getElementById('GeocoderLocation').innerHTML =  coordLat.toFixed(7) + ',' + coordLon.toFixed(7);
+		//console.log("HELLLLLO");
+		
+		marker.setPosition({lat: coordLat, lng: coordLon});
+		map.addObject(marker);
+
+	});
+	
+
+ 	viewer.on('viewDirectionUpdate', function (e) {
+	
+		//loc = e.location.geodesic;
+		//latitude = loc.lat;
+		//longitude = loc.lon;
+
+		//var coordLat =  loc.lat;
+		//var coordLon = loc.lon;
+	
+		var markerDirection = viewer.getViewDirection();
+		//svgDirectionIcon.setAttribute( 'x1', coordLat );
+		//svgDirectionIcon.setAttribute( 'y1', coordLon );
+		//var svgDirectionIcon = document.getElementById("svgDirectionID");
+		
+
+	
+	});
+
+	  
+      
+      // Create an adapter to keep track of features mapped through the Viewer.  Ad
+      // d the adapter to the viewer.
+      var layersAdapter = new RLENS.AdapterLayers();
+      
+      viewer.addAdapter(layersAdapter);
+      
+      
+      // The layer type is specified as a string parameter to an RLENS.Layer when i
+      // t is instantiated.  Features have no inherent geometry type and depend on 
+      // layers to interpret the points they contain.
+      // Point layers interpret the first point of a feature as the location of a m
+      // arker.  The marker displays an icon designated by the style of the parent 
+      // layer.  If no icon is specified, then the default vertex icon will be used
+      //  and colorized by the designated color of the style.  If no color is speci
+      // fied, then it will be colorized white.  If a point layer is specified as t
+      // he input target, each point added translates to a single point feature add
+      // ed.
+      var pointLayer = new RLENS.Layer({
+        type: 'point',
+        isEditable: true,
+        styles: [
+          new RLENS.Style({
+            color: new RLENS.Color(0x00FF00)
+          })
+        ]
+      });
+      
+      
+      // Polyline layers connect all adajcent point pairs with lines.  A polyline m
+      // ust have at least two points before it is considered eligible for successf
+      // ul completion.  The polyline uses the color of the style indexed by the fe
+      // ature.  If no color is specified, the polyline will be white.
+      var polylineLayer = new RLENS.Layer({
+        type: 'polyline',
+        isEditable: true,
+        hasInfobox: true,
+        styles: [
+          new RLENS.Style({
+            color: new RLENS.Color(0xFF0000)
+          })
+        ]
+      });
+      
+      // Polygon layers connect all adajcent point pairs with lines, connect the th
+      // e first and last points with a line, and triangulate the interior laterall
+      // y.  If triangulation fails for whatever reason then only the line outline 
+      // of the polygon will be displayed.  If the polygon happens to contain the v
+      // iewpoint, the triangulation will not be rendered.  If the polygon exceeds 
+      // 40 square meters in area, the triangulation will not be rendered.  A polyg
+      // on must have at least three points if it is to be triangulated.  If a poly
+      // gon layer is set as the input target, then at least three points must be p
+      // lotted before it will be considered eligible for successful completion.  T
+      // he polygon uses the color of the style indexed by the feature.  If no colo
+      // r is specified, the polygon will be white.
+      var polygonLayer = new RLENS.Layer({
+        type: 'polygon',
+        isEditable: true,
+        styles: [
+          new RLENS.Style({
+            color: new RLENS.Color(0xFFFF00)
+          })
+        ]
+      });
+      
+      
+      // Perpendicular layers form a line between the first and second points, and 
+      // then form a line between the third point and the projection of the third p
+      // oint onto the line formed by the first and second points.  If a perpendicu
+      // lar layer is set as the input target, then exactly three points must be pl
+      // otted for successful completion.  The perpendicular uses the color of the 
+      // style indexed by the feature.  If no color is specified, the perpendicular
+      //  will be white.
+      var perpendicularLayer = new RLENS.Layer({
+        type: 'perpendicular',
+        isEditable: true,
+        hasInfobox: true,
+        styles: [
+          new RLENS.Style({
+            color: new RLENS.Color(0x00FF00)
+          })
+        ]
+      });
+      
+      // Catenary layers form a line is formed between the first and second points,
+      //  and then form a curve that follows the path of a uniformly tense cable of
+      //  a known length under uniform gravity.  Features can provide an additional
+      //  property, slack, which is added to the derived distance between the first
+      //  and second points of to produce the curve length.  If no slack property i
+      // s provided or if the catenary was just constructed, a slack of 0.1 meters 
+      // is assumed.  If a catenary layer is set as the input target, then exactly 
+      // two points must be plotted for successful completion.  The slack value of 
+      // the catenary can be adjusted in the viewer by dragging the vertex that app
+      // ears near the center of the curve.  The catenary uses the color of the sty
+      // le indexed by the feature.  If no color is specified, the catenary will be
+      //  white.  
+      var catenaryLayer = new RLENS.Layer({
+        type: 'catenary',
+        isEditable: true,
+        hasInfobox: true,
+        styles: [
+          new RLENS.Style({
+            color: new RLENS.Color(0x00FFFF)
+          })
+        ]
+      });
+      
+      // Add all of these newly created layers to the adapter.
+      layersAdapter.addLayer(pointLayer);
+      layersAdapter.addLayer(polylineLayer);
+      layersAdapter.addLayer(perpendicularLayer);
+      layersAdapter.addLayer(catenaryLayer);
+      layersAdapter.addLayer(polygonLayer);
+      
+      // Provide functions for HTML buttons to reference so the viewer method setIn
+      // putTarget can be invoked by the user.  These buttons are described in the 
+      // included HTML dump.
+      // Fixes the styles for the buttons when they are clicked.
+      function selectButton (name) {
+        var i, buttons = document.getElementsByTagName('button');
+      
+        for (i = 0; i < buttons.length; ++i) {
+          buttons[i].classList.remove('selected');
+        }
+      
+        document.getElementById('button-' + name).classList.add('selected');
+      }
+      
+      // Return to the default click to navigate user experience.
+      function setModeNavigate () {
+        viewer.setInputTarget(null);
+        selectButton('navigate');
+      }
+      
+      // Clicking in the view will now create point features on the
+      // point layer.
+      function setModePoint () {
+        viewer.setInputTarget(layersAdapter, pointLayer);
+        selectButton('point');
+      }
+      
+      // Clicking in the view will now create polyline features on the
+      // polyline layer.
+      function setModePolyline () {
+        viewer.setInputTarget(layersAdapter, polylineLayer);
+        selectButton('polyline');
+      }
+      
+      // Clicking in the view will now create perpendicular features on the
+      // perpendiuclar layer.
+      function setModePerpendicular () {
+        viewer.setInputTarget(layersAdapter, perpendicularLayer);
+        selectButton('perpendicular');
+      }
+      
+      // Clicking in the view will now create catenary features on the
+      // catenary layer.
+      function setModeCatenary () {
+        viewer.setInputTarget(layersAdapter, catenaryLayer);
+        selectButton('catenary');
+      }
+      
+      // Clicking in the view will now create polygon features on the
+      // polygon layer.
+      function setModePolygon () {
+        viewer.setInputTarget(layersAdapter, polygonLayer);
+        selectButton('polygon');
+      }
+      
+      // The current input target will be maintained, but all features will be
+      // removed from all layers in the data source.
+      function clearAllFeatures () {
+        layersAdapter.clearFeatures();
+        viewer.queryAdapters();
+		
+		
+		//document.getElementById('snapshot_img').style.display = 'none';
+		//document.getElementById('snapshot_meta').style.display = 'none';
+      }
+	  
+	//Set image start number
+	function getImageStartNo (val){
+	
+		//Incremental geotagged filename
+		var startFileSaveNumber = val;	
+		startFilenumber = parseInt(startFileSaveNumber);	
+		
+		//console.log(startFilenumber);
+		
+		return startFilenumber;
+	}
+	  
+    // Create a function, takeSnapshot, that calls the RLENS.Viewer method getSna
+    // pshot and populates an image and textarea DOM elements.
+    function takeSnapshot () {
+	  
+	  document.getElementById('snapshot_img').src = "";
+	  
+        var s = viewer.getSnapshot();
+		
+		//console.log('s.location',s.location);
+			
+       document.getElementById('snapshot_img').src = s.image;
+		
+		var snapshotSource = document.getElementById('snapshot_img').src;
+		imgSource = snapshotSource;
+		
+		//console.log(imgSource);
+		
+        //document.getElementById('snapshot_img').style.display = 'block';
+        //document.getElementById('snapshot_meta').style.display = 'block';
+        document.getElementById('snapshot_meta').textContent = JSON.stringify({
+          location: s.location,
+          viewDirection: s.viewDirection
+        }, null, '  ');
+		
+		
+		//Geotagging codes start from here
+		
+		
+		
+		//var camLat1 = ((s.location).geodesic).lat;
+		//var camLng = ((s.location).geodesic).lon;
+		//var camAlt = ((s.location).geodesic).alt;
+		
+		//console.log('camLat1= ',camLat1);
+		//console.log('camLng1= ',camLng);
+		
+		var camLat = RL_lat_Array[moveIndex];
+		var camLng = RL_lng_Array[moveIndex];
+		//var camAlt = ((s.location).geodesic).alt;
+
+		//console.log('camGeotagLat2= ',camLat);
+		//console.log('ccamGeotagLng2= ',camLng);
+		//console.log(camLat +","+camLng);
+		
+
+		ConvertDDToDMS(camLat, camLng);
+		
+		var exifObj = piexif.load(imgSource);
+		
+
+		var gps = {};
+	
+		
+		//gps[piexif.GPSIFD.GPSVersionID] = [7, 7, 7, 7];
+		//gps[piexif.GPSIFD.GPSDateStamp] = "1999:99:99 99:99:99";
+		
+		gps[piexif.GPSIFD.GPSLatitudeRef] = LatDirect;
+		gps[piexif.GPSIFD.GPSLongitudeRef] = LonDirect;
+		gps[piexif.GPSIFD.GPSLatitude] = [[LatDeg,1],[LatMin,1],[(LatSec*100),100]];
+		gps[piexif.GPSIFD.GPSLongitude] = [[LonDeg,1],[LonMin,1],[(LonSec*100),100]];
+		
+		var exifObj = {"GPS":gps};
+		
+		var exifbytes = piexif.dump(exifObj);
+		
+		var newJpeg = piexif.insert(exifbytes, imgSource)
+				
+		var exifObj1 = piexif.load(newJpeg);
+		
+		/*
+		for (var ifd in exifObj1) {
+			if (ifd == "thumbnail") {
+				continue;
+			}
+				console.log("-" + ifd);
+			for (var tag in exifObj1[ifd]) {
+				console.log("  " + piexif.TAGS[ifd][tag]["name"] + ":" + exifObj1[ifd][tag]);
+			}
+		}
+		*/
+    
+	
+	
+		//window.open(newJpeg);
+		
+		var fileSaveName = document.getElementById("textSaveNameId").value;
+
+		downloadScreenCapturedImage (newJpeg, fileSaveName, startFilenumber);
+
+		startFilenumber = startFilenumber + 1;
+	
+	}
+	
+	function downloadScreenCapturedImage (newJpeg, fileName, startFilenumber){
+
+	
+		var download = document.createElement('a');
+		//var startFilenumber = startFilenumber + 1;
+		
+		//console.log(fileName + ',' +startFilenumber);
+		
+		download.href = newJpeg;
+		download.download = fileName + startFilenumber + '.jpg';
+		document.getElementById("imageSavedName").innerHTML = fileName + startFilenumber + '.jpg';
+		download.click();	
+	
+	}
+	
+	//convert dd.mmmmm to dd mm ss
+	function ConvertDDToDMS(lat, lon){
+			if (lat<0) {
+			  LatDirect = "S";
+			}
+			else {
+			  LatDirect ="N";
+			}
+
+		  // Change to absolute value
+		  latMath = Math.abs(lat);		
+
+
+		  // Convert to Degree Minutes Seconds Representation
+		  LatDeg = Math.floor(latMath);	
+		  //LatMin = ((latMath-LatDeg)*100);
+		  LatMin = Math.floor((latMath-LatDeg)*60);
+		  LatSec =  (Math.round((((latMath - LatDeg) - (LatMin/60)) * 60 * 60) * 100) / 100 ) ;	
+		  
+		
+		
+			if (lon<0) {
+			  LonDirect = "W";
+			}
+			else {
+			  LonDirect ="E";
+			}
+
+		  // Change to absolute value
+		  lonMath = Math.abs(lon);		
+
+
+		  // Convert to Degree Minutes Seconds Representation
+		  LonDeg = Math.floor(lonMath);	
+		  //LonMin = ((lonMath-LonDeg)*100);
+		  LonMin = Math.floor((lonMath-LonDeg)*60);
+		  LonSec =  (Math.round((((lonMath - LonDeg) - (LonMin/60)) * 60 * 60) * 100) / 100 ) ;
+
+
+	}
+	
+ 
+
+
+			
+	//reading csv file
+    function handleFiles(files) {
+      // Check for the various File API support.
+      if (window.FileReader) {
+          // FileReader are supported.
+          getAsText(files[0]);
+      } else {
+          alert('FileReader are not supported in this browser.');
+      }
+    }
+
+    function getAsText(fileToRead) {
+      var reader = new FileReader();
+      // Read file into memory as UTF-8      
+      reader.readAsText(fileToRead);
+	  
+      // Handle errors load
+      reader.onload = loadHandler;
+      reader.onerror = errorHandler;
+    }
+
+    function loadHandler(event) {
+      var csv = event.target.result;
+	  
+	  browsedFile= csv;
+	  //console.log(csv);
+      processData(csv);
+	  //CSVtoArray(csv);
+    }
+
+    function processData(csv) {
+        var allTextLines = csv.split(/\r\n|\n/);
+		//console.log(allTextLines);
+        var lines = [];
+        for (var i=0; i<allTextLines.length; i++) {
+            var data = allTextLines[i].split(';');
+                var tarr = [];
+                for (var j=0; j<data.length; j++) {
+                    tarr.push(data[j]);
+                }
+                lines.push(tarr);
+        }
+      //console.log(lines);
+	  
+	  //extractXYfromCSV(lines);
+	  CSVtoArray(lines);
+	  
+    }
+
+    function errorHandler(evt) {
+      if(evt.target.error.name == "NotReadableError") {
+          alert("Canno't read file !");
+      }
+    } 
+	/*
+    function extractXYfromCSV(lines) {
+        
+        var RLPoint_XY = [];
+		console.log(lines[0]);
+        for (var i=0; i<lines.length; i++) {
+            var Point_XY = lines[i].split(';');
+                var tarr1 = [];
+                for (var j=0; j<Point_XY.length; j++) {
+                    tarr1.push(Point_XY[j]);
+					
+					console.log(tarr1);
+                }
+                //RLPoint_XY.push(Point_XY);
+        }
+      console.log(RLPoint_XY);
+    }	
+ 
+*/
+
+
+	// Return array of string values, or NULL if CSV string not well formed.
+	function CSVtoArray(text) {
+	
+		document.getElementById("geotagNoText").innerHTML = "";
+		document.getElementById("geotagNoText").innerHTML = text.length;
+		
+		var RL_lat = [];
+		var RL_lng = [];
+		
+		RL_lat_Array = [];
+		RL_lng_Array = [];
+				
+		//console.log(text);
+		//console.log(text.length);
+		for (var i=0; i<text.length; i++) {
+			var lineString = text[i].toString();
+
+			var re_valid = /^\s*(?:'[^'\\]*(?:\\[\S\s][^'\\]*)*'|"[^"\\]*(?:\\[\S\s][^"\\]*)*"|[^,'"\s\\]*(?:\s+[^,'"\s\\]+)*)\s*(?:,\s*(?:'[^'\\]*(?:\\[\S\s][^'\\]*)*'|"[^"\\]*(?:\\[\S\s][^"\\]*)*"|[^,'"\s\\]*(?:\s+[^,'"\s\\]+)*)\s*)*$/;
+			var re_value = /(?!\s*$)\s*(?:'([^'\\]*(?:\\[\S\s][^'\\]*)*)'|"([^"\\]*(?:\\[\S\s][^"\\]*)*)"|([^,'"\s\\]*(?:\s+[^,'"\s\\]+)*))\s*(?:,|$)/g;
+			// Return NULL if input string is not well formed CSV string.
+			if (!re_valid.test(lineString)) return null;
+			var a = [];                     // Initialize array to receive values.
+			lineString.replace(re_value, // "Walk" the string using replace with callback.
+				function(m0) {
+
+					// Remove backslash from \' in single quoted values.
+					if      (m0 !== undefined) a.push(Number(m0.replace(/,/g, "")));
+					// Remove backslash from \" in double quoted values.
+					//else if (m1 !== undefined) a.push(m1.replace(/\\"/g, '"'));
+					//else if (m2 !== undefined) a.push(m2.replace(/\\"/g, '"'));
+					//return ''; // Return empty string.
+				});
+			// Handle special case of empty last value.
+			//if (/,\s*$/.test(text)) a.push('');
+			//return a;
+			//console.log(a.length);
+			//console.log(a);
+			//console.log("X= "+a[1]+ "Y= "+a[2]);
+			RL_lng.push(a[1]);
+			RL_lat.push(a[2]);
+		}	
+		//console.log(RL_lat);
+		//console.log(RL_lng);	
+		//console.log(RL_lat[0]);
+		//console.log(RL_lng[0]);
+		RL_lat_Array = RL_lat;
+		RL_lng_Array = RL_lng;
+		
+		
+		if (browsedFile) {
+		//Move the viewer to the first location
+		viewer.setLocation(new RLENS.Geodesic({
+          lat: RL_lat_Array[0],
+          lon: RL_lng_Array[0]
+        })).then(function (lat,lng) {
+          
+          //map.setCenter(position);
+		  
+        }).catch(function (err) {
+          alert(err);
+        });
+		
+		} else {
+		
+			alert('Please browse a CSV file.');
+		}
+	
+
+		calculateAzimuths(RL_lat_Array,RL_lng_Array);
+		
+/*		
+		//visible change camera change side button
+		fourSideDiv.style.visibility = "visible";
+		document.getElementById("pointNoText").innerHTML = "1";
+		//takeSnapshotsText
+		//pointNoText.label
+		
+		//remove lines		
+		lineGroup.removeAll();
+		
+		//reset indexes
+		sIndex = 0;
+		moveIndex = 0;
+*/
+		
+	}; 
+	
+	
+	function calculateAzimuths(azLat,azLng){
+	
+		var geod = GeographicLib.Geodesic.WGS84;
+		var r;
+		
+		var azimuthRL = [];
+		
+		//console.log('zLat.length= ',azLat.length);
+	
+		for (i = 0; i < ((azLat.length)-1); ++i) {
+		
+			r = geod.Inverse(azLat[i], azLng[i], azLat[i+1], azLng[i+1]);
+			//console.log('r: ',r);
+			azimuthRL.push (r.azi1);
+		}
+		
+		
+	//console.log('azimuthRL=', azimuthRL);
+	
+		azimuthArray = azimuthRL;
+		
+		//visible change camera change side button
+		fourSideDiv.style.visibility = "visible";
+		//document.getElementById("pointNoText").innerHTML = "0";
+		//takeSnapshotsText
+		//pointNoText.label
+		
+		//remove lines		
+		lineGroup.removeAll();
+		
+		//make the point distance text null
+		
+		document.getElementById("distTextId").innerHTML = "Distance to the next point (m):";
+		document.getElementById("distTextPointText").innerHTML = "";
+		document.getElementById("pointNoText").innerHTML = 1;
+
+		//calculate the distance on the start point		
+		var startPointLat = RL_lat_Array[0];
+		var startPointLng = RL_lng_Array[0];
+		var secendPointLat = RL_lat_Array[1];
+		var secondtPointLng = RL_lng_Array[1];
+
+		calculateDistToNextPoint (startPointLat, startPointLng, secendPointLat, secondtPointLng);
+		
+		
+		//reset indexes
+		sIndex = 0;
+		moveIndex = 0;
+	}
+	
+
+	/************************************
+		Start Geotagging
+	************************************/
+	
+	//Front snapshot
+	function changeCameraSideFront(){
+	
+	var azimuth ="";
+		lineGroup.removeAll();
+		takeSnapshotButtonId.style.visibility = "hidden";	
+		fileSaveNameId.style.visibility = "hidden";
+		console.log('front'); 
+		//initialise RL location
+		viewer.setViewDirection(new RLENS.YawPitch({
+			yaw: azimuthArray[moveIndex] ,
+			pitch: 0
+		}))
+		.then(function (yaw,pitch) { 
+			// This function will be called if the view direction was successfully
+			// determined from the input provided.
+			var azimuth = azimuthArray[moveIndex];
+			var baseLat = RL_lat_Array[moveIndex];
+			var baseLng = RL_lng_Array[moveIndex];
+
+			takeSnapshotButtonId.style.visibility = "visible";
+			fileSaveNameId.style.visibility = "visible";
+			
+			addAzimuthToMap(baseLat, baseLng, azimuth);
+
+			console.log('Successfully setViewDirection to 0 degrees');
+		})
+		.catch(function (e) {
+			// If viewer.setViewDirection fails for some reason, this function will
+			// receive the error.
+			
+			// Log the error here.
+			console.error(e);
+		});	
+
+
+	}
+	
+	//Right snapshot
+	function changeCameraSideRight(){
+	
+	var azimuth ="";
+		lineGroup.removeAll();
+		takeSnapshotButtonId.style.visibility = "hidden";
+		fileSaveNameId.style.visibility = "hidden";
+		console.log('right'); 
+		//initialise RL location
+		viewer.setViewDirection(new RLENS.YawPitch({
+			yaw: azimuthArray[moveIndex] + 90,
+			pitch: 0
+		}))
+		.then(function (yaw,pitch) { 
+			// This function will be called if the view direction was successfully
+			// determined from the input provided.
+			var azimuth = azimuthArray[moveIndex] + 90;
+			var baseLat = RL_lat_Array[moveIndex];
+			var baseLng = RL_lng_Array[moveIndex];
+
+			takeSnapshotButtonId.style.visibility = "visible";
+			fileSaveNameId.style.visibility = "visible";
+			
+			addAzimuthToMap(baseLat, baseLng, azimuth);
+
+			console.log('Successfully setViewDirection to 0 degrees');
+		})
+		.catch(function (e) {
+			// If viewer.setViewDirection fails for some reason, this function will
+			// receive the error.
+			
+			// Log the error here.
+			console.error(e);
+		});	
+
+
+
+	}
+	
+	//Back snapshot
+	function changeCameraSideBack(){
+	
+	var azimuth ="";
+		lineGroup.removeAll();
+		takeSnapshotButtonId.style.visibility = "hidden";
+		fileSaveNameId.style.visibility = "hidden";
+		console.log('back'); 
+		//initialise RL location
+		viewer.setViewDirection(new RLENS.YawPitch({
+			yaw: azimuthArray[moveIndex] + 180,
+			pitch: 0
+		}))
+		.then(function (yaw,pitch) { 
+			// This function will be called if the view direction was successfully
+			// determined from the input provided.
+			var azimuth = azimuthArray[moveIndex] + 180;
+			var baseLat = RL_lat_Array[moveIndex];
+			var baseLng = RL_lng_Array[moveIndex];
+
+			takeSnapshotButtonId.style.visibility = "visible";
+			fileSaveNameId.style.visibility = "visible";
+			
+			addAzimuthToMap(baseLat, baseLng, azimuth);
+
+			console.log('Successfully setViewDirection to 0 degrees');
+		})
+		.catch(function (e) {
+			// If viewer.setViewDirection fails for some reason, this function will
+			// receive the error.
+			
+			// Log the error here.
+			console.error(e);
+		});	
+
+
+	}
+	
+	//Left snapshot
+	function changeCameraSideLeft(){
+		
+		var azimuth ="";
+		lineGroup.removeAll();
+		takeSnapshotButtonId.style.visibility = "hidden";
+		fileSaveNameId.style.visibility = "hidden";
+		console.log('left'); 
+		//initialise RL location
+		viewer.setViewDirection(new RLENS.YawPitch({
+			yaw: azimuthArray[moveIndex] + 270,
+			pitch: 0
+		}))
+		.then(function (yaw,pitch) { 
+			// This function will be called if the view direction was successfully
+			// determined from the input provided.
+			var azimuth = azimuthArray[moveIndex] + 270;
+			var baseLat = RL_lat_Array[moveIndex];
+			var baseLng = RL_lng_Array[moveIndex];
+
+			takeSnapshotButtonId.style.visibility = "visible";
+			fileSaveNameId.style.visibility = "visible";
+			
+			addAzimuthToMap(baseLat, baseLng, azimuth);
+
+			console.log('Successfully setViewDirection to 0 degrees');
+		})
+		.catch(function (e) {
+			// If viewer.setViewDirection fails for some reason, this function will
+			// receive the error.
+			
+			// Log the error here.
+			console.error(e);
+		});	
+		
+
+	}	
+	
+	function addAzimuthToMap(baseLat, baseLng, azimuth) {
+		
+		var geod2 = GeographicLib.Geodesic.WGS84;
+		var r2;	
+		var r2 = geod2.Direct(baseLat, baseLng, azimuth, 80);
+		var baseLat2 = r2.lat2;
+		var baseLng2 = r2.lon2;
+	
+		var strip = new H.geo.Strip();
+
+		strip.pushPoint({lat:baseLat, lng:baseLng});
+		strip.pushPoint({lat:baseLat2, lng:baseLng2});
+
+
+		lineGroup.addObject(new H.map.Polyline(
+			strip, { style: { 
+				lineWidth: 5,
+				strokeColor: '#F01D05'
+				}}
+		));
+		
+		map.addObject(lineGroup);
+		
+	}
+	
+	
+	
+	function moveToNextPoint(){
+		
+		lineGroup.removeAll();
+
+		//console.log('sIndex',sIndex);
+		sIndex = sIndex+1;
+		//moveIndex = sIndex;
+		
+		
+		
+		//console.log('sIndex',sIndex);
+		//console.log('point.length',RL_lat_Array.length);
+		
+		
+		
+		if (sIndex <= ((RL_lat_Array.length))) {	
+
+			moveIndex = sIndex;	
+			//document.getElementById("pointNoText").innerHTML = moveIndex + 1;
+			
+			//Move the viewer to the next location
+			viewer.setLocation(new RLENS.Geodesic({
+			  lat: RL_lat_Array[moveIndex],
+			  lon: RL_lng_Array[moveIndex]
+			})).then(function (lat,lng) {
+			  
+				//map.setCenter(position);
+			  	var currentPointLat = RL_lat_Array[moveIndex];
+				var currentPointLng = RL_lng_Array[moveIndex];
+				var nextPointLat = RL_lat_Array[moveIndex+1];
+				var nextPointLng = RL_lng_Array[moveIndex+1];
+		
+				//console.log (currentPointLat, currentPointLng, nextPointLat, nextPointLng);
+				
+				calculateDistToNextPoint (currentPointLat, currentPointLng, nextPointLat, nextPointLng);			
+
+				document.getElementById("pointNoText").innerHTML = moveIndex+1;
+		  
+			  
+			}).catch(function (err) {
+			  alert(err);
+			});		
+		} else {
+		
+			alert("This is the last point!");
+		}
+		
+
+	
+	}
+	
+	function moveToPrevPoint(){
+		
+		lineGroup.removeAll();
+
+		//console.log('sIndex',sIndex);
+		sIndex = sIndex-1;
+		//moveIndex = sIndex;
+		
+		
+		
+		//console.log('sIndex',sIndex);
+		//console.log('point.length',RL_lat_Array.length);
+		
+		
+		
+		if (sIndex > 0) {	
+
+			moveIndex = sIndex;	
+			//document.getElementById("pointNoText").innerHTML = moveIndex - 1;
+			
+			//Move the viewer to the next location
+			viewer.setLocation(new RLENS.Geodesic({
+			  lat: RL_lat_Array[moveIndex],
+			  lon: RL_lng_Array[moveIndex]
+			})).then(function (lat,lng) {
+			  
+				//map.setCenter(position);
+				
+			  	var currentPointLat = RL_lat_Array[moveIndex];
+				var currentPointLng = RL_lng_Array[moveIndex];
+				var prePointLat = RL_lat_Array[moveIndex-1];
+				var prePointLng = RL_lng_Array[moveIndex-1];
+				
+				//console.log (currentPointLat, currentPointLng, nextPointLat, nexttPointLng);
+		
+				calculateDistToPreviousPoint (currentPointLat, currentPointLng, prePointLat, prePointLng);
+				
+				document.getElementById("pointNoText").innerHTML = moveIndex;
+			  
+			}).catch(function (err) {
+			  alert(err);
+			});		
+		} else {
+		
+			alert("This is the first point!");
+		}
+		
+	
+	}
+	
+	// Function calculating distance between points
+	function calculateDistToNextPoint (cpLat, cpLng, ppLat, ppLng){
+	
+	
+		var geod3 = GeographicLib.Geodesic.WGS84;
+		var r3;	
+		var r3 = geod3.Inverse(cpLat, cpLng, ppLat, ppLng);
+		//console.log(r3);
+		var cp_np_dist = (r3.s12).toFixed(2);
+		
+		
+	  //var cp_np_dist_round = cp_np_dist.toFixed(3);
+	  document.getElementById("distTextId").innerHTML = "Distance to the next point (m):";
+		document.getElementById("distTextPointText").innerHTML = cp_np_dist;
+	
+	}
+	
+
+	// Function calculating distance between points
+	function calculateDistToPreviousPoint (cpLat, cpLng, npLat, npLng){
+	
+	
+		var geod3 = GeographicLib.Geodesic.WGS84;
+		var r3;	
+		var r3 = geod3.Inverse(cpLat, cpLng, npLat, npLng);
+		//console.log(r3);
+		var cp_np_dist = (r3.s12).toFixed(2);
+		
+		
+	  //var cp_np_dist_round = cp_np_dist.toFixed(3);
+		document.getElementById("distTextId").innerHTML = "Distance to the previous point (m):";
+		document.getElementById("distTextPointText").innerHTML = cp_np_dist;
+	
+	}
+
+	
+ 		// Function loading browsed data
+		function loadRLCLPoints(){
+
+			map.removeLayer(clusteringLayer);		
+		
+			//Close open infoBubbles				
+			var displayLoadedRLPoints;
+			displayLoadedRLPoints= document.getElementById("check1").checked;
+			
+			if (displayLoadedRLPoints == true){
+
+				startClustering(map, RL_lat_Array, RL_lng_Array);
+				
+			} else if (displayLoadedRLPoints == false){
+				// Remove layer
+				map.removeLayer(clusteringLayer);
+				
+			}
+
+		};	
+
+		
+		function startClustering(map, RL_lat_Array, RL_lng_Array) {
+			// First we need to create an array of DataPoint objects,
+			// for the ClusterProvider
+		  
+			var dataPoints = [];
+		  
+		  
+			for (var i = 0; i < RL_lat_Array.length; i++){
+		  
+				dataPoints.push(new H.clustering.DataPoint(RL_lat_Array[i],RL_lng_Array[i]));
+			}
+
+
+			// Create a clustering provider with custom options for clusterizing the input
+			var clusteredDataProvider = new H.clustering.Provider(dataPoints, {
+				//min: ,
+				//max: ,
+				clusteringOptions: {
+					// Maximum radius of the neighbourhood
+					eps: 32,
+					// minimum weight of points required to form a cluster
+					minWeight: 2
+				}
+			});
+
+			// Create a layer tha will consume objects from our clustering provider
+			var clusteringLayer = new H.map.layer.ObjectLayer(clusteredDataProvider);
+
+			// To make objects from clustering provder visible,
+			// we need to add our layer to the map
+			
+			//clusterGroup.addLayer(clusteringLayer);
+			map.addLayer(clusteringLayer);
+		}		
+	
+    </script>

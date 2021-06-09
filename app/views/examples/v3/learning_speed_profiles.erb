@@ -1,0 +1,734 @@
+<%= javascript_include_tag "jszip.min.js" %>
+
+<% content_for :title, "Compare speed profiles" %>
+
+<div class="ctrl-panel">
+<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+<h5>Comparing ETA times with/without learning speed profiles</h5>
+<ul>
+  <li>Drag & drop trace file for speed profile learning (GPX) into <b>Input trace</b> box</li>
+  <li>Uploading the trace file, takes the first and the last point for routing </li>
+  <li>Add Waypoints for routing by directly clicking onto the map </li>
+</ul>
+<h5>Server URL</h5>
+<input type="text" id="cleUrl" value="set me" autocomplete="off" class="form-control">
+
+</br>
+<div class="form-inline">
+	<div class="form-group">
+		<label class="control-label" for="learn_id_eta">Speed Profile Learning id:</label>
+		<input class="form-control" type="text" id="learn_id_eta" value="abcd999" size="20" autocomplete="off">
+	</div>
+</div>	
+</br>
+<h5>1. Submit trace file for learning</h5>
+<label>Samples:</label>
+<input id="example1" class="btn btn-default btn-sm" type="button" value="Zurich - Frankurt(GPX)" onclick="loadFromFile('public_car_zurich_frankfurt_no_traffic.gpx');"/>	
+<input id="example2" class="btn btn-default btn-sm" type="button" value="Bielefeld - Lübbecke(GPX)" onclick="loadFromFile('public_car_bielefeld_luebbecke.gpx');"/></br>
+<label for="tracetextarea">Trace file:</label>
+<textarea id="tracetextarea" class="form-control" rows="5" placeholder="Drag & drop trace file here"></textarea>
+<div>
+	<input id="submittracebutton" class="btn btn-default btn-sm" type="button" onclick="submitTrace()" value="Submit trace"/>
+	<label class="control-label" id="msgAfterTraceSubmit"></label> 
+</div>
+
+</br>
+<style>
+	.appCreds {
+		width: 50%;
+	}
+</style>
+<h5>Speed Profile: </h5>
+<div>
+<table id="matrixTable" style="height:140px">
+<tr><td></td><td style="font-weight:bold">SC1</td><td style="font-weight:bold">SC2</td><td style="font-weight:bold">SC3</td><td style="font-weight:bold">SC4</td>
+<td style="font-weight:bold">SC5</td><td style="font-weight:bold">SC6</td><td style="font-weight:bold">SC7</td><td style="font-weight:bold">SC8</td></tr>
+<tr><td style="font-weight:bold">FC1</td>
+<td id="cell00"></td><td id="cell01"></td><td id="cell02"></td>
+<td id="cell03"></td><td id="cell04"></td><td id="cell05"></td>
+<td id="cell06"></td><td id="cell07"></td></tr>
+<tr><td style="font-weight:bold">FC2</td> 
+<td id="cell10"></td><td id="cell11"></td><td id="cell12"></td>
+<td id="cell13"></td><td id="cell14"></td><td id="cell15"></td>
+<td id="cell16"></td><td id="cell17"></td></tr>
+<tr><td style="font-weight:bold">FC3</td>
+<td id="cell20"></td><td id="cell21"></td><td id="cell22"></td>
+<td id="cell23"></td><td id="cell24"></td><td id="cell25"></td>
+<td id="cell26"></td><td id="cell27"></td></tr>
+<tr><td style="font-weight:bold">FC4</td>
+<td id="cell30"></td><td id="cell31"></td><td id="cell32"></td>
+<td id="cell33"></td><td id="cell34"></td><td id="cell35"></td>
+<td id="cell36"></td><td id="cell37"></td></tr>
+<tr><td style="font-weight:bold">FC5</td>
+<td id="cell40"></td><td id="cell41"></td><td id="cell42"></td>
+<td id="cell43"></td><td id="cell44"></td><td id="cell45"></td>
+<td id="cell46"></td><td id="cell47"></td></tr>
+<tr><td style="font-weight:bold">FC6</td>
+<td id="cell50"></td><td id="cell51"></td><td id="cell52"></td>
+<td id="cell53"></td><td id="cell54"></td><td id="cell55"></td>
+<td id="cell56"></td><td id="cell57"></td></tr>
+</table>
+</div>
+
+<div>
+	<div>
+		<label>Compare with:</label>
+		<label><input type="radio" id="radionButtonCompareWithPrevious" name="comparison" value="previous" onclick="comparisonTypeChanged(this);" checked>previous values</label>
+		<label id="defaultLabel"><input type="radio" name="comparison" value="default" onclick="comparisonTypeChanged(this);">default matrix</label>    
+	</div>
+</div>
+
+
+</br>
+<h5>2. Verify ETA learning by routing on it</h5>
+<label for="waypointstextarea">Waypoints:</label>	
+<textarea id="waypointstextarea" class="form-control" rows="5" placeholder="Right-click into map to add way points"></textarea>
+<input class="btn btn-default btn-sm" type="button" value="Reset" onclick="resetAll();"/>
+<input id="routebutton" class="btn btn-default btn-sm" type="button" onclick="route()" value="Route"/>
+
+</br><div id="etaarea" style="height:30px;font-weight:bold;font-size:13px">ETA times:</div>
+</div>
+
+			<div id="mapContainer"></div>
+			
+			<script type="text/javascript">
+
+			// author wobecker (C) HERE 2014 - 2018
+			var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+			var secure = (location.protocol === 'https:') ? true : false; // check if the site was loaded via secure connection
+			var oldMatrix = [];
+			var previousMatrix = [];
+			var highLightedLinks = [];
+			var selectedLink;
+			var learnedSpeedFcCat;
+			var highLightedCell;
+			var selectedCell;
+			var previousLearnedSpeedFcCat;
+			var defaultmatrices = {
+					'car' : '114,113,95,81,70,56,35,10;114,100,80,75,65,46,35,10;108,90,74,70,60,40,35,10;60,60,60,60,57,34,30,10;50,48,46,42,39,22,19,10;10,10,10,10,10,10,10,10',
+					'truck':'98,97,90,73,52,33,15,10;97,93,78,73,52,32,14,10;93,90,72,70,51,31,13,10;50,50,50,50,47,30,12,10;30,30,30,30,19,18,11,10;10,10,10,10,10,10,10,10'	
+			};
+			var HIGHLIGHT_LINK_STYLE = {lineWidth: 12, strokeColor: '#48dad0', lineJoin: 'round'};
+			var NORMAL_LINK_STYLE = {lineWidth: 8, strokeColor: 'rgba(18, 65, 145, 0.7)', lineJoin: 'round'};
+			var HOVER_LINK_STYLE = {lineWidth: 12, strokeColor: '#bbbb00', lineJoin: 'round'};
+
+			var mapContainer = document.getElementById('mapContainer');	
+			var platform = new H.service.Platform({	app_code: app_code,	app_id: app_id,	useHTTPS: secure });
+			var	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+			var	map = new H.Map(mapContainer, maptypes.normal.map, { center: new H.geo.Point(52.11, 0.68), zoom: 5 });
+			var zoomToResult = true;
+			var etaTime = 0;
+			var breakTime = 0;
+			var identifiedVehicleFromRMEResponse = "";
+
+			document.getElementById('cleUrl').setAttribute('value', "https://cle.api.here.com/2/calculateroute.json?mode=fastest;car;traffic:disabled&app_id=" + app_id_cors + "&app_code=" + app_code_cors);
+	
+			map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width()); // Do not draw underneath control panel
+
+			new H.mapevents.Behavior(new H.mapevents.MapEvents(map)); // add behavior control
+			var ui = H.ui.UI.createDefault(map, maptypes); // add UI
+
+			platform.configure(H.map.render.panorama.RenderEngine); // setup the Streetlevel imagery
+			window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+			var	objContainer = new H.map.Group();
+			var	tracePointContainer = new H.map.Group();
+			var custom_app_id=   getUrlParameter( 'app_id' );
+			var custom_app_code= getUrlParameter( 'app_code' );
+			
+			if( custom_app_id !== null && custom_app_code !== null )
+			{
+				app_id = custom_app_id;
+				app_code = custom_app_code;
+				document.getElementById("endpointDetails").style.display= "table-row";
+			}
+
+			// add click event handler on map object group which holds all route links
+			objContainer.addEventListener('tap', function(evt){
+				// clear previous selected link
+				if(evt.target.getData()){
+					clearCurrentColors();
+					
+					selectedLink = evt.target;
+					selectedLink.setStyle(HOVER_LINK_STYLE);
+					
+					var fc = parseInt(selectedLink.getData().functionClass);
+					var sc = parseInt(selectedLink.getData().speedCategory);
+					var tableCell = document.getElementById("cell" + (fc-1) + (sc-1));
+					
+					tableCell.style.backgroundColor = "#bbbb00";
+					highLightedCell = tableCell;
+				}
+			});
+
+			// add click event handler into matrix table cells
+			var addCellClickHandler = function(){
+				var table = document.getElementById("matrixTable");
+				var rows = table.getElementsByTagName("tr");
+				for (i = 1; i < rows.length; i++) {
+					var currentRow = table.rows[i];
+					var cells = currentRow.getElementsByTagName("td")
+					for(j = 1; j < cells.length; j++){
+						var getClickHandler = function(i,j){
+							return function() {
+								if(objContainer.getChildCount() == 0) return;
+								var clickedCell = document.getElementById("cell" + (i-1) + (j-1));
+								if(clickedCell.innerHTML){
+									clearCurrentColors();
+									clickedCell.style.backgroundColor = "#48dad0";
+									selectedCell = clickedCell;
+									objContainer.getObjects().filter(obj => {
+																if(obj.getData() && obj.getData().functionClass && obj.getData().speedCategory)
+																	return parseInt(obj.getData().functionClass) === i && parseInt(obj.getData().speedCategory) === j;
+																else
+																	return false;
+															}).forEach(obj => {
+																	obj.setStyle(HIGHLIGHT_LINK_STYLE);
+																	highLightedLinks.push(obj);
+															});
+								}
+							};
+						}
+						cells[j].onclick = getClickHandler(i,j);
+					}
+				}
+			}();
+
+			// clear color of selected link/cell and highlighted cell/links
+			var clearCurrentColors = function(){
+				if(selectedLink)selectedLink.setStyle(NORMAL_LINK_STYLE);
+				if(selectedCell)selectedCell.style.backgroundColor = "";
+				if(highLightedCell)highLightedCell.style.backgroundColor = "";
+				if(highLightedLinks.length != 0){
+					highLightedLinks.forEach(link => {
+						link.setStyle(NORMAL_LINK_STYLE);
+					})
+					highLightedLinks = [];
+				}
+			}
+
+			var submitTrace = function () {
+				reset();
+				identifiedVehicleFromRMEResponse = ""; //setting it to empty so that the identified vehicle can be assigned once RME response is received
+				// if there is an app_id specified in the URL then use it, otherwise use the default
+				var url = document.getElementById('cleUrl').value;
+				//verify if the url is present or not
+				if (!url){
+					alert('Please enter a valid server url');
+					return;
+				}
+				var appIdRegEx= /[\?&]app_id=/i;
+				var appCodeRegEx= /[\?&]app_code=/i;
+				if( url.search( appIdRegEx ) === -1 && url.search( appCodeRegEx ) === -1 ) {
+					if( ! url.endsWith( "&" ) ) url= url.concat( "&" );
+					url= url.concat( "app_id=" + app_id + "&app_code=" + app_code );                
+				}
+				url += "&routeMatch=1&routeAttributes=speedProfile&algopts=createSpeedCatFc"; //adding param to create the matrix
+
+				//verifying if the mode parameter is specified or not
+				var modeParamRegEx= /[\?&]mode=/i;
+				if( url.search( modeParamRegEx ) === -1){
+					alert('Server Url is missing the \'mode\' parmater. For example., &mode=fastest;car;traffic:disabled');
+					return;
+				}
+
+				if( ( url.search( appIdRegEx ) >= 0 && url.search( appCodeRegEx ) < 0 ) || ( url.search( appIdRegEx ) < 0 && url.search( appCodeRegEx ) >= 0 ) ) {
+					alert('If you provide credentials in the RME URL field, please provide both app_id AND app_code.');                
+					return;
+				}
+				if (document.getElementById('learn_id_eta').value){
+					url += "&learnIdSpeed=" + document.getElementById('learn_id_eta').value;
+				} 
+				var fileContent=document.getElementById('tracetextarea').value;
+				var rmeFile = new Blob([fileContent], { type: 'plain/text' });
+				// if there is an app_id specified in the URL then use it, otherwise use the default
+				$.ajax({
+					url: url,
+					dataType: "json",
+					async: true,
+					type: 'post',
+					data: rmeFile,
+					processData: false,
+					contentType: "application/octet-stream",
+					success: function(data) {
+						populateWaypointsAndExtractIdentifiedVehicleFromRmeResponse(data);
+					},
+					error: function(xhr, status, e) {
+						alert(xhr.responseJSON.issues[0].message);
+					}
+				});
+			};
+
+			var route = function () {
+				objContainer.removeAll();
+				clearCurrentColors();
+				
+				var url = document.getElementById('cleUrl').value;
+				
+				//verify if the url is present or not
+				if (!url){
+					alert('Please enter a valid server url');
+					return;
+				}
+				
+				// if there is an app_id specified in the URL then use it, otherwise use the default
+				var appIdRegEx= /[\?&]app_id=/i;
+				var appCodeRegEx= /[\?&]app_code=/i;
+				if( url.search( appIdRegEx ) === -1 && url.search( appCodeRegEx ) === -1 ) {
+					if( ! url.endsWith( "&" ) ) url= url.concat( "&" );
+					url= url.concat( "app_id=" + app_id + "&app_code=" + app_code );                
+				}
+
+				var urlParams = [];
+
+				urlParams.push("algopts=nohlprouter");
+				urlParams.push("routeAttributes=speedProfile"); //adding param to return the matrix
+
+				if( ( url.search( appIdRegEx ) >= 0 && url.search( appCodeRegEx ) < 0 ) || ( url.search( appIdRegEx ) < 0 && url.search( appCodeRegEx ) >= 0 ) ) {
+					alert('If you provide credentials in the RME URL field, please provide both app_id AND app_code.');                
+					return;
+				}
+				
+				if (document.getElementById('learn_id_eta').value){
+					urlParams.push("learnIdSpeed=" + document.getElementById('learn_id_eta').value);
+					//urlParams.push("speedFcCat=learnIdEta");
+				} 
+				urlParams.push("attributes=LINK_ATTRIBUTE_FCn(*)");
+
+				if (document.getElementById('waypointstextarea').value){
+					var waypoints = document.getElementById('waypointstextarea').value.split("\n");
+					for(var i = 1 ; i < waypoints.length; i++){
+						var params = waypoints[i].split(",");
+						urlParams.push("waypoint" + params[0].trim() + "=" + params[1].trim() + "," + params[2].trim());
+					}
+				}else {
+					alert("Please enter waypoints");
+					return;
+				}
+
+				url+= '&' + urlParams.join("&");
+
+				$.ajax({
+					url: url,
+					dataType: "json",
+					async: true,
+					type: 'get',
+					success: function(data) {
+						processRouteResponse(data);
+					},
+					error: function(xhr, status, e) {
+						alert(xhr.responseJSON.issues[0].message);
+					}
+				});
+			};
+
+			// clear route, previously calculated results. Keep way points, trace text area, and the old matrix for comparison
+			function reset(){
+				objContainer.removeAll();
+				tracePointContainer.removeAll();
+				etaTime = 0;
+				breakTime = 0;
+				identifiedVehicleFromRMEResponse = "";
+				learnedSpeedFcCat = undefined;
+				for(var i = 0 ; i< 6; i++)
+					for(var j = 0; j < 8 ; j++)
+						document.getElementById('cell' + i + j).innerHTML = ""
+				document.getElementById('etaarea').innerHTML = "ETA times: ";
+				document.getElementById('msgAfterTraceSubmit').innerHTML = "";
+				document.getElementById('defaultLabel').innerHTML = '<input type="radio" name="comparison" value="default" onclick="comparisonTypeChanged(this);">default matrix';
+				document.getElementById('radionButtonCompareWithPrevious').checked = true;
+				clearCurrentColors();
+			}
+
+			// clear everything
+			function resetAll() {
+				//document.getElementById('matchedCheckbox').checked = true;
+				var waypointsTextArea = document.getElementById('waypointstextarea');
+				waypointsTextArea.value = '';
+				var traceTextArea = document.getElementById('tracetextarea');
+				traceTextArea.value = '';
+				oldMatrix = [];
+				reset();
+			}
+
+			map.addEventListener('contextmenu', function(currentEvent) {
+				var waypointsTextArea = document.getElementById('waypointstextarea');
+				if (waypointsTextArea.value.lastIndexOf('SEQNR,\tLATITUDE,\tLONGITUDE', 0) != 0) waypointsTextArea.value = 'SEQNR,\tLATITUDE,\tLONGITUDE';
+				var coord = map.screenToGeo(currentEvent.viewportX, currentEvent.viewportY);				
+				var numLines = waypointsTextArea.value.split(/\r*\n/).length;
+				document.getElementById('waypointstextarea').value += "\n" + (numLines - 1) + ",\t" + (Math.round(coord.lat * 100000.0) / 100000.0) + ",\t" + (Math.round(coord.lng * 100000.0) / 100000.0);
+				zoomToResult = false;
+			}, false);
+			
+			map.addEventListener('tap', function (currentEvent) {
+				var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+				zoomToResult = false;
+			}, false);
+
+			document.getElementById('tracetextarea').addEventListener(
+					'dragover', function handleDragOver(evt) {
+						evt.stopPropagation();
+						evt.preventDefault();
+						evt.dataTransfer.dropEffect = 'copy';
+					},
+					false
+			);
+
+			document.getElementById('tracetextarea').addEventListener(
+					'drop', function(evt) {
+						evt.stopPropagation();
+						evt.preventDefault();
+						var files = evt.dataTransfer.files;
+						var file = files[0];
+						var r = new FileReader();
+						r.onload = function(e) { 
+							document.getElementById('tracetextarea').value = r.result;
+						}
+						r.readAsText(file);
+					},
+					false
+			);
+
+			function reverseGeocode(params, onSuccess) {
+				var geocoder = platform.getGeocodingService();
+				geocoder.reverseGeocode(
+						params,
+						onSuccess,
+						function (){
+							console.log('cannot geocode');
+						}
+				);
+			}
+
+			// process route response
+			var processRouteResponse = function (respJsonObj) {
+				//document.getElementById('matchedCheckbox').checked = true;
+				if (respJsonObj.error != undefined || respJsonObj.faultCode != undefined || respJsonObj.type) {
+					alert(respJsonObj.message + "\nStatus: " + respJsonObj.responseCode);
+					return;
+				}
+				var routeLinks = respJsonObj.RouteLinks;
+				if (routeLinks == undefined) { // new calculateroute response
+					// draw the route
+					for(var i = 0; i < respJsonObj.response.route[0].leg.length; i++){
+						routeLinks = respJsonObj.response.route[0].leg[i].link;
+						for (var l = 0; l < routeLinks.length; l++) {
+							var coords1 = routeLinks[l].shape;
+							var coords2 = new H.geo.Strip();
+							for (var c = 0; c < coords1.length; c += 2)
+								coords2.pushLatLngAlt(coords1[c], coords1[c + 1], null);
+							var linkAtt = routeLinks[l].attributes.LINK_ATTRIBUTE_FCN[0];
+							objContainer.addObject(new H.map.Polyline(coords2, {zIndex: 3, style: NORMAL_LINK_STYLE, data: {functionClass: linkAtt.FUNCTIONAL_CLASS, speedCategory: linkAtt.SPEED_CATEGORY}}));
+						}
+					}
+					// draw the waypoints
+					tracePoints = respJsonObj.response.route[0].waypoint;
+					for (var l = 0; l < tracePoints.length; l++) {
+						var p = tracePoints[l];
+						objContainer.addObject(new H.map.Marker(new H.geo.Point(p.originalPosition.latitude, p.originalPosition.longitude), {icon: createIcon("#000000", l)}));
+						objContainer.addObject(new H.map.Marker(new H.geo.Point(p.  mappedPosition.latitude, p.  mappedPosition.longitude), {icon: createIcon("#00FF00", l)}));
+					}
+				} else { // old routematch response
+					// draw the route
+					for (var l = 0; l < routeLinks.length; l++) {
+						var coords1 = routeLinks[l].shape.split(" ");
+						var coords2 = new H.geo.Strip();
+						for (var c = 0; c < coords1.length; c += 2)
+							coords2.pushLatLngAlt(parseFloat(coords1[c]), parseFloat(coords1[c + 1]), null);
+						objContainer.addObject(new H.map.Polyline(coords2, {zIndex: 3, style: NORMAL_LINK_STYLE}));
+					}
+					// draw the original and the matched trace points
+					tracePoints = respJsonObj.TracePoints;
+					for (var l = 0; l < tracePoints.length; l++) {
+						var p = tracePoints[l];
+						objContainer.addObject(new H.map.Marker(new H.geo.Point(p.lat       , p.lon       ), {icon: createIcon("#000000", l)}));
+						objContainer.addObject(new H.map.Marker(new H.geo.Point(p.latMatched, p.lonMatched), {icon: createIcon("#00FF00", l)}));
+					}
+				}
+
+				// Lazily geocode
+				var geocodedWithHeading = false;
+				var geocodedWithoutHeading = false;
+				var geocodedWithHeadingGroup = new H.map.Group();
+				var geocodedWithoutHeadingGroup = new H.map.Group();
+				toggleReverseGeocodeWithoutHeading = function (checkbox) {
+					if (!checkbox.checked) {
+						geocodedWithoutHeadingGroup.removeAll();
+						objContainer.removeObject(geocodedWithoutHeadingGroup);
+						return;
+					}
+					if (!geocodedWithoutHeading) {
+						for (var l = 0; l < tracePoints.length; l++) {
+							reverseGeocode({gen: '9', pos: tracePoints[l].lat + ',' + tracePoints[l].lon, mode: 'trackPosition'},
+									function (l) {
+								return function (data) {
+									var p = data.Response.View[0].Result[0].Location.DisplayPosition;
+									geocodedWithoutHeadingGroup.addObject(new H.map.Marker(new H.geo.Point(p.Latitude, p.Longitude), {icon: createIcon("blue", l)}));
+								}
+							}(l));
+						}
+					}
+					objContainer.addObject(geocodedWithoutHeadingGroup);
+				};
+
+				map.addObject(objContainer);
+				if (zoomToResult) map.setViewBounds(objContainer.getBounds());
+				zoomToResult = true;
+				// should display the warnings … warnings = respJsonObj.Warnings;  if (warnings.length > 0) …
+				mapVersion = respJsonObj.mapVersion; //RME's map version. Use it to cross reference with PDE.
+                var etaArea = document.getElementById("etaarea");
+                var travelTime = Math.round(100 * respJsonObj.response.route[0].summary.travelTime / 60) / 100;
+				var breakTimeInMinute = Math.round(100 * breakTime / 60) / 100;
+				var travelTimeInTrace = Math.round(100 * (etaTime - breakTimeInMinute)) / 100;
+				var displayBreakTime = breakTimeInMinute == 0 ? "" : "(travel time: " + travelTimeInTrace + "m, breaktime " + breakTimeInMinute + "m)";
+
+                etaArea.innerHTML = "ETA times:&nbsp;&nbsp;<span style='color:blue;font-weight:bold;font-size:12px'>Router: " + travelTime + "m</span>&nbsp;&nbsp;" +
+                		"<span style='color:red;font-weight:bold;font-size:12px'>Trace File: " + etaTime + "m "+ displayBreakTime + "</span>";
+
+			};
+
+			var loadFromFile = function (filename) {
+				identifiedVehicleFromRMEResponse = "";
+				var req = new XMLHttpRequest();
+				req.open('GET', '/sample_data/' + filename);
+				req.onreadystatechange = function() {
+					if (req.readyState != XMLHttpRequest.DONE) return;
+					var fileContent = req.responseText;
+					document.getElementById('tracetextarea').value = fileContent;
+				}
+				req.send();
+			}
+
+			//below function will extract:
+			//1. the first and last waypoint from the RME response so that a route can be calculated
+			//2. the identified vehicle from the RME response so that the route request should contain the identified vehicle and not the one specified by the user
+			var populateWaypointsAndExtractIdentifiedVehicleFromRmeResponse = function(data){
+			
+				waypoints = data.response.route[0].waypoint;
+
+				//draw trace points on the map
+				var tracePointCount = 100;
+				var blockSize = Math.round(data.response.route[0].waypoint.length / tracePointCount);
+				for (var l = 0; l < waypoints.length; l++) {
+					if (l % blockSize != 0) continue;
+					var p = waypoints[l];
+					tracePointContainer.addObject(new H.map.Marker(new H.geo.Point(p.originalPosition.latitude, p.originalPosition.longitude), {icon: createIcon("#000000", l)}));
+				}
+				map.addObject(tracePointContainer);
+				map.setViewBounds(tracePointContainer.getBounds());
+
+				document.getElementById('waypointstextarea').value = ""; //remove already existing waypoints from the waypoints text area so that the new waypoints from the submitted trace can be shown
+				
+				//add first and last point to the waypoints 
+				var startWaypoint = waypoints[0];
+				var endWaypoint = waypoints[waypoints.length - 1];
+
+				var lat = startWaypoint.originalPosition.latitude;
+				var lng = startWaypoint.originalPosition.longitude;
+				if (document.getElementById('waypointstextarea').value == ""){
+					if (document.getElementById('waypointstextarea').value.lastIndexOf('SEQNR,\tLATITUDE,\tLONGITUDE', 0) != 0) 
+						document.getElementById('waypointstextarea').value = 'SEQNR,\tLATITUDE,\tLONGITUDE';			
+					var j = 0;
+					var waypointCount = 20;
+					var blockSize = Math.round(data.response.route[0].waypoint.length / waypointCount);
+					for(var i = 0; i < data.response.route[0].waypoint.length; i++){
+						if (i % blockSize != 0) continue;
+						var currWaypoint = data.response.route[0].waypoint[i];
+						var lat = currWaypoint.mappedPosition.latitude;
+						var lng = currWaypoint.mappedPosition.longitude;
+						document.getElementById('waypointstextarea').value += "\n" + (j++) + ",\t\t" + (Math.round(lat * 100000.0) / 100000.0) + ",\t\t" + (Math.round(lng * 100000.0) / 100000.0);
+					}
+				}
+				var firstTime = new Date(startWaypoint.timestamp);	
+				var lastTime = new Date(endWaypoint.timestamp);
+				etaTime = Math.round(100 * (lastTime.getTime() - firstTime.getTime()) / (1000*60)) / 100;
+
+				//extract the identified vehicle from the RME response and update the router mode parameter with the identified vehicle if different than the provided vehicle by the user
+				var resp = data.response;
+				if (resp.route[0].matchedVehicleType && resp.route[0].matchedVehicleType.length > 0){
+					identifiedVehicleFromRMEResponse = resp.route[0].matchedVehicleType[0].type; // the first guessed vehicle has the highest confidence
+					updateRouteModeWithIdentifiedVehicle();
+					var confidenceText = resp.route[0].matchedVehicleType.map(vtype => {return vtype.type+": "+ (vtype.confidence*100).toFixed(0) + "%";}).join("; ");
+					document.getElementById('msgAfterTraceSubmit').innerHTML = "&nbsp;&nbsp;&nbsp;Identified vehicle: " + identifiedVehicleFromRMEResponse + " (" + confidenceText + ")";
+					var defaultLabel = document.getElementById('defaultLabel');
+					defaultLabel.innerHTML = '<input type="radio" name="comparison" value="default" onclick="comparisonTypeChanged(this);">default ' + identifiedVehicleFromRMEResponse + ' matrix';
+					if(resp.speedFcCat){
+						if(oldMatrix.length != 0){
+							previousMatrix = oldMatrix;
+							oldMatrix = refreshSpeedProfileMatrix(oldMatrix, resp.speedFcCat);
+						}
+						else{
+							oldMatrix = refreshSpeedProfileMatrix(oldMatrix, resp.speedFcCat);
+							previousMatrix = oldMatrix;
+						}
+						learnedSpeedFcCat = resp.speedFcCat;
+						document.getElementById('radionButtonCompareWithPrevious').checked = true;
+					}
+				}
+
+				//collect all the detected breaks and calculate the break time
+				resp.route[0].waypoint.filter(waypoint => {
+													return waypoint.breakDuration !== undefined;
+												}).forEach(waypoint => {
+													breakTime += (waypoint.breakDuration / 1000);		
+												});
+
+				if(!resp.speedFcCat){
+					document.getElementById('msgAfterTraceSubmit').innerHTML = "&nbsp;&nbsp;&nbsp;No speed profile got learned from the trace" + identifiedVehicleFromRMEResponse;
+					document.getElementById('radionButtonCompareWithPrevious').checked = true;
+				}
+
+			};
+
+			// 
+			var refreshSpeedProfileMatrix = function(currentMatrix, speedFcCat){
+				if(!currentMatrix || !speedFcCat) return;
+				var tempMatrix = [];
+				var rows = speedFcCat.split(";");
+				for(var d = 0; d < rows.length; d++) {
+					var cells = rows[d].split(",");
+					for(var i= 0; i< cells.length; i++){
+						var tableCell = document.getElementById("cell" + d + i);
+						tableCell.innerHTML = cells[i];
+						if (currentMatrix[d] && currentMatrix[d][i]){
+							if (parseInt(cells[i]) > parseInt(currentMatrix[d][i])){
+								tableCell.innerHTML += "<span style='color:green;font-weight:bold;font-size:11px'>(+" + (cells[i] - currentMatrix[d][i]) + ")</span>&nbsp;";
+							} else if (parseInt(cells[i]) < parseInt(currentMatrix[d][i])) {
+								tableCell.innerHTML += "<span style='color:red;font-weight:bold;font-size:11px'>(-" + (currentMatrix[d][i] - cells[i]) + ")</span>&nbsp;";
+							}
+						}
+					}
+					tempMatrix[d] = cells;
+				}
+				return tempMatrix;
+			}
+
+			// will be called when the radio button has been changed
+			var comparisonTypeChanged = function(input){
+				if('default' === input.value){
+					var selectedProfile = defaultmatrices[identifiedVehicleFromRMEResponse];
+					refreshSpeedProfileMatrix(generateMatrixFromString(selectedProfile), learnedSpeedFcCat);
+				}
+				else{
+					refreshSpeedProfileMatrix(previousMatrix, learnedSpeedFcCat);
+				}
+			}
+
+			// generate matrix (array) out of the speed fc cat string
+			var generateMatrixFromString = function(speedFcCat){
+				if(!speedFcCat) return;
+				var matrix = [];
+				var rows = speedFcCat.split(";");
+				for(var d = 0; d < rows.length; d++) {
+					var cells = rows[d].split(",");
+					matrix[d] = cells;
+				}
+				return matrix;
+			}
+
+			// update the router url\'s mode parameter with the identified vehicle if it is different than what was specified by the user
+			var updateRouteModeWithIdentifiedVehicle = function(){
+				if (identifiedVehicleFromRMEResponse){
+					var url = document.getElementById('cleUrl').value;
+					if (url){
+						var params = getAllParameters(url);
+						if (params){
+							var modeParam = params["mode"];
+							if (modeParam){
+								var specifiedVehicle = extractProvidedVehicle(modeParam);
+								if (specifiedVehicle !== identifiedVehicleFromRMEResponse) { //update the mode parameter in the url only if the identified vehicle is different than the specified vehicle
+									url = url.replace(specifiedVehicle, identifiedVehicleFromRMEResponse);
+									document.getElementById('cleUrl').value = "";
+									document.getElementById('cleUrl').value = url;
+									alert("Vehicle '"+ identifiedVehicleFromRMEResponse +"' has been identified from the provided trace file. The 'mode' parameter in the Server URL will be updated accordingly. Please change the vehicle type in 'mode' parameter if you want to use a different vehicle for the router call.");
+								} 
+							}
+						}
+					}
+				}
+			}
+
+			//below function will extract all the parameters from the provided url
+			function getAllParameters(url){
+				var params = {};
+				var queryString = url.split("?")[1]; //assuming that the url contains the char \'?\'
+				if (queryString){
+					queryString = queryString.split("#")[0]; //remove anythign after the char \'#\' because anything after this char is not part of the querystring
+
+					//split the query string into its component parts
+					var paramsArray = queryString.split("&");
+
+					for (var i=0; i<paramsArray.length; i++){
+						 //separate the keys and the values
+						 var param = paramsArray[i].split("=");
+						 var paramName = param[0];	
+						 var paramValue = typeof(param[1]) === 'undefined' ? true : param[1]; // if no value for the parameter is specified then setting its value to true
+						 
+						 //only store the parameter if the parameter does not already exist otherwise just take the first value and ignore the other values for example.,
+						 //if we have duplicated parameters like length=2&length=5 then we will only have the first parameter length=2 in the array and the second value will be ignored
+						 if (!params[paramName]){ 
+							params[paramName]= paramValue;
+						 }
+					}
+				}
+				return params;
+			} 
+
+			//below function will extract the vehicle from the mode parameter value like mode=fastest;car;traffic:disabled
+			function extractProvidedVehicle(modeParamValue){
+				//modeParamValue=fastest;car;traffic:disabled
+				var modeParts = modeParamValue.split(";");
+				var prividedVehicleType = "";
+				for( var j= 0; j < modeParts.length; j++ ) {
+					if (modeParts[j] && (modeParts[j] === 'traffic:enabled' || modeParts[j] === 'traffic:disabled'))
+						continue;
+					if (modeParts[j] && (modeParts[j] === 'fastest' || modeParts[j] === 'shortest'))
+						continue;
+					if (modeParts[j] && modeParts[j].indexOf('motorway:') !== -1)
+						continue;
+					if (modeParts[j] && modeParts[j].indexOf('tollroad:') !== -1)
+						continue;
+					if (modeParts[j] && modeParts[j].indexOf('boatFerry:') !== -1)
+						continue;
+					if (modeParts[j] && modeParts[j].indexOf('railFerry:') !== -1)
+						continue;	
+					//else the vehicle type
+					if(modeParts[j]){
+						prividedVehicleType = modeParts[j];
+					}
+				}
+				return prividedVehicleType;
+			}
+			
+			var createIcon = function (color, text) {
+				var div = document.createElement("div");
+				var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="16px">' +
+				'<line x1="14"  y1="16" x2="14" y2="9" stroke="' + color + '"/>' +
+				'<text font-size="10" x="14" y="8" text-anchor="middle" fill="' + color + '">' + text + '</text>' +
+				'</svg>';
+				div.innerHTML = svg;
+				return new H.map.Icon(svg, {anchor: {x : 14, y : 16}});
+			};
+
+			function getJSONP(url, callback) {
+				var cbnum = "s" + getJSONP.counter++;
+				var cbname = "getJSONP." + cbnum;
+				url += "&callback=" + cbname;
+				var script = document.createElement("script");
+				getJSONP[cbnum] = function(response) {
+					try {
+						callback(response);
+					}
+					finally {
+						delete getJSONP[cbnum];
+						script.parentNode.removeChild(script);
+					}
+				};
+				script.src = url;
+				script.onerror = function(data)	{
+					alert("Could not connect to RME.\nCheck connectivity and trace size.");
+				}
+				document.body.appendChild(script);
+			} getJSONP.counter = 0;
+
+			</script>

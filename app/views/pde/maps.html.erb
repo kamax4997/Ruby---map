@@ -1,0 +1,65 @@
+<% content_for :title, "Platform Data Extension" %>
+
+<div class="subheader">List of available maps</div>
+
+<table class="pde_table" cellpadding="4" cellspacing="0" border="1" width="90%">
+	<thead>
+		<tr>
+			<th width="<%= (params.has_key?(:detail) ? "80%" : "20%") %>">Region</th>
+			<th width="20%">Release</th>
+			<th width="60%" colspan="4">Content</th>
+		</tr>
+	</thead>
+	<tbody id="maps_table_body">
+
+		<% @json['maps'].each do |map| %>
+			<tr>
+				<td width="20%">
+					<%= map['coverage'] %>
+					<% if params.has_key?(:detail) %>
+						(<%= map['name'] == nil ? "" : map['name']  %>)
+					<% end %>
+				</td>
+				<% parameters = "?" + "region=" + map['coverage'] +"&release=" +  (map['releaseYearAndQuarter'] == nil ? "" : map['releaseYearAndQuarter'] )  + "&url_root=" + params[:url_root] %>
+
+				<td width="20%"><%= map['releaseYearAndQuarter'] %></td>
+				<td width="15%" class="center"><%= link_to "View Layers", "/pde/layers" + parameters %></td>
+				<td width="15%" class="center"><%= link_to "View Attributes", "/pde/attributes" + parameters %></td>
+				<td width="15%" class="center"><%= link_to "View Static Contents", "/pde/scontents" + parameters %></td>
+				<td width="15%" class="center"><%= link_to "View Indexes", "/pde/indexes" + parameters %></td>
+			</tr>
+		<% end %>
+
+	</tbody>
+</table>
+<% if params.has_key?(:detail) %>
+	<% mapFiles = { "localFiles" => "Local Map Files", "repositoryFiles" => "Repository Map Files" } %>
+	<% mapFiles.each do |key, value| %>
+		<div class="subheader bb"><%= value %></div>
+
+		<table class="pde_table" cellpadding="4" cellspacing="0" border="1" width="90%">
+			<thead>
+				<tr>
+					<th width="80%">Map file</th>
+					<th width="20%">Size (in MB)</th>
+				</tr>
+			</thead>
+
+			<tbody>
+				<% sum = 0 %>
+				<% @json[key].each do |file| %>
+					<tr>
+						<td width="20%"><%= file['name'] %></td>
+						<td width="20%"><%= file['size'] %></td>
+					</tr>
+					<% sum += file['size'] %>
+				<% end %>
+
+				<tr>
+					<td width="20%"></td>
+					<td width="20%"><b><%= sum %></b></td>
+				</tr>
+			</tbody>
+		</table>
+	<% end %>
+<% end %>

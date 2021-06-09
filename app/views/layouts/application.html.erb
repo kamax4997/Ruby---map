@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title><%= yield(:title) %></title>
+		<% if yield(:title) == 'Custom Routing Basic Demo' %>
+			<link rel="manifest" type="application/manifest+json" href="/manifest.json" crossorigin="use-credentials">
+		<% end %>
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<%= javascript_include_tag "hereAccount" %>
+				
+		<script src="<%= @environment%>/js/sdk/sso.min.js"></script>
+		<script>
+			var app_id = "<%= @app_id_global%>",
+				app_code = "<%= @app_code_global%>",
+				app_id_cors = "<%= @app_id_cors%>",
+				app_code_cors = "<%= @app_code_cors%>",
+				app_id_jp = "<%= @app_id_jp%>",
+				app_code_jp = "<%= @app_code_jp%>",
+				api_key = "<%= @api_key%>",
+				api_key_jp = "<%= @api_key_jp%>";
+		</script>
+		
+		<% if params[:action] == 'render_example3' && @is_china_example == "true" %>
+			<script src="https://js.hereapi.cn/v3/3.0/mapsjs-core.js" type="text/javascript" charset="utf-8"></script>
+			<script src="https://js.hereapi.cn/v3/3.0/mapsjs-service.js" type="text/javascript" charset="utf-8"></script>
+			<script src="https://js.hereapi.cn/v3/3.0/mapsjs-mapevents.js" type="text/javascript" charset="utf-8"></script>
+			<script src="https://js.hereapi.cn/v3/3.0/mapsjs-ui.js" type="text/javascript" charset="utf-8"></script>
+			<script src="https://js.hereapi.cn/v3/3.0/mapsjs-clustering.js" type="text/javascript" charset="utf-8"></script>
+		    <link rel="stylesheet" type="text/css"  href="https://js.hereapi.cn/v3/3.0/mapsjs-ui.css" />
+		<% elsif params[:action] == 'render_example3' %>
+			<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+			<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+			<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+			<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-pano.js"></script>
+			<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+			<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-clustering.js"></script>
+			<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-data.js"></script>
+			<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css" />
+		<% end %>
+
+		<% if params[:action] == 'render_example31' %>
+			<script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
+			<script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-core-legacy.js"></script>
+			<script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
+			<script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-service-legacy.js"></script>
+			<script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
+			<script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"></script>
+			<script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-data.js"></script>
+			<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+		<% end %>
+
+		<%= favicon_link_tag 'favicon.ico' %>
+		<%= stylesheet_link_tag 'application', media: 'screen', 'data-turbolinks-track' => true %>
+		<%= javascript_include_tag 'application', 'data-turbolinks-track' => true %>
+		<%= csrf_meta_tags %>
+	  
+	</head>
+	<body>
+		
+		<%= javascript_tag "initLogin('#{@clientId}','#{@environment}','#{@type}','#{@lang}','#{@screenconfig}','#{root_url}','#{@hideLogOut}');" %> 
+		
+		<nav class="navbar navbar-default navbar-fixed-top">
+			<div class="container-fluid">
+				<div class="row">
+					<div class="col-xs-1">
+						<div class="navbar-header">
+							<a class="navbar-brand" href="<%= root_url %>"><%= image_tag "logo.svg", :size => '60x44', :alt => 'HERE logo' %></a>
+						</div>
+					</div>
+					<div class="col-xs-10">
+						<div class="header-text"><%= yield(:title) %></div>
+					</div>
+					<div class="col-xs-1">
+						 <div id="logoutButton" onclick="javascript:logOut()" class="hvr2-overline-reveal hvr2-overline-reveal-min-width">
+							<a href="/login" >Log Out</a>
+						</div> 
+					</div>
+				</div>
+			</div>
+		</nav>
+		<div id="content-padder"></div>
+		<div id="content-real">
+			<%= yield %>
+		</div>
+		<footer >
+		<div id="footer" class="footer">
+			
+		<div class="col-xs-11" >
+							<a target="_blank"  href="https://legal.here.com/terms/serviceterms">Terms Of use </a>
+		</div>
+		<div class="col-xs-1" >
+							 &copy; 2020 HERE
+		</div>
+		
+		</div>
+		</footer> 
+		<div id="frame-container"></div>
+		
+	    <script>
+	    	checkLoggedIn();
+	    </script>
+		
+	</body>
+</html>

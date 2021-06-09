@@ -1,0 +1,233 @@
+<%= javascript_include_tag "moment" %>
+<%= javascript_include_tag "moment-range" %>
+<%= javascript_include_tag "jszip.min" %>
+<%= javascript_include_tag "gpx-parser" %>
+<%= javascript_include_tag "date-time-parser" %>
+
+<% content_for :title, "Platooning Basic Demo" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>Add a route to see Platooning opportunities. Long click into the map to select a coordinate.</p>
+	<div class="form-horizontal">
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="start">Start:</label>
+			<div class="col-sm-9">
+				<input type="text" class="form-control input-wide" id="start" value="Kassel" onkeydown="if (event.keyCode == 13) go();">
+			</div>
+		</div>
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="dest">Destination:</label>
+			<div class="col-sm-9">
+				<input type="text" class="form-control input-wide" id="dest" value="Eberswalde" onkeydown="if (event.keyCode == 13) go();">
+			</div>
+		</div>
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="date">Departure:</label>
+			<div class="col-sm-9">
+				<input type="date" id="date" value="">
+				<input type="time" id="time"value="">
+			</div>
+		</div>
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="assetid">Asset Id:</label>
+			<div class="col-sm-9">
+				<input type="text" id="assetid" value="MTK-HE 4711">
+			</div>
+		</div>
+		<div class="form-group">
+			<label class="control-label col-sm-3" for="server">Server:</label>
+			<div class="col-sm-9">
+				<input type="text" class="form-control input-wide" id="server" value="http://platoon.eu-west-1.elasticbeanstalk.com/1/platooning/calculateroute.json?">
+			</div>
+		</div>
+		<input type="submit" id="routeButton" class="btn btn-default btn-sm" value="Calculate Route">
+		<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+	</div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+
+	/*
+	(C) HERE 2017
+	*/
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	var mapContainer = document.getElementById('mapContainer'),
+		pointA,		// position of route start
+		pointB,		// position of route destination
+		platform = new H.service.Platform({app_code: app_code, app_id: app_id, useHTTPS: secure}),
+		maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+		geocoder = platform.getGeocodingService(),
+		router = platform.getRoutingService(),
+		group = new H.map.Group(),
+		map = new H.Map(mapContainer, maptypes.normal.map, { center: new H.geo.Point(52.11, 0.68), zoom: 5 });
+
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());	// Do not draw under control panel
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map));	// add behavior control
+	map.addEventListener('longpress', handleLongClickInMap);	// add long click in map event listener
+	var ui = H.ui.UI.createDefault(map, maptypes);	// add UI
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var	routeButton = document.getElementById("routeButton"),
+		start = document.getElementById("start"),
+		dest = document.getElementById("dest"),
+		date = document.getElementById("date"),
+		time = document.getElementById("time"),
+		routeBBox,
+		depature,
+		group = new H.map.Group(),
+		now = moment(),
+		currentBubble,
+		startMarker,
+		destMarker,
+		bLongClickUseForStartPoint = true; // for long click in map we toggle start/destination;
+
+	date.value = now.format("YYYY-MM-DD");
+	time.value = now.format("HH:mm");
+	
+	/********************************************************
+	Start/Destination selection via LongClick in map
+	********************************************************/
+	function handleLongClickInMap(currentEvent)
+	{
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+		if (bLongClickUseForStartPoint) {
+			map.addObject(group);
+			var line1 = "" + Math.round(lastClickedPos.lat * 100000.0) / 100000.0 + "," + Math.round(lastClickedPos.lng * 100000.0) / 100000.0;
+			var line2 = "0";
+			start.value = line1;
+			pointA = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng);
+			if (startMarker !=  null) {
+				markerGroup.removeObject(startMarker);
+			}
+			startMarker = new H.map.Marker(pointA, { icon: createIconMarker(line1, line2) });
+			group.addObject(startMarker);
+			bLongClickUseForStartPoint = false;
+		} else {
+			var line1 = "" + Math.round(lastClickedPos.lat * 100000.0) / 100000.0 + "," + Math.round(lastClickedPos.lng * 100000.0) / 100000.0;
+			var line2 = "1";
+			dest.value = line1;
+			pointB = new H.geo.Point(lastClickedPos.lat, lastClickedPos.lng);
+			if (destMarker !=  null) {
+				markerGroup.removeObject(destMarker);
+			}
+			destMarker = new H.map.Marker(pointB, { icon: createIconMarker(line1, line2) });
+			group.addObject(destMarker);
+			bLongClickUseForStartPoint = true;
+			go();
+		}
+	}	
+
+	routeButton.onclick = function ()
+	{
+		go();
+	};
+
+	var go = function()
+	{
+		depature = date.value + "T" + time.value + ":00";
+		group.removeAll();
+		group = new H.map.Group();
+		feedbackTxt.innerHTML = "Sending routing from " + start.value + " to " + dest.value;
+		geocode(start.value, true);
+	};
+
+	var geocode = function(searchTerm, start)
+	{
+		geocoder.search( { searchText: searchTerm },
+			function(result) {
+				if (result.Response.View[0].Result[0].Location != null)	{
+					pos = result.Response.View[0].Result[0].Location.DisplayPosition;
+				} else {
+					pos = result.Response.View[0].Result[0].Place.Locations[0].DisplayPosition;
+				}
+				if( start) pointA = new H.geo.Point(pos.Latitude, pos.Longitude);
+				else       pointB = new H.geo.Point(pos.Latitude, pos.Longitude);
+				if (result.Response.View[0].Result[0].Location != null)	{
+					address = result.Response.View[0].Result[0].Location.Address;
+				} else {
+					address = result.Response.View[0].Result[0].Place.Locations[0].Address;
+				}
+				line1 = pos.Latitude + " " + pos.Longitude;
+				line2 = address.Label ? address.Label : " ";
+				marker = new H.map.Marker(start ? pointA : pointB, { icon: createIconMarker(line1, line2) });
+				group.addObject(marker);
+				if (start)
+					geocode(dest.value, false);
+				else {
+					calculateRouteDirect(pointA, pointB);
+				}	
+			},
+			function(error) {
+				alert(error);
+			}
+		);
+	};
+
+	var calculateRouteDirect = function(start, destination)
+	{		
+		var url = document.getElementById("server").value + "asset_id=" + document.getElementById("assetid").value +
+				  "&waypoint0=" +	start.lat + "," + start.lng + "&waypoint1=" + destination.lat + "," + destination.lng +
+				  "&departure=" + depature + "&mode=fastest;car;traffic:disabled&app_id=" + app_id + "&app_code=" + app_code+ "&jsonpcallback=gotRoutingResponse";
+		script = document.createElement("script");
+		script.src = url;
+		document.body.appendChild(script);
+	};
+
+	// parse the routing response
+	var gotRoutingResponse = function (respJsonRouteObj)
+	{
+		if (respJsonRouteObj.error != undefined) {
+			alert (respJsonRouteObj.error);
+			feedbackTxt.innerHTML = respJsonRouteObj.error;
+			return;
+		}
+		var strip = new H.geo.Strip(),
+			links = respJsonRouteObj.response.route[0].leg[0].link;
+		for (var i = 0; i < links.length; i++)	{
+			var shape = links[i].shape;
+			for (var j = 0; j < shape.length; j += 2)	{
+				strip.pushLatLngAlt(parseFloat(shape[j]), parseFloat(shape[j + 1]), 0);
+			}
+		}
+		var polyline = new H.map.Polyline(strip, { style: { lineWidth: 5, strokeColor: "#2222B2", lineJoin: "round" } });
+		group.addObject(polyline);
+		feedbackTxt.innerHTML = "";
+		for (var i = 0; i < respJsonRouteObj.response.route[0].platooningMatches.length; i++) {
+			var match = respJsonRouteObj.response.route[0].platooningMatches[i];
+			strip = new H.geo.Strip();
+			strip.pushLatLngAlt(match.startLat, match.startLon, 0);
+			strip.pushLatLngAlt(match.endLat, match.endLon, 0);
+			polyline = new H.map.Polyline(strip, { style: { lineWidth: 7, strokeColor: "#22B222", lineJoin: "round" } });
+			group.addObject(polyline);
+			joinMarker = new H.map.Marker(new H.geo.Point(match.startLat, match.startLon), { icon: createIconMarker(match.otherAssetId, "Wait " + Math.round(match.waitTimeMsec/1000/60) + " min, " + Math.round(match.commonDistanceMeter/1000) + " km") });
+			group.addObject(joinMarker);
+			var d = new Date(match.startTimeStampMsec);
+			var dateTime = d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate() + " " + d.getHours() + ":" + d.getMinutes();
+			feedbackTxt.innerHTML += "<br/>Wait " + Math.round(match.waitTimeMsec/1000/60) + " minutes to join " + match.otherAssetId +
+                                     " on " + dateTime + " for " + Math.round(match.commonDistanceMeter/1000) + " km = " +
+									 Math.round(match.commonTimeMsec/1000/60) + " minutes";
+		}
+		map.addObject(group);
+		map.setViewBounds(group.getBounds());
+	}
+
+	//--- Create marker with 2 text lines
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_Line;
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line2);
+		svgMarker = svgMarker.replace(/__width__/g, line2.length * 4 + 20);
+		svgMarker = svgMarker.replace(/__widthAll__/g, line2.length * 4 + 200);
+		return new H.map.Icon(svgMarker, { anchor: new H.math.Point(24, 57)	});
+	};
+
+</script>
+	</body>
+</html>

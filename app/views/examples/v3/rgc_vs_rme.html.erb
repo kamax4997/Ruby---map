@@ -1,0 +1,525 @@
+<% content_for :title, "RGC vs. RMC" %>
+@<%= javascript_include_tag "gpx-parser" %>@
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+		<div id="notecontent">
+			<p>Please choose a GPS Trace file to submit (GPX, NMEA or CSV)</p>
+	<p><input type='File' onchange='startImport(this.files[0]);''></p>
+			<p>Get a data sample:
+				<a href="/sample_data/sample_rome.gpx" style="color: #00ACDC" download="sample_rome.gpx">Rome</a>
+				<a href="/sample_data/sample_sheffield.csv" style="color: #00ACDC" download="sample_sheffield.csv">Sheffield</a>
+			</p>
+			<p><input type="checkbox" id="showOrig" onchange='showOriginalPoints(this);' checked >Show Original Points</td><td><span id="showOrigDiv" ></span></td>
+			<table>
+			<tr>
+				<td><input type="checkbox" id="showRGC" onchange='showRGC(this);' checked >Show RGC Results</td><td><span id="showRGCDiv" ></span></td>
+			</tr>
+			<tr>
+				<td><input type="checkbox" id="showRGCH" onchange='showRGCH(this);' checked>Show RGCH Results</td><td><span id="showRGCHDiv" ></span></td>
+			</tr>
+			<tr>
+				<td><input type="checkbox" id="showRouteMatch" onchange='showRouteMatch(this);' checked>Show Route Match Results</td><td><span id="showRouteMatchDiv" ></span></td>
+			</tr>
+			</table>
+		</div>
+	</span>
+</div>
+<div id="mapContainer"></div>
+<div id="pageblock"></div>
+<div id="spinner"></div>
+		<script type="text/javascript">
+			/* 
+				author dom schuette
+				(C) HERE 2018
+			*/ 
+
+			// Check whether the environment should use hi-res maps
+			var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+			
+			// special handling for IE11, as readAsBinaryString is not supported
+			if (FileReader.prototype.readAsBinaryString === undefined)
+			{
+				FileReader.prototype.readAsBinaryString = function (fileData) {
+					var binary = "";
+					var pt = this;
+					var reader = new FileReader();
+					reader.onload = function (e) {
+						var bytes = new Uint8Array(reader.result);
+						var length = bytes.byteLength;
+						for (var i = 0; i < length; i++) {
+							binary += String.fromCharCode(bytes[i]);
+						}
+						pt.content = binary;
+						pt.onload(); 
+					}
+					reader.readAsArrayBuffer(fileData);
+				}
+			}
+
+			var icon_template='<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="36px">' +
+						  '<path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 28 13 28 C 16.3 28 19' +
+						  ' 29.3 19 31 Z" fill="#000" fill-opacity=".2"/>' +
+						  '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 19.5 3.8 21.9 L 13 31 L 22.2' +
+						  ' 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="#fff"/>' +
+						  '<path d="M 13 2.2 C 6 2.2 2.3 7.2 2.1 12.8 C 2.1 16.1 3.1 18.4 5.2 20.5 L 13 28.2 L 20.8 20.5 C' +
+						  ' 22.9 18.4 23.8 16.2 23.8 12.8 C 23.6 7.07 20 2.2 13 2.2 Z" fill="__color__"/>' +
+						  '</svg>';
+						  
+			var icon_template_heading = '<svg height="32px" width="32px" xmlns="http://www.w3.org/2000/svg">' +
+						  '<g fill="none" fill-rule="evenodd" stroke="none" stroke-width="1" transform="rotate(dir,16,16)">' +
+						  '<path d="M16,30 C8.26801312,30 2,23.7319869 2,16 C2,8.26801312 8.26801312,2 16,2 C23.7319869,2 30,8.26801312 30,16 C30,23.7319869 23.7319869,30 ' +
+						  '16,30 Z M16,28 C22.6274173,28 28,22.6274173 28,16 C28,9.37258267 22.6274173,4 16,4 C9.37258267,4 4,9.37258267 4,16 C4,22.6274173 9.37258267,28 16,28 ' +
+						  'Z M16,28" fill="#404040" id="Oval 278"/><path d="M16,5 C16,5 20,13.7900009 20,16 C19.9999999,18.2099991 18.2091391,20 16,20 C13.7908609,20 ' +
+						  '12.0000001,18.2099991 12,16 C12,13.7900009 16,5 16,5 Z M16,18 C17.1045696,18 18,17.1045696 18,16 C18,14.8954304 17.1045696,14 16,14 C14.8954304,14 ' +
+						  '14,14.8954304 14,16 C14,17.1045696 14.8954304,18 16,18 Z M16,18" fill="#FF0000" /></g></svg>';
+			
+			var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+			
+			var markerRGC = new H.map.Group(),
+				markerRGCH = new H.map.Group(),
+				markerMatch = new H.map.Group(),
+				markerOriginal = new H.map.Group(),
+				mapContainer = document.getElementById("mapContainer"),
+				currentBubble,
+				requestcount = 0,
+				icons = new Object();
+
+				// check if the site was loaded via secure connection
+			var secure = (location.protocol === 'https:') ? true : false;
+
+			// Create a platform object to communicate with the HERE REST APIs
+			var platform = new H.service.Platform({
+				app_code: app_code,
+				app_id: app_id,
+				useHTTPS: secure
+			}),
+			
+			maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+			geocoder = platform.getGeocodingService(),
+			map = new H.Map(mapContainer, maptypes.normal.map, 
+				{
+					center: new H.geo.Point(50.11, 8.68),
+					zoom: 10,
+					pixelRatio: hidpi ? 2 : 1
+				}
+			);
+			
+			// add behavior control
+			new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+			// Enable the default UI
+			var ui = H.ui.UI.createDefault(map, maptypes);
+			
+			// setup the Streetlevel imagery
+			platform.configure(H.map.render.panorama.RenderEngine);
+		
+			window.addEventListener('resize', function() { map.getViewPort().resize(); });
+			
+			function showRGC(cb)
+			{
+				if(cb.checked)
+					map.addObject( markerRGC );
+				else
+					map.removeObject( markerRGC );
+			}
+			
+			function showRGCH(cb)
+			{
+				if(cb.checked)
+					map.addObject( markerRGCH );
+				else
+					map.removeObject( markerRGCH );
+			}
+			
+			function showRouteMatch(cb)
+			{
+				if(cb.checked)
+					map.addObject( markerMatch );
+				else
+					map.removeObject( markerMatch );
+			}
+			
+			function showOriginalPoints(cb)
+			{
+				if(cb.checked)
+					map.addObject( markerOriginal );
+				else
+					map.removeObject( markerOriginal );
+			}
+			
+			function rgc(lat, lng, heading)
+			{
+				requestcount++;
+				var useHeading = (heading != undefined);
+				var rgcurl = 
+			         ["http",
+					 secure ? "s" : "", 
+					 "://reverse.geocoder.api.here.com/search/6.2/reversegeocode.json?",
+					 "maxresults=1",
+					 useHeading ? "&requestId=00ff00_" + heading : "&requestId=ff0000",
+					 useHeading ? "&mode=trackPosition" : "&mode=retrieveAddresses",
+					 useHeading ? "&pos=" : "&prox=",
+					 lat,
+					 ",",
+					 lng,
+					 useHeading ? "," + heading :",50",
+					 "&gen=7",
+					 "&app_id=",
+					 app_id,
+					 "&app_code=",
+					 app_code,
+					 "&jsoncallback=rgccallback"
+					 ].join("");
+				script = document.createElement("script");
+				script.src = rgcurl;
+				document.body.appendChild(script);
+			}
+			
+			function rgccallback(response)
+			{
+				requestcount--;
+				if(response && response.Response && response.Response.View[0] && response.Response.View[0].Result[0] && response.Response.View[0].Result[0].Location)
+				{
+					var label = response.Response.View[0].Result[0].Location.Address.Label,
+						lat = response.Response.View[0].Result[0].Location.DisplayPosition.Latitude,
+						lng = response.Response.View[0].Result[0].Location.DisplayPosition.Longitude,
+						color = response.Response.MetaInfo.RequestId.split('_')[0],
+						heading = response.Response.MetaInfo.RequestId.split('_')[1];
+					
+					var marker = new H.map.Marker(new H.geo.Point(lat, lng), 
+					{
+						icon: createIcon("#" + color, heading)
+					});
+					
+					if(color == "ff0000")
+						markerRGC.addObject(marker);
+					else
+						markerRGCH.addObject(marker);
+					
+					var result = response.Response.View[0].Result[0];
+					
+					marker.$matchlevel = result.MatchLevel;
+					marker.$distance = result.Distance;
+					marker.$linkID = result.Location.LocationId;
+					
+					var address = result.Location.Address;
+					marker.$label = address.Label;
+											
+					marker.addEventListener("pointerdown", function(e)
+					{
+						if(currentBubble)
+							ui.removeBubble(currentBubble);
+
+						var html = '<div>';
+							html +=	'<p style="font-family:Arial,sans-serif; font-size:12px;">LinkID: ' + e.target.$linkID +'</p>';
+							html += e.target.$label != null ? ('<p style="font-family:Arial,sans-serif; font-size:12px;">Location: ' + e.target.$label +'</p>') : "";
+							html += '</div>';
+
+						var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+						currentBubble = new H.ui.InfoBubble(pos, { content: html });
+						ui.addBubble(currentBubble);
+					});
+				}
+				
+				if(requestcount == 0)
+				{
+					map.setViewBounds(markerRGC.getBounds());
+					Spinner.hideSpinner();
+				}
+			}		
+			
+			function createIcon(color, heading) 
+			{
+				var dir = "";
+				if(heading != undefined)
+				{
+					dir = Math.round(heading);
+					// console.log(dir);
+				}
+					
+				if(!icons[color+dir])
+				{
+					// var div = document.createElement("div");
+
+					var svg = "";
+					
+					if(heading)
+					{
+						svg = icon_template_heading;
+						svg = svg.replace(/dir/, dir);
+					}
+					else
+					{
+						svg = icon_template;
+					}
+				
+					svg = svg.replace(/__color__/g, color);
+					// div.innerHTML = svg;
+					
+					var image = new Image(); 
+					image.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+					icons[color] = new H.map.Icon(image, {
+						anchor: new H.math.Point(14, 32)
+					});
+				}
+				return icons[color];
+			}
+			
+			function processRGC(arr, latpos, lngpos, headingpos, firstline)
+			{
+				var	i = firstline;
+				for(; i < arr.length; i++)
+				{
+					var linearr = arr[i].trim().split(','),
+						latitude = linearr[latpos],
+						longitude = linearr[lngpos],
+						heading = linearr[headingpos];
+					
+					// ignore empty lines, example last line
+					if(latitude && longitude)
+					{
+						rgc(latitude, longitude);
+						if(heading)
+						{
+							document.getElementById("showRGCH").disabled = false;
+							document.getElementById("showRGCH").checked = true;
+							rgc(latitude, longitude, heading);
+						}
+						else
+						{
+							document.getElementById("showRGCH").disabled = true;
+							document.getElementById("showRGCH").checked = false;
+						}
+					}
+				}
+			}
+			//process csv file
+			function processCSV(result){
+				// check where the position is inside the header line
+							var arr = result.split('\n'),
+								l1 = arr[0].trim(),
+								l1split = l1.split(','),
+								i = 0,
+								latpos = -1,
+								lngpos = -1,
+								headingpos = -1,
+								firstline = 0;
+							
+							for(;i < l1split.length; i++)
+							{
+								var colName = l1split[i].toUpperCase().trim();
+								if(colName == "LATITUDE")
+								{
+									latpos = i;
+									firstline = 1;
+								}
+								else if(colName == "LONGITUDE")
+								{
+									lngpos = i;
+									firstline = 1;
+								}
+								else if(colName == "HEADING" || l1split[i].toUpperCase() == "BEARING")
+								{
+									headingpos = i;
+									firstline = 1;
+								}
+							}
+							
+							// if we have only recId|pos
+							// where pos is lat,lng,heading
+							// 1|44.347745,-0.8594633,21.13
+							if(latpos == -1 && lngpos == -1 && l1.indexOf('|') != -1)
+							{
+								var t = new Array();
+								for(i = 1; i < arr.length; i++)
+								{
+									t.push(arr[i].split('|')[1]);
+								}
+								arr = t;
+								latpos = 0; 
+								lngpos = 1;
+								headingpos = 2;
+							}
+							processRGC(arr, latpos, lngpos, headingpos, firstline);
+			}
+			// process gpx file
+			function processGPX(result)
+			{
+				if (typeof window.DOMParser != "undefined") 
+				{
+					parseXml = function(xmlStr) {
+						return ( new window.DOMParser() ).parseFromString(xmlStr, "text/xml");
+					};
+				} 
+				else if (typeof window.ActiveXObject != "undefined" &&  new window.ActiveXObject("Microsoft.XMLDOM")) 
+				{
+					parseXml = function(xmlStr) {
+						var xmlDoc = new window.ActiveXObject("Microsoft.XMLDOM");
+						xmlDoc.async = "false";
+						xmlDoc.loadXML(xmlStr);
+						return xmlDoc;
+					};
+				} 
+				else 
+				{
+					throw new Error("No XML parser found");
+				}
+				
+				xmlDoc = parseXml(result);
+				parser = new GPXParser(xmlDoc, map, false);
+				parser.SetMinTrackPointDelta(0.000001);                         // Set the minimum distance between track points
+				parser.AddTrackpointsToMap();                                   // Add the trackpoints
+				parser.AddWaypointsToMap();                                     // Add the waypoints
+				
+				var objs = parser.GetPointsWithSpeed(),
+					i = 0,
+					arr = new Array(), 
+					heading = false;
+				
+				for(;i < objs.length; i++)
+				{
+					if(objs[i].heading)
+					{
+						heading = true;
+						arr.push(objs[i].coord.lat + "," + objs[i].coord.lng + "," + objs[i].heading);
+					}
+					else
+					{
+						arr.push(objs[i].coord.lat + "," + objs[i].coord.lng);
+					}
+				}
+				processRGC(arr, 0, 1, heading ? 2 : null, 0);
+			}
+			
+			// request route match extension
+			function requestRME(result)
+			{
+				var fileContentString = encodeURIComponent(btoa(result));
+				var url = ["http", 
+					secure ? "s" : "", 
+					"://rme.api.here.com/2/matchroute.json?routemode=car&file=" + fileContentString +
+					"&app_id=" + app_id + "&app_code=" + app_code + "&callback=gotRouteMatchResponse"].join("");
+					var script = document.createElement("script");
+					script.onerror = function(data)	{
+					alert("Error calling RME");
+					}
+					script.src = url;
+				document.body.appendChild(script);
+			}
+			
+			// remove markers from map
+			function clearMap(){
+				markerRGC.removeAll();
+				markerRGCH.removeAll();
+				markerMatch.removeAll();
+				markerOriginal.removeAll();
+				
+				map.addObject(markerRGC);
+				map.addObject(markerRGCH);
+				map.addObject(markerMatch);
+				map.addObject(markerOriginal);
+				
+				document.getElementById("showOrig").checked =true;
+				document.getElementById("showRGC").checked =true;
+				document.getElementById("showRGCH").checked =true;
+				document.getElementById("showRouteMatch").checked =true;
+			}
+			
+			var gotRouteMatchResponse = function (respJsonObj) {
+				Spinner.hideSpinner();
+				if (respJsonObj.error != undefined || respJsonObj.faultCode != undefined || respJsonObj.type) {
+					alert("Got RME error response");
+				}
+				// draw the route
+				var routeLinks = respJsonObj.RouteLinks;
+				for (var l = 0; l < routeLinks.length; l++) {
+				var coords1 = routeLinks[l].shape.split(" ");
+				var coords2 = new H.geo.Strip();
+				for (var c = 0; c < coords1.length; c += 2)
+					coords2.pushLatLngAlt(parseFloat(coords1[c]), parseFloat(coords1[c + 1]), null);
+ 					if(c > 2) 
+						markerMatch.addObject(new H.map.Polyline(coords2, {zIndex: 3, style: {lineWidth: 8, strokeColor: "rgba(18, 65, 145, 0.7)", lineJoin: "round"}}));
+				}
+
+				// draw the original and the matched trace points
+				tracePoints = respJsonObj.TracePoints;
+				for (var l = 0; l < tracePoints.length; l++) {
+					var p = tracePoints[l];
+					markerOriginal.addObject(new H.map.Marker(new H.geo.Point(p.lat, p.lon), {icon: createIcon("#000000")}));
+					markerMatch.addObject(new H.map.Marker(new H.geo.Point(p.latMatched, p.lonMatched), {icon: createIcon("#00FFFF")}));
+				}
+
+				map.addObject(markerMatch);
+				map.addObject(markerOriginal);
+				map.setViewBounds(markerMatch.getBounds());
+			};
+			
+			
+			// Add icons to the labels
+			createLabelIcons("#00FFFF","showRouteMatchDiv");
+			createLabelIcons("#ff0000","showRGCDiv");
+			createLabelIcons("#000000","showOrigDiv");
+			 
+			var headingIconSVG=icon_template_heading;
+			headingIconSVG=headingIconSVG.replace(/dir/, 21);
+			var headingIcon=document.createElement("div");
+			headingIcon.setAttribute("style","float:right");
+			headingIcon.innerHTML=headingIconSVG;
+			document.getElementById("showRGCHDiv").appendChild(headingIcon);
+			 
+			function createLabelIcons(color,parentId){
+				var labelIcon=icon_template;
+				labelIcon=labelIcon.replace(/__color__/g, color);
+				var icon=document.createElement("div");
+				icon.setAttribute("style","float:right");
+				icon.innerHTML=labelIcon;
+				document.getElementById(parentId).appendChild(icon);
+			 }
+			
+			 //for upload file option
+			function startImport(file)
+			{
+				Spinner.showSpinner();
+				var reader = new FileReader();
+				
+				clearMap();
+
+				if(file)
+				{
+					if(file.name.indexOf("csv") != -1)
+					{
+						reader.onload = function(e)
+						{
+							processCSV(reader.result);	
+						}
+					}
+					else if(file.name.indexOf("gpx") != -1)
+					{
+						reader.onload = function(e)
+						{	
+							processGPX(reader.result);
+						}
+					}
+					reader.readAsText(file);
+					
+					var reader2 = new FileReader();
+					reader2.readAsBinaryString(file);
+					reader2.onload = function(e)
+					{
+						var data; 
+						if (!e)
+						{
+							data = reader.result;
+						}
+						else
+						{
+							data = e.target.result;
+						}
+						requestRME(data);
+					}
+				}
+			}
+		</script>
+	</body>
+</html>

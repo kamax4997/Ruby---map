@@ -1,0 +1,93 @@
+<% content_for :title, "Simple Korean HERE Map Display" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control &amp; UI</p>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+/* 
+	author domschuette
+	(C) HERE 2019
+*/
+
+// Check whether the environment should use hi-res maps
+var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+// check if the site was loaded via secure connection
+var secure = (location.protocol === 'https:') ? true : false;
+
+app_id_customer = getUrlParameter( 'app_id' );
+app_code_customer = getUrlParameter( 'app_code' );
+		
+if(app_id_customer != null && app_code_customer != null)
+{
+	var app_id = app_id_customer,
+		app_code = app_code_customer;
+}
+
+// Create a platform object to communicate with the HERE REST APIs
+var platform = new H.service.Platform({
+	app_id: app_id,
+	app_code: app_code,
+	baseUrl: new mapsjs.service.Url('http', 'cc.api.heremaps.kr'),
+	useHTTPS: secure
+});
+
+var base = platform.getMapTileService({type: 'base'});
+var areal = platform.getMapTileService({type: 'aerial'});
+var traffic = platform.getMapTileService({type: 'traffic'});
+
+var incidentsProvider = new H.service.TrafficIncidentsProvider(platform.getTrafficIncidentsService(), undefined, null);
+var incidentsLayer = new H.map.layer.MarkerTileLayer(incidentsProvider);
+
+var defaultLayers = {
+	normal: {
+		map: base.createTileLayer('maptile', 'normal.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		xbase: base.createTileLayer('xbasetile', 'normal.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		base: base.createTileLayer('basetile', 'normal.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		transit: base.createTileLayer('maptile', 'normal.day.transit', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		label: base.createTileLayer('labeltile', 'normal.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		traffic: traffic.createTileLayer('traffictile', 'normal.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false)
+	},
+	satellite: {
+		xbase: areal.createTileLayer('xbasetile', 'hybrid.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		base: areal.createTileLayer('basetile', 'hybrid.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		map: areal.createTileLayer('maptile', 'hybrid.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		label: areal.createTileLayer('labeltile', 'hybrid.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		traffic: traffic.createTileLayer('traffictile', 'hybrid.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false)
+	},
+	terrain: {
+		label: areal.createTileLayer('labeltile', 'terrain.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		map: areal.createTileLayer('maptile', 'terrain.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		base: areal.createTileLayer('basetile', 'terrain.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		xbase: areal.createTileLayer('xbasetile', 'terrain.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false),
+		traffic: traffic.createTileLayer('traffictile', 'terrain.day', 256, 'png8', {lg2: "eng"}, hidpi ? 2 : 1, false)
+	},
+	incidents: this.incidentsLayer
+};
+  
+// Instantiate a map in the 'map' div, set the base map to normal
+var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+	zoom: 12,
+	center: new H.geo.Point(37.465241849335015, 127.03659770355904),
+	pixelRatio: hidpi ? 2 : 1
+});
+
+// Enable the map event system
+var mapevents = new H.mapevents.MapEvents(map);
+
+// Enable map interaction (pan, zoom, pinch-to-zoom)
+var behavior = new H.mapevents.Behavior(mapevents);
+
+// Enable the default UI
+var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+// setup the Streetlevel imagery
+platform.configure(H.map.render.panorama.RenderEngine);
+
+window.addEventListener('resize', function() { map.getViewPort().resize(); });
+	
+</script>

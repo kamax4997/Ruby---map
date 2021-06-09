@@ -1,0 +1,53 @@
+
+<% content_for :title, "Platform Data Extension" %>
+
+<div class="subheader">Indexes in <%= params[:region] %> [<%= params[:release] %>] </div>
+
+<table class="pde_table" cellpadding="4" cellspacing="0" border="1" width="90%">
+  <thead>
+    <tr>
+      <th width="15%">Layers</th>
+      <th width="70%">Index Columns</th>
+      <th width="15%">Example Requests</th>
+    </tr>
+  </thead>
+  <tbody>
+
+  <% @json.each do |index| %>
+    <tr>
+      <% parameters = "region=" + params[:region] + "&release=" + params[:release]+ "&url_root=" + params[:url_root]%>
+
+      <td><%= link_to index['indexedLayerName'], "/pde/layer?" + parameters + "&layer="  + index['indexedLayerName'] %></td>
+      <td><%= index['indexedColumnNames'] %></td>
+      <%
+        exampleNames = index['exampleNames'].split(',')
+        exampleUrlParams = index['exampleUrlParams'].split(',')
+      %>
+    <td>
+      <% exampleNames.each_with_index do |exampleName, i| %>
+        <%=
+          link_to exampleName,
+            [
+              "https://" + params[:url_root] + "/1/",
+              exampleUrlParams[i].gsub('%2C', ','),
+              "&" + parameters,
+              "&app_id=" + Rails.application.config.app_id,
+              "&app_code=" + Rails.application.config.app_code
+            ].join("\n") + "\n"
+        %>
+      <% end %>
+
+      <% if exampleNames.empty? %>
+        Layer is empty
+      <% end %>
+
+    </td>
+    </tr>
+  <% end %>
+
+  <% if @json.empty? %>
+    <tr><td colspan="3" class="empty">No static content for this layer</td></tr>
+  <% end %>
+
+  </tbody>
+</table>

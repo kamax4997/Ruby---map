@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Bikes Demo</title>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<meta charset="UTF-8">
+	<script src="/assets/hereAccount.js"></script>
+	<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css">
+	<script src="https://account.here.com/js/sdk/sso.min.js"></script>
+
+	<script>
+		var app_id = "1LO6E5r6Y6GHsIK8FL8O",
+			app_code = "as80cWhdBr-z3tBxKSRM8Q";
+	</script>
+
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+	<script type="text/javascript" charset="UTF-8" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+
+
+	<link rel="shortcut icon" type="image/x-icon" href="/assets/favicon.ico" />
+	<link rel="stylesheet" media="screen" href="/assets/application.css" data-turbolinks-track="true" />
+	<script src="/assets/application.js" data-turbolinks-track="true"></script>
+</head>
+
+<body>
+	<nav class="navbar navbar-default navbar-fixed-top">
+		<div class="container-fluid">
+			<div class="row">
+				<div class="col-xs-1">
+					<div class="navbar-header">
+						<a class="navbar-brand" href="http://tcs.ext.here.com/"><img alt="HERE logo" src="/assets/logo.svg" width="60" height="44" /></a>
+					</div>
+				</div>
+				<div class="col-xs-10">
+					<div class="header-text">Bikes Demo</div>
+				</div>
+			</div>
+		</div>
+	</nav>
+	<div id="content-padder"></div>
+	<div id="content-real">
+
+		<link rel="stylesheet" type="text/css" href="./css/bootstrap.min.css">
+		<link rel="stylesheet" type="text/css" href="./css/legend.css">
+		<link rel="stylesheet" type="text/css" href="./css/styles.css">
+
+		<style type="text/css">
+			.ctrl-panel {
+				display: none;
+			}
+			
+			footer {
+				display: none;
+			}
+			
+			#mapContainer {
+				top: 80px;
+				height: calc(100% - 80px);
+			}
+			
+			.loading {
+				top: 80px;
+				height: calc(100% - 80px);
+				width: 100%;
+				left: 0px;
+				z-index: 10;
+			}
+			
+			.controls {
+				z-index: 1;
+				top: 96px;
+			}
+			
+			.label {
+				margin-left: 0;
+				margin-top: 0;
+			}
+			
+			.sctable {
+				width: 140%;
+				background: #57D9CF;
+			}
+			
+			.slidecontainer {
+				width: 100%;
+			}
+			
+			.pslider {
+				-webkit-appearance: none;
+				width: 100%;
+				height: 10px;
+				background: white;
+				outline: none;
+				opacity: 0.7;
+				-webkit-transition: .2s;
+				transition: opacity .2s;
+			}
+			
+			.pslider:hover {
+				opacity: 1;
+			}
+			
+			.pslider::-webkit-slider-thumb {
+				-webkit-appearance: none;
+				appearance: none;
+				width: 25px;
+				height: 25px;
+				background: #57D9CF;
+				cursor: pointer;
+			}
+			
+			.pslider::-moz-range-thumb {
+				width: 25px;
+				height: 25px;
+				background: #57D9CF;
+				cursor: pointer;
+			}
+		</style>
+		<div class="loading"></div>
+		<div class="controls">
+			<div class="group">
+				<div class="title">
+					<span class="more"></span> Settings</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="Einbahnen" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Einbahnen</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="FK_1_GK_1_Preferred" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Preferred</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="FK_1_GK_5_Preferred_minus" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Preferred minus</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="FK_2_GK_1_Bikelane_abgegrenzt" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Bikelane abgegrenzt</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="FK_3_GK_3_Bikelane_unabgegrenzt" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Bikelane unabgegrenzt</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="FK_4_GK_3_Traffic" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Traffic</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="FK_5_GK_3_Kopfsteinpflaster" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Kopfsteinpflaster</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="FK_5_GK_5_Kreuzungen" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Kreuzungen</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="FK_5_GK_6_Baustellen_komplett_gesperrt" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">Baustellen</div>
+			</label>
+				</div>
+
+				<div class="switcher">
+					<label class="switch">
+				<input class="complete" type="checkbox">
+				<div class="slider round"></div>
+				<div class="label">complete</div>
+			</label>
+				</div>
+
+				<script type="text/javascript">
+					var tests = [{
+						start: "Köpenickerstraße 14 Berlin",
+						dest: "Urbanstraße 124 Berlin"
+					}, {
+						start: "Fidicinstraße 40 Berlin",
+						dest: "Heinrich-Heine-Straße 5 Berlin"
+					}, {
+						start: "Jüterborger 40 Berlin",
+						dest: "Pflügerstraße 30 Berlin"
+					}, {
+						start: "Cuvrystraße 48 Berlin",
+						dest: "Prinzenstraße 20 Berlin"
+					}, {
+						start: "Dieffenbachstraße 60 Berlin",
+						dest: "Adalbertstraße 50 Berlin"
+					}, {
+						start: "Heckmannufer Berlin",
+						dest: "Pflügerstraeße 54 Berlin"
+					}, {
+						start: "Pflügerstraße 80 Berlin",
+						dest: "Waldemarstraße 20 Berlin"
+					}, {
+						start: "Zimmerstraße 54 Berlin",
+						dest: "Donaustraße 120 Berlin"
+					}, {
+						start: "Zimmerstraße 48a Berlin",
+						dest: "Donaustraße 120 Berlin"
+					}, {
+						start: "Fedicinstraße 42 Berlin",
+						dest: "Melchiorstraße 30 Berlin"
+					}, {
+						start: "Cuvrystraße 32 Berlin",
+						dest: "Wiener Straße 43 Berlin"
+					}];
+				</script>
+
+				<!--div class="group">
+			<label for="example">Tests</label>
+			<div class="custom-select" style="width:200px;">
+				<select id="example" onchange="changeStartAndDest(this);">>
+					<option value="0" selected>Köpenickerstraße 14</option>
+					<option value="1">Fidicinstraße 40</option>
+					<option value="2">Jüterborger 40</option>
+					<option value="3">Cuvrystraße 48</option>
+					<option value="4">Dieffenbachstraße 60</option>
+					<option value="5">Heckmannufer</option>
+					<option value="6">Pflügerstraße 80</option>
+					<option value="7">Zimmerstraße 54</option>
+					<option value="8">Zimmerstraße 48a</option>
+					<option value="9">Fedicinstraße 42</option>
+					<option value="9">Curvystraße 32</option>
+				</select>
+			</div>
+		</div-->
+
+				<!--div class="form-group">
+			<label for="input-date-start" class="col-sm-2 control-label">Start</label>
+			<input type="text" class="form-control" id="start" value="Köpenickerstraße 14 Berlin" onkeyup="enableManualInput();"/>
+		</div>
+
+		<div class="form-group">
+			<label for="input-date-start" class="col-sm-2 control-label">Destination</label>
+			<input type="text" class="form-control" id="destination" value="Urbanstraße 124 Berlin"/>
+		</div-->
+
+				<!--div class="form-group">
+			<table class="sctable">
+				<th></th>
+				<th style="text-align:center">SC1</th>
+				<th style="text-align:center">SC2</th>
+				<th style="text-align:center">SC3</th>
+				<th style="text-align:center">SC4</th>
+				<th style="text-align:center">SC5</th>
+				<th style="text-align:center">SC6</th>
+				<th style="text-align:center">SC7</th>
+				<th style="text-align:center">SC8</th>
+				<tr>
+					<td><b>FCl</b></td>
+					<td><input type="text" class="form-control" id="FC1SC1" value="40"/></td>
+					<td><input type="text" class="form-control" id="FC1SC2" value="30"/></td>
+					<td><input type="text" class="form-control" id="FC1SC3" value="20"/></td>
+					<td><input type="text" class="form-control" id="FC1SC4" value="18"/></td>
+					<td><input type="text" class="form-control" id="FC1SC5" value="15"/></td>
+					<td><input type="text" class="form-control" id="FC1SC6" value="8"/></td>
+					<td><input type="text" class="form-control" id="FC1SC7" value="3"/></td>
+					<td><input type="text" class="form-control" id="FC1SC8" value="1"/></td>
+				<tr>
+				<tr>
+					<td><b>FC2</b></td>
+					<td><input type="text" class="form-control" id="FC2SC1" value="38"/></td>
+					<td><input type="text" class="form-control" id="FC2SC2" value="28"/></td>
+					<td><input type="text" class="form-control" id="FC2SC3" value="18"/></td>
+					<td><input type="text" class="form-control" id="FC2SC4" value="16"/></td>
+					<td><input type="text" class="form-control" id="FC2SC5" value="13"/></td>
+					<td><input type="text" class="form-control" id="FC2SC6" value="8"/></td>
+					<td><input type="text" class="form-control" id="FC2SC7" value="3"/></td>
+					<td><input type="text" class="form-control" id="FC2SC8" value="1"/></td>
+				<tr>
+				<tr>
+					<td><b>FC3</b></td>
+					<td><input type="text" class="form-control" id="FC3SC1" value="36"/></td>
+					<td><input type="text" class="form-control" id="FC3SC2" value="26"/></td>
+					<td><input type="text" class="form-control" id="FC3SC3" value="16"/></td>
+					<td><input type="text" class="form-control" id="FC3SC4" value="14"/></td>
+					<td><input type="text" class="form-control" id="FC3SC5" value="12"/></td>
+					<td><input type="text" class="form-control" id="FC3SC6" value="8"/></td>
+					<td><input type="text" class="form-control" id="FC3SC7" value="3"/></td>
+					<td><input type="text" class="form-control" id="FC3SC8" value="1"/></td>
+				<tr>
+				<tr>
+					<td><b>FC4</b></td>
+					<td><input type="text" class="form-control" id="FC4SC1" value="20"/></td>
+					<td><input type="text" class="form-control" id="FC4SC2" value="18"/></td>
+					<td><input type="text" class="form-control" id="FC4SC3" value="16"/></td>
+					<td><input type="text" class="form-control" id="FC4SC4" value="14"/></td>
+					<td><input type="text" class="form-control" id="FC4SC5" value="12"/></td>
+					<td><input type="text" class="form-control" id="FC4SC6" value="7"/></td>
+					<td><input type="text" class="form-control" id="FC4SC7" value="2"/></td>
+					<td><input type="text" class="form-control" id="FC4SC8" value="1"/></td>
+				<tr>
+				<tr>
+					<td><b>FC5</b></td>
+					<td><input type="text" class="form-control" id="FC5SC1" value="18"/></td>
+					<td><input type="text" class="form-control" id="FC5SC2" value="16"/></td>
+					<td><input type="text" class="form-control" id="FC5SC3" value="14"/></td>
+					<td><input type="text" class="form-control" id="FC5SC4" value="12"/></td>
+					<td><input type="text" class="form-control" id="FC5SC5" value="10"/></td>
+					<td><input type="text" class="form-control" id="FC5SC6" value="6"/></td>
+					<td><input type="text" class="form-control" id="FC5SC7" value="1"/></td>
+					<td><input type="text" class="form-control" id="FC5SC8" value="1"/></td>
+				<tr>
+				<tr>
+					<td><b>VC</b></td>
+					<td><input type="text" class="form-control" id="VCSC1" value="10"/></td>
+					<td><input type="text" class="form-control" id="VCSC2" value="10"/></td>
+					<td><input type="text" class="form-control" id="VCSC3" value="10"/></td>
+					<td><input type="text" class="form-control" id="VCSC4" value="10"/></td>
+					<td><input type="text" class="form-control" id="VCSC5" value="8"/></td>
+					<td><input type="text" class="form-control" id="VCSC6" value="4"/></td>
+					<td><input type="text" class="form-control" id="VCSC7" value="1"/></td>
+					<td><input type="text" class="form-control" id="VCSC8" value="1"/></td>
+				<tr>
+			</table>
+		</div-->
+
+				<!--div class="form-group">
+			<label for="input-preferred-bonus" class="col-sm-4 control-label" id="input-preferred-bonus">Preferred</label>
+			<input type="range" min="1" max="100" value="40" class="pslider" id="preferredbonus">
+		</div>
+		
+		<div class="group">
+			<div class="btn-calculate">Calculate Route</div>
+		</div-->
+			</div>
+		</div>
+
+		<div id="mapContainer"></div>
+
+		<script type="text/javascript">
+			/*
+							author domschuette
+							(C) HERE 2019
+						*/
+
+			// Check whether the environment should use hi-res maps
+			var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+			// check if the site was loaded via secure connection
+			var secure = (location.protocol === 'https:') ? true : false;
+
+			// Create a platform object to communicate with the HERE REST APIs
+			var platform = new H.service.Platform({
+					useCIT: true,
+					app_id: app_id,
+					app_code: app_code,
+					useHTTPS: secure
+				}),
+				defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+			defaultLayers.normal.map = platform.getMapTileService({
+				type: 'base'
+			}).createTileLayer('basetile', 'reduced.night', hidpi ? 512 : 256, 'png8', null, hidpi ? 2 : 1, false);
+
+			// Instantiate a map in the 'map' div, set the base map to normal
+			map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+				center: new H.geo.Point(52.49511185162211, 13.418564998428337),
+				zoom: 14,
+				pixelRatio: hidpi ? 2 : 1
+			});
+
+			// Enable the map event system
+			var mapevents = new H.mapevents.MapEvents(map);
+
+			// Enable map interaction (pan, zoom, pinch-to-zoom)
+			var behavior = new H.mapevents.Behavior(mapevents);
+			window.addEventListener('resize', function() {
+				map.getViewPort().resize();
+			});
+
+			// Enable the default UI
+			var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+			// helper for manual inputs
+			var manualInput = false;
+
+			var restHelper = {
+				CLE: {
+					// hostname: "http://cle.ci.api.here.com",
+					hostname: "https://cle.api.here.com",
+					// hostname: "http://10.223.128.155:8080",
+					resources: {
+						searchAll: {
+							path: '/2/search/all.json',
+							method: 'GET'
+						}
+					}
+				}
+			};
+
+			var EinbahnenGroup = new H.map.Group(),
+				FK_1_GK_1_PreferredGroup = new H.map.Group(),
+				FK_1_GK_5_Preferred_minusGroup = new H.map.Group(),
+				FK_2_GK_1_Bikelane_abgegrenztGroup = new H.map.Group(),
+				FK_3_GK_3_Bikelane_unabgegrenztGroup = new H.map.Group(),
+				FK_4_GK_3_TrafficGroup = new H.map.Group(),
+				FK_5_GK_3_KopfsteinpflasterGroup = new H.map.Group(),
+				FK_5_GK_5_KreuzungenGroup = new H.map.Group(),
+				FK_5_GK_6_Baustellen_komplett_gesperrtGroup = new H.map.Group(),
+				completeGroup = new H.map.Group(),
+				routingGroup = new H.map.Group(),
+				polyline,
+				lastMarker,
+				waypoint_first,
+				firstMarker,
+				waypoint_last,
+				routeColor = ["rgba(18, 65, 145, 0.8)", "rgba(0, 145, 255, 0.7)", "rgba(127, 201, 255, 0.6)"],
+				routeLinkHashMap = new Object(),
+				legLinkHashMap = new Object(),
+				lastRouteURL = "",
+				routeStroke = 8,
+				// Info Bubbles for LinkInfo display
+				linkDataInfoBubble,
+				HOVER_LINK_STYLE = {
+					lineWidth: 12,
+					strokeColor: 'rgba(0, 255, 50, 0.7)',
+					lineJoin: 'round'
+				},
+				DEFAULT_LINK_STYLE = {
+					lineWidth: 11,
+					strokeColor: "#B22222",
+					lineJoin: "round"
+				},
+				geocoder = platform.getGeocodingService();
+
+			map.addObject(routingGroup);
+
+			// ui functions
+			map.addEventListener('contextmenu', function(e) {
+				if (e.target.type == 3) {
+					return;
+				}
+
+				currClickedviewportX = e.viewportX;
+				currClickedviewportY = e.viewportY;
+				clickCoords = map.screenToGeo(e.viewportX, e.viewportY);
+
+				e.items.push(new H.util.ContextItem({
+					label: 'Route from here',
+					callback: function() {
+						removeObjects(false);
+						waypoint_first = clickCoords;
+						firstMarker = addMarker(clickCoords);
+						waypoint_last = "";
+
+					}
+				}));
+				e.items.push(new H.util.ContextItem({
+					label: 'Route to here (bicycle)',
+					callback: function() {
+						removeObjects(true);
+						waypoint_last = clickCoords;
+						lastMarker = addMarker(clickCoords);
+						calculateRouteFromAtoB('bicycle', 'OVERLAYBICYCLECOMPLETE');
+						routeNotCalculated = false;
+					}
+				}));
+				e.items.push(new H.util.ContextItem({
+					label: 'Route to here (without layer)',
+					callback: function() {
+						removeObjects(true);
+						waypoint_last = clickCoords;
+						lastMarker = addMarker(clickCoords);
+						calculateRouteFromAtoB('bicycle', null);
+						routeNotCalculated = false;
+					}
+				}));
+				e.items.push(new H.util.ContextItem({
+					label: 'Route to here (car)',
+					callback: function() {
+						removeObjects(true);
+						waypoint_last = clickCoords;
+						lastMarker = addMarker(clickCoords);
+						calculateRouteFromAtoB('car', 'OVERLAYBICYCLECOMPLETE');
+						routeNotCalculated = false;
+					}
+				}));
+
+				if (lastRouteURL != "") {
+					e.items.push(new H.util.ContextItem({
+						label: 'Re-calculate last route (car)',
+						callback: function() {
+							removeObjects(true);
+							reCalculateRoute("car");
+							routeNotCalculated = false;
+						}
+					}));
+
+					e.items.push(new H.util.ContextItem({
+						label: 'Re-calculate last route (bike)',
+						callback: function() {
+							removeObjects(true);
+							reCalculateRoute("bicycle");
+							routeNotCalculated = false;
+						}
+					}));
+				}
+			});
+
+			$('.btn-calculate').click(function(evt) {
+				startRouteCalculation();
+			});
+
+			$('.Einbahnen').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(EinbahnenGroup);
+					if (EinbahnenGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEONEWAY",
+							layerId: "TRUCK_RESTR_FC4,TRUCK_RESTR_FC5,ROAD_ADMIN_FC4,TRUCK_RESTR_FC2,ROAD_ADMIN_FC5,ROAD_GEOM_FC5,ROAD_ADMIN_FC2,LINK_ATTRIBUTE_FC5,ROAD_ADMIN_FC3,ROAD_GEOM_FC2,ROAD_GEOM_FC3,ROAD_GEOM_FC4,TURN_RESTR_FC4,TURN_RESTR_FC5,LINK_FC5,LINK_ATTRIBUTE_FC2,TURN_RESTR_FC2,TURN_RESTR_FC3,LINK_FC4,LINK_FC3,LINK_ATTRIBUTE_FC4,LINK_FC2,LINK_ATTRIBUTE_FC3",
+							counter: 0,
+							group: EinbahnenGroup,
+							color: "#b22222"
+						});
+					}
+				} else {
+					map.removeObject(EinbahnenGroup);
+				}
+			});
+
+			$('.FK_1_GK_1_Preferred').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(FK_1_GK_1_PreferredGroup);
+					if (FK_1_GK_1_PreferredGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEFK1GK1PREFERRED",
+							layerId: "TRUCK_RESTR_FC5,ROAD_ADMIN_FC4,ROAD_ADMIN_FC5,ROAD_GEOM_FC5,ROAD_ADMIN_FC2,LINK_ATTRIBUTE_FC5,ROAD_ADMIN_FC3,ROAD_GEOM_FC2,ROAD_GEOM_FC3,ROAD_GEOM_FC4,LINK_FC5,LINK_ATTRIBUTE_FC2,LINK_FC4,LINK_FC3,LINK_ATTRIBUTE_FC4,LINK_ATTRIBUTE_FC3,LINK_FC2",
+							counter: 0,
+							group: FK_1_GK_1_PreferredGroup,
+							color: "#FF2222"
+						});
+					}
+				} else {
+					map.removeObject(FK_1_GK_1_PreferredGroup);
+				}
+			});
+
+			$('.FK_1_GK_5_Preferred_minus').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(FK_1_GK_5_Preferred_minusGroup);
+					if (FK_1_GK_5_Preferred_minusGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEFK1GK1PREFERREDMINUS",
+							layerId: "LINK_FC5,LINK_FC3,ROAD_ADMIN_FC5,LINK_ATTRIBUTE_FC3,ROAD_GEOM_FC5,LINK_ATTRIBUTE_FC5,ROAD_ADMIN_FC3,ROAD_GEOM_FC3",
+							counter: 0,
+							group: FK_1_GK_5_Preferred_minusGroup,
+							color: "#F2F222"
+						});
+					}
+				} else {
+					map.removeObject(FK_1_GK_5_Preferred_minusGroup);
+				}
+			});
+
+			$('.FK_2_GK_1_Bikelane_abgegrenzt').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(FK_2_GK_1_Bikelane_abgegrenztGroup);
+					if (FK_2_GK_1_Bikelane_abgegrenztGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEFK2GK1BIKELANEAB",
+							layerId: "ROAD_ADMIN_FC4,ROAD_ADMIN_FC5,TRUCK_RESTR_FC3,ROAD_ADMIN_FC2,ROAD_GEOM_FC5,ROAD_ADMIN_FC3,LINK_ATTRIBUTE_FC5,ROAD_GEOM_FC2,ROAD_GEOM_FC3,ROAD_GEOM_FC4,LINK_ATTRIBUTE_FC2,LINK_FC5,LINK_FC4,LINK_FC3,LINK_ATTRIBUTE_FC4,LINK_FC2,LINK_ATTRIBUTE_FC3",
+							counter: 0,
+							group: FK_2_GK_1_Bikelane_abgegrenztGroup,
+							color: "#F22F22"
+						});
+					}
+				} else {
+					map.removeObject(FK_2_GK_1_Bikelane_abgegrenztGroup);
+				}
+			});
+
+			$('.FK_3_GK_3_Bikelane_unabgegrenzt').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(FK_3_GK_3_Bikelane_unabgegrenztGroup);
+					if (FK_3_GK_3_Bikelane_unabgegrenztGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEFK2GK1BIKELANEUAB",
+							layerId: "TRUCK_RESTR_FC4,TRUCK_RESTR_FC5,ROAD_ADMIN_FC4,ROAD_ADMIN_FC5,ROAD_GEOM_FC5,ROAD_ADMIN_FC2,LINK_ATTRIBUTE_FC5,ROAD_ADMIN_FC3,ROAD_GEOM_FC2,ROAD_GEOM_FC3,ROAD_GEOM_FC4,LINK_FC5,LINK_ATTRIBUTE_FC2,LINK_FC4,LINK_ATTRIBUTE_FC4,LINK_FC3,LINK_FC2,LINK_ATTRIBUTE_FC3",
+							counter: 0,
+							group: FK_3_GK_3_Bikelane_unabgegrenztGroup,
+							color: "#F222F2"
+						});
+					}
+				} else {
+					map.removeObject(FK_3_GK_3_Bikelane_unabgegrenztGroup);
+				}
+			});
+
+			$('.FK_4_GK_3_Traffic').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(FK_4_GK_3_TrafficGroup);
+					if (FK_4_GK_3_TrafficGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEFK4GK3TRAFFIC",
+							layerId: "TRUCK_RESTR_FC4,ROAD_ADMIN_FC4,ROAD_ADMIN_FC5,ROAD_ADMIN_FC2,ROAD_GEOM_FC5,ROAD_ADMIN_FC3,LINK_ATTRIBUTE_FC5,ROAD_GEOM_FC2,ROAD_GEOM_FC3,ROAD_GEOM_FC4,LINK_ATTRIBUTE_FC2,LINK_FC5,LINK_FC4,LINK_FC3,LINK_ATTRIBUTE_FC4,LINK_FC2,LINK_ATTRIBUTE_FC3",
+							counter: 0,
+							group: FK_4_GK_3_TrafficGroup,
+							color: "#F444F4"
+						});
+					}
+				} else {
+					map.removeObject(FK_4_GK_3_TrafficGroup);
+				}
+			});
+
+			$('.FK_5_GK_3_Kopfsteinpflaster').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(FK_5_GK_3_KopfsteinpflasterGroup);
+					if (FK_5_GK_3_KopfsteinpflasterGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEFK5GK3KOPFSTEIN",
+							layerId: "TRUCK_RESTR_FC5,ROAD_ADMIN_FC4,ROAD_ADMIN_FC5,ROAD_GEOM_FC5,ROAD_ADMIN_FC2,LINK_ATTRIBUTE_FC5,ROAD_ADMIN_FC3,ROAD_GEOM_FC2,ROAD_GEOM_FC3,ROAD_GEOM_FC4,LINK_FC5,LINK_ATTRIBUTE_FC2,LINK_FC4,LINK_FC3,LINK_ATTRIBUTE_FC4,LINK_ATTRIBUTE_FC3,LINK_FC2",
+							counter: 0,
+							group: FK_5_GK_3_KopfsteinpflasterGroup,
+							color: "#F666F6"
+						});
+					}
+				} else {
+					map.removeObject(FK_5_GK_3_KopfsteinpflasterGroup);
+				}
+			});
+
+			$('.FK_5_GK_5_Kreuzungen').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(FK_5_GK_5_KreuzungenGroup);
+					if (FK_5_GK_5_KreuzungenGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEFK5GK5KREUZUNGEN",
+							layerId: "LINK_ATTRIBUTE_FC2,LINK_FC3,LINK_ATTRIBUTE_FC3,LINK_FC2,ROAD_ADMIN_FC2,ROAD_ADMIN_FC3,ROAD_GEOM_FC2,ROAD_GEOM_FC3",
+							counter: 0,
+							group: FK_5_GK_5_KreuzungenGroup,
+							color: "#F777F7"
+						});
+					}
+				} else {
+					map.removeObject(FK_5_GK_5_KreuzungenGroup);
+				}
+			});
+
+			$('.FK_5_GK_6_Baustellen_komplett_gesperrt').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(FK_5_GK_6_Baustellen_komplett_gesperrtGroup);
+					if (FK_5_GK_6_Baustellen_komplett_gesperrtGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLEFK5GK6BLOCKED",
+							layerId: "LINK_FC5,LINK_FC4,LINK_FC3,LINK_ATTRIBUTE_FC4,ROAD_ADMIN_FC4,LINK_ATTRIBUTE_FC3,ROAD_ADMIN_FC5,ROAD_GEOM_FC5,ROAD_ADMIN_FC3,LINK_ATTRIBUTE_FC5,ROAD_GEOM_FC3,ROAD_GEOM_FC4",
+							counter: 0,
+							group: FK_5_GK_6_Baustellen_komplett_gesperrtGroup,
+							color: "#F777F7"
+						});
+					}
+				} else {
+					map.removeObject(FK_5_GK_6_Baustellen_komplett_gesperrtGroup);
+				}
+			});
+
+			$('.complete').click(function(evt) {
+
+				if ($(this).is(':checked')) {
+					map.addObject(completeGroup);
+					if (completeGroup.getChildCount() == 0) {
+						display_overlay({
+							layer: "OVERLAYBICYCLECOMPLETE",
+							layerId: "TRUCK_RESTR_FC4,TRUCK_RESTR_FC5,ROAD_ADMIN_FC4,ROAD_ADMIN_FC5,TRUCK_RESTR_FC3,ROAD_GEOM_FC5,ROAD_ADMIN_FC2,LINK_ATTRIBUTE_FC5,ROAD_ADMIN_FC3,ROAD_GEOM_FC2,ROAD_GEOM_FC3,ROAD_GEOM_FC4,LINK_FC5,LINK_ATTRIBUTE_FC2,LINK_FC4,LINK_ATTRIBUTE_FC4,LINK_FC3,LINK_ATTRIBUTE_FC3,LINK_FC2",
+							counter: 0,
+							group: completeGroup,
+							color: "#F999F9"
+						});
+					}
+				} else {
+					map.removeObject(completeGroup);
+				}
+			});
+
+			// trigger a click for init
+			$('.complete').trigger('click');
+
+			/*
+			document.getElementById("input-preferred-bonus").innerHTML = "Bonus " + "40%"
+			preferredbonus.oninput = function() {
+				document.getElementById("input-preferred-bonus").innerHTML = "Bonus " + this.value + "%"; 
+			}
+			*/
+
+			function display_overlay(meta) {
+
+				var params = {
+					layer_id: meta.layerId,
+					map_name: meta.layer,
+					start_geometry_id: meta.counter,
+					no_of_records: 500,
+					geom: 'full'
+				};
+
+				restAPICaller("CLE", "searchAll", params,
+					function(data, meta) {
+						gotSearchAllResponse(data, meta);
+					},
+					function(data, meta) {
+						console.log(data);
+					},
+					meta);
+			};
+
+			var gotSearchAllResponse = function(respJsonObj, meta) {
+				if (respJsonObj.error != undefined) {
+					alert(respJsonObj.error);
+					feedbackTxt.innerHTML += JSON.stringify(respJsonObj, null, 2) + '\n';
+					return;
+				}
+
+				var color = meta.color;
+
+				var links = respJsonObj.geometries;
+
+				if (links.length == 0)
+					meta.counter = 0;
+
+				for (var i = 0; i < links.length; i++) {
+					var strip = new H.geo.Strip();
+					var geometryId = links[i].attributes["GEOMETRY_ID"] != undefined ? parseInt(links[i].attributes["GEOMETRY_ID"]) : -1;
+					if (meta.counter < geometryId)
+						meta.counter = geometryId;
+
+					var lineString0 = new H.geo.LineString();
+					var lineString1 = new H.geo.LineString();
+					var shape = links[i].geometry.startsWith('LINESTRING') ?
+						links[i].geometry.substring(11, links[i].geometry.length - 1).split(',') // LINESTRING(lat lon, lat lon, ...)
+						:
+						links[i].geometry.substring(17, links[i].geometry.length - 2).split(',') // MULTILINESTRING((lat lon, lat lon, ...))
+					for (var j = 0; j < shape.length; j++) {
+						var lonLat = shape[j].trim().split(' ');
+						strip.pushLatLngAlt(parseFloat(lonLat[1]), parseFloat(lonLat[0]), 0);
+						if (j == 0) {
+							lineString0.pushPoint({
+								lat: parseFloat(lonLat[1]),
+								lng: parseFloat(lonLat[0])
+							});
+							lineString0.pushPoint({
+								lat: parseFloat(lonLat[1]),
+								lng: parseFloat(lonLat[0])
+							});
+						}
+						if (j == shape.length - 1) {
+							lineString1.pushPoint({
+								lat: parseFloat(lonLat[1]),
+								lng: parseFloat(lonLat[0])
+							});
+							lineString1.pushPoint({
+								lat: parseFloat(lonLat[1]),
+								lng: parseFloat(lonLat[0])
+							});
+						}
+					}
+
+					var isAttrChanged = links[i].hasOwnProperty("attributes") && links[i].attributes.hasOwnProperty("LINK_ID") && links[i].attributes.LINK_ID > 10000000;
+					var isBlocked = links[i].hasOwnProperty("attributes") && links[i].attributes.hasOwnProperty("VEHICLE_TYPES") && links[i].attributes.VEHICLE_TYPES === "0";
+
+					var width = 5;
+					if (isAttrChanged) width = 3;
+					if (isBlocked) width = 5;
+
+					var polyline = isBlocked ? new H.map.Polyline(strip, {
+							style: {
+								lineDash: [2, 20],
+								lineWidth: width,
+								strokeColor: meta.color,
+								fillColor: meta.color,
+								lineJoin: "round"
+							}
+						}) :
+						new H.map.Polyline(strip, {
+							style: {
+								lineWidth: width,
+								strokeColor: isAttrChanged ? meta.color + "C0" : meta.color,
+								fillColor: isAttrChanged ? meta.color + "C0" : meta.color,
+								lineJoin: "round"
+							}
+						});
+
+					polyline.addEventListener('tap', createTapLinkHandler(polyline));
+					polyline.addEventListener('pointerenter', createPointerEnterLinkHandler(polyline));
+					polyline.addEventListener('pointerleave', createPointerLeaveLinkHandler(polyline));
+					polyline.$object = links[i];
+					polyline.$style = polyline.getStyle();
+
+					meta.group.addObject(polyline);
+					if (links[i].hasOwnProperty("attributes") && links[i].attributes.hasOwnProperty("LINK_ID")) {
+						coords = strip.getLatLngAltArray()
+						l = coords.length / 3;
+						cl = Math.floor(l / 2);
+						var inscLat = (coords[0] + coords[3]) / 2;
+						var inscLon = (coords[1] + coords[4]) / 2;
+
+						if (coords.length > 6) {
+							inscLat = coords[cl * 3]
+							inscLon = coords[cl * 3 + 1]
+						}
+
+						var linkText = isBlocked ? '(' + links[i].attributes.LINK_ID + ')' : links[i].attributes.LINK_ID;
+					}
+
+				}
+
+				if (meta.counter != 0) {
+					meta.counter++;
+					display_overlay(meta);
+				} else {
+					map.addObject(meta.group);
+					map.setViewBounds(meta.group.getBounds());
+				}
+			};
+
+			// Link selection display handlers
+			function createPointerEnterLinkHandler(polyline) {
+				return function(evt) {
+					polyline.setStyle(HOVER_LINK_STYLE);
+				};
+			}
+
+			function createPointerLeaveLinkHandler(polyline) {
+				return function(e) {
+					polyline.setStyle(e.target.$style);
+				};
+			}
+
+			//LinkInfo display handler
+			function createTapLinkHandler(polyline) {
+				return function(e) {
+					var linkInfo = polyline.$object;
+
+					var strip = polyline.getGeometry();
+					var linkId = polyline.$linkId;
+					var lowIndex = Math.floor((strip.getPointCount() - 1) / 2);
+					var highIndex = Math.ceil(strip.getPointCount() / 2);
+					var center;
+					if (lowIndex === highIndex) {
+						center = strip.extractPoint(lowIndex);
+					} else {
+						var lowPoint = strip.extractPoint(lowIndex);
+						var highPoint = strip.extractPoint(highIndex);
+						center = new H.geo.Point((lowPoint.lat + highPoint.lat) / 2, (lowPoint.lng + highPoint.lng) / 2);
+					}
+
+					var tableText = "";
+					tableText += '<table <table class="link-info">';
+					tableText += "<tr>";
+					tableText += "<th>Attribute</th>";
+					tableText += "<th>Value    </th>";
+					tableText += "</tr>";
+					var keys = Object.keys(linkInfo);
+					keys.sort();
+					keys.forEach(function(val, idx) {
+
+						tableText += '<tr style="color:gray>';
+						tableText += "<td>" + val + "</td>";
+						tableText += "<td>" + linkInfo[val] + "</td>";
+						tableText += "</tr>";
+					});
+
+					tableText += "</table>";
+
+					// Adding Link data to a Infobubble with text area formatting
+					var infoText = "<div style='background-color:black;border:0;font-size:12px;width:375px;max-height:250px;overflow-y: scroll'>" + tableText + "</div>";
+
+					if (!linkDataInfoBubble) {
+						linkDataInfoBubble = new H.ui.InfoBubble(center, {
+							content: infoText
+						});
+						ui.addBubble(linkDataInfoBubble);
+					} else {
+						linkDataInfoBubble.setPosition(center);
+						linkDataInfoBubble.setContent(infoText);
+					}
+					linkDataInfoBubble.open();
+
+				};
+			}
+
+			var startRouteCalculation = function() {
+				geocode(document.getElementById("start").value, true);
+			};
+
+			function geocode(searchTerm, start) {
+				geocoder.search({
+						searchText: searchTerm
+					},
+					function(result) {
+						var pos;
+						if (result.Response.View[0].Result[0].Location != null) {
+							pos = result.Response.View[0].Result[0].Location.DisplayPosition;
+						} else {
+							pos = result.Response.View[0].Result[0].Place.Locations[0].DisplayPosition;
+						}
+
+						pos = new H.geo.Point(pos.Latitude, pos.Longitude);
+
+						if (start) {
+							removeObjects(false);
+							waypoint_first = pos;
+							firstMarker = addMarker(pos);
+							waypoint_last = "";
+						} else {
+							removeObjects(true);
+							waypoint_last = pos;
+							lastMarker = addMarker(pos);
+							calculateRouteFromAtoB('bicycle', 'OVERLAYBICYCLECOMPLETE');
+							routeNotCalculated = false;
+						}
+
+						if (start)
+							geocode(document.getElementById('destination').value, false);
+					},
+					function() {
+						alert("Address not found!");
+					});
+			}
+
+			var enableManualInput = function() {
+				manualInput = true;
+			}
+
+			var request_route = function(start, destination) {
+				var endpoint = document.getElementById('endpoint-text-input').value;
+				var url = document.getElementById("route-area").value.replace(/\r?\n/g, "") + '&jsoncallback=gotRoutingResponse';
+				script = document.createElement("script");
+				script.src = encodeUrlParameters(endpoint, url);
+				document.body.appendChild(script);
+			};
+
+			var gotRoutingResponse = function(respJsonRouteObj) {
+				routegroup.removeAll();
+				if (respJsonRouteObj.error != undefined || respJsonRouteObj.issues != undefined) {
+					alert(respJsonRouteObj.error);
+					feedbackTxt.innerHTML = respJsonRouteObj.error;
+					return;
+				}
+				var strip = new H.geo.Strip();
+				for (var l = 0; l < respJsonRouteObj.response.route[0].leg.length; l++) {
+					var links = respJsonRouteObj.response.route[0].leg[l].link;
+					for (var i = 0; i < links.length; i++) {
+						var shape = links[i].shape;
+						for (var j = 0; j < shape.length; j++) {
+							if (shape[j].toFixed != undefined) { // &jsonattributes=41 -> array of lat, lon, lat, lon...
+								strip.pushLatLngAlt(shape[j], shape[j + 1], 0);
+								j++;
+							} else { // array of "lat,lon", "lat,lon", ...
+								var latLon = shape[j].split(",");
+								strip.pushLatLngAlt(parseFloat(latLon[0]), parseFloat(latLon[1]), 0);
+							}
+						}
+					}
+				}
+				var polyline = new H.map.Polyline(strip, {
+					style: {
+						lineWidth: 5,
+						strokeColor: "#2222B2",
+						lineJoin: "round"
+					}
+				});
+				polyline.setArrows(true);
+				routegroup.addObject(polyline);
+				// show maneuver instructions
+				for (var l = 0; l < respJsonRouteObj.response.route[0].leg.length; l++) {
+					var maneuvers = respJsonRouteObj.response.route[0].leg[l].maneuver;
+					for (var i = 0; maneuvers && i < maneuvers.length; i++) {
+						var lat = maneuvers[i].position.latitude;
+						var lon = maneuvers[i].position.longitude;
+						var point = new H.geo.Point(parseFloat(lat), parseFloat(lon));
+						var instr = maneuvers[i].instruction.replace(new RegExp("</span>", 'g'), "").replace(new RegExp('<span class="[a-z\-]+">', 'g'), "");
+						var marker = new H.map.Marker(point, {
+							icon: createIconMarker(maneuvers[i].travelTime + " seconds", instr)
+						});
+						routegroup.addObject(marker);
+					}
+				}
+				map.addObject(routegroup);
+				map.setViewBounds(routegroup.getBounds());
+			}
+
+			var svgMarkerImage_Line = '<svg width="__widthAll__" height="60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+				'<g>' +
+				'<rect id="label-box" ry="3" rx="3" stroke="#000000" height="30" width="__width__" y="11" x="45" fill="#ffffff"/>' +
+				'<text id="label-text" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="10" font-weight="bold" y="24" x="55" stroke-width="0" fill="#000000">__line1__</text>' +
+				'<text id="label-desc" xml:space="preserve" text-anchor="start" font-family="Sans-serif" font-size="8" y="36" x="55" stroke-width="0" fill="#000000">__line2__</text>' +
+				'<image width="50" height="50" x="8.5" y="9.5" xlink:href="data:image/png;base64,R0lGODlhfQDCAPQdAAELHgEMHgIMHw8LHRALHR8KGyAKGxEbLCEqOzE5SUBIVkFIV2Fnc3B1gHF2gYCFjoCFj4+UnJCVnZ+jqqCkq6+yuLCzuc/R1NDS1d/g4uDh4+/v8PDw8f///wAAAAAAACH5BAEAAB4ALAAAAAB9AMIAAAX+oCeOJCmcaKqubOu+cCyvZW2XxKzvfO+vhNvN8Csaj0eD0IRsOp+vpQdKrUKF1qy2aNt6v7MSEUwup5Qjs9o8yq3f3uAUTteK6vjqPc9v7vuAP3OBhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnCkICwoMEA4KCwidWgsSGB2trq+uFxEKqEcHHhUcsLu8HRsTHge1OwgTvcfIE6fDLwcQyNDIEMLMKs4b0dm9G9PVJwkZ2uK9GQnVDOPpvQzDEervuxGdBxXw9q8V1JgHF/f+rRf0VeL3r2DAS/UKFqxgSYLChxIooXv4kF2kBBQzmnt0IFzGhxkELnr2kSIERwf+sJV8uEEkIpIrH55chCDmx2WJKNjMSEHRgZ0fXQaaCLRiIgtFKfZEpDJpwQ2IFjiluOCQw6kKIxrqh9Xgoa4Pv4ItaKjm2H84AUk9668qobVs7bkNBDPuOweF6tpNN5PuXnh43/59N1ftYHWF+2A8PC4tIMbjxELOdojVZGgYrF6GprUQ3M28EgfSBXoXh6Oldy09RDR1K4uHfrp2JTSQztmrEZl17fiQ3st9fZLezKG2od+Mgy86oGGzhoubN0JqPRh2pKuDO09C+tfCpQOW42IwzjH82PGaDnAHa4H8JOxTtXOiDtQ6qgTNgWqQzszZ8I8cKOeNMyV14w0LCNz+VhAFvR1oDQMU/CcOBxQw4J6DKqhi3jGyiIZhD58s4MAoC5jy4Ykopqjiiiy26OKLMMYo44w01mgjIIPcqMMfOoaRY48x8AgkDCIMMGQMA6RxZBQjFLBkCwWU8CQLXUyJAhZWShEJAAIE0GUAYIYp5phenkAmmCpw2YIUIjjZiJpbwKlClGyOYOQiclYBQJ4nJFknloXwCcWeKfxp6KGIJiplFn4q6uijkNagRaORVmrpoYxeqummS2TK6aeg/ugEpaGWGqkVpJqqaqJjXLHqq47qAeush7bqBK24/klFrrwuYSsSvQZb5a3CFiuCG34Ya+wTyhqL7BHNLptstMHTEktttcBeiy202m7LRbe9Zgsur9yOm2u55uJqRLrkfsuuuoK8C68P8uL664710upDqvmaei+S/erLA78Bh/qsDAQXDOrACsN6MAwJN8zpDhFLrOnDLlRs8aX4bqxqxx6b6mPIIstA8qomn1wykSqv7ELLLq8Jc6ksz7wwkzbfLHPOn+LM86b/nvCzzjQMzWnQRvdMZdKbYsz0xEU/fenDUm8addWVHoy1pipszTEKGnuta59iWwp22WYLEDbaWqrNdqVuvw1p3HI/unbdeOetN6whAAA7" />' +
+				'</g>' +
+				'</svg>';
+
+			//--- Create marker with 2 text lines
+			var createIconMarker = function(line1, line2) {
+				var svgMarker = svgMarkerImage_Line;
+				svgMarker = svgMarker.replace(/__line1__/g, line1);
+				svgMarker = svgMarker.replace(/__line2__/g, line2);
+				svgMarker = svgMarker.replace(/__width__/g, line2.length * 4 + 20);
+				svgMarker = svgMarker.replace(/__widthAll__/g, line2.length * 4 + 200);
+				return new H.map.Icon(svgMarker, {
+					anchor: new H.math.Point(24, 57)
+				});
+			};
+
+			var encodeUrlParameters = function(endpoint, url) {
+				if (endpoint.endsWith("/")) endpoint.substring(0, endpoint.length - 1);
+				if (!url.startsWith("/")) url = '/' + url;
+				var urlParts = url.split('?');
+				var urlParams = urlParts[1].split('&');
+
+				for (var i = 0; i < urlParams.length; i++) {
+					var nameValue = urlParams[i].split('=');
+					urlParams[i] = encodeURIComponent(nameValue[0]) + '=' + (nameValue.length > 1 ? encodeURIComponent(nameValue[1]) : "");
+				}
+				var allEncUrlParams = urlParams.join('&');
+				var result = [endpoint, urlParts[0], '?', allEncUrlParams].join('');
+				console.log(result);
+				return result;
+			}
+
+
+			function addSVGMarker(group, text, color, latitude, longitude, isDrawnUnder) {
+				var w = 10 * text.length
+					//Create the svg mark-up
+					// stroke="black"
+				var svgMarkup = '<svg  width="' + w + '" height="24" xmlns="http://www.w3.org/2000/svg">' +
+					'<rect fill="${FILL}" fill-opacity="0.3" x="1" y="1" width="' + w + '" height="22" />' +
+					'<text x="1" y="18" font-size="12pt" font-family="monospace" font-weight="bold" ' +
+					'text-anchor="start" fill="${STROKE}" >${Text}</text></svg>';
+
+				var anIcon = new H.map.Icon(svgMarkup.replace('${FILL}', color).replace('${STROKE}', "black").replace('${Text}', text), {
+					anchor: new H.math.Point(w / 2, (isDrawnUnder ? 0 : 24))
+				});
+				//var anchor= anIcon.setAnchor(new H.math.Point(w/2, 12));
+				console.log(anIcon.getAnchor());
+
+				group.addObject(new H.map.Marker({
+					lat: latitude,
+					lng: longitude
+				}, {
+					icon: anIcon
+				}));
+			}
+
+			// function removes objects from map as required
+			function removeObjects(onlyPolyline) {
+				if (onlyPolyline) {
+					if (routingGroup.contains(polyline))
+						routingGroup.removeObject(polyline);
+					if (routingGroup.contains(lastMarker))
+						routingGroup.removeObject(lastMarker);
+				} else {
+					routingGroup.removeAll();
+				}
+			}
+
+			// function creates a marker , adds to map
+			function addMarker(coordinates) {
+				var marker = new H.map.Marker({
+					lat: coordinates.lat,
+					lng: coordinates.lng
+				});
+				routingGroup.addObject(marker);
+				return marker;
+			}
+
+			function getSCForFC(fc) {
+				/*
+				ret = [40,30,20,18,15,8,3,1;38,28,18,16,13,8,3,1;36,26,16,14,12,8,3,1;20,18,16,14,12,7,2,1;18,16,14,12,10,6,1,1;10,10,10,10,8,4,1,1];
+				for(var i = 1; i < 9; i++)
+					ret.push(document.getElementById(fc + "SC" + i).value);
+				return ret.join(",") + ";";
+				*/
+				return "40,30,20,18,15,8,3,1;38,28,18,16,13,8,3,1;36,26,16,14,12,8,3,1;20,18,16,14,12,7,2,1;18,16,14,12,10,6,1,1;10,10,10,10,8,4,1,1";
+			}
+
+			// function to calculate route
+			function calculateRouteFromAtoB(vehicleType, overlay) {
+				var routerResource = '/2/calculateroute.json?' + 'app_id=' + app_id + '&app_code=' + app_code;
+				lastRouteURL = routerResource + '&mode=fastest;' + vehicleType + ';traffic:disabled' + "&departure=now" + "&waypoint0=" + waypoint_first.lat + "," + waypoint_first.lng + "&waypoint1=" + waypoint_last.lat + "," + waypoint_last.lng + (overlay !== null ? ('&overlays=' + overlay) : "");
+				if (vehicleType == "bicycle") {
+					lastRouteURL += "&oneway=penalty:0.1";
+					lastRouteURL += "&speedFcCat=";
+
+					/*
+					10,10,10,10,10,8,3,1;       // FC1
+					30,30,30,20,20,10,3,1;     // FC2
+					30,30,30,20,20,10,3,1;     // FC3
+					30,30,30,20,20,10,3,1;     // FC4
+					30,30,30,20,20,10,3,1;     // FC5
+					10,10,10,10,10,8,3,1        // VC
+					*/
+
+					lastRouteURL += getSCForFC("FC1");
+					/*
+					lastRouteURL += getSCForFC("FC2");
+					lastRouteURL += getSCForFC("FC3");
+					lastRouteURL += getSCForFC("FC4");
+					lastRouteURL += getSCForFC("FC5");
+					lastRouteURL += getSCForFC("VC").replace(";", "");
+					*/
+					// add also the "bonus" for preferred routes
+					lastRouteURL += "&algopts=prefbonus" + "0.4";
+				}
+				calculateRoute(lastRouteURL);
+			}
+
+			function reCalculateRoute(mode) {
+				if (mode == "car")
+					lastRouteURL = lastRouteURL.replace("bicycle", "car").replace("&oneway=penalty:0.1", "");
+				else if (mode == "bicycle") {
+					lastRouteURL = lastRouteURL.replace("car", "bicycle");
+					lastRouteURL = lastRouteURL + "&oneway=penalty:0.1";
+				}
+
+				calculateRoute(lastRouteURL);
+			}
+
+			/**
+			 *	Calculate route
+			 */
+			function calculateRoute(url) {
+				$('.loading').show();
+				$.ajax({
+					url: restHelper['CLE'].hostname + url,
+					dataType: "jsonp",
+					async: true,
+					type: 'get',
+					success: function(data) {
+						$('.loading').hide();
+						parseRoutingResponse(data);
+					},
+					error: function(xhr, status, e) {
+						$('.loading').hide();
+						var errorResp = (xhr.responseJSON.issues[0] || {
+							"message": "unknown error occured"
+						});
+						var text = "<font color=\"red\">" + errorResp.message + "</font>";
+						text += "<br/>";
+						alert(text);
+					}
+				});
+			}
+
+			/**
+			 *  Parse the routing response
+			 */
+			function parseRoutingResponse(resp) {
+				clearRoute();
+				routeLinkHashMap = new Object();
+
+				// create link objects
+				for (var r = 0; r < resp.response.route.length; r++) {
+					for (var k = 0; k < resp.response.route[r].leg.length; k++) {
+						for (var m = 0; m < resp.response.route[r].leg[k].link.length; m++) {
+							// only add new link if it does not exist so far - so alternatives are not drawn multiple times
+							var linkId = (resp.response.route[r].leg[k].link[m].linkId.lastIndexOf("+", 0) === 0 ? resp.response.route[r].leg[k].link[m].linkId.substring(1) : resp.response.route[r].leg[k].link[m].linkId);
+							if (routeLinkHashMap[linkId] == null) {
+								var strip = new H.geo.Strip(),
+									shape = resp.response.route[r].leg[k].link[m].shape,
+									i,
+									l = shape.length;
+
+								for (i = 0; i < l; i += 2) {
+									strip.pushLatLngAlt(shape[i], shape[i + 1], 0);
+								}
+
+								var link = new H.map.Polyline(strip, {
+									style: {
+										lineWidth: (routeStroke - (r + 1)), // alternatives get smaller line with
+										strokeColor: routeColor[r],
+										lineCap: 'butt'
+									}
+								});
+								link.setArrows({
+									color: "#F00F",
+									width: 2,
+									length: 3,
+									frequency: 8
+								});
+								link.$linkId = resp.response.route[r].leg[k].link[m].linkId;
+
+								//The router can send back links ids with "-" or "+" prefix: only "-" prefix is kept and stored in this HashMap, the "+" is removed
+								routeLinkHashMap[linkId] = link;
+								legLinkHashMap[linkId] = resp.response.route[r].leg[k].link[m];
+								// add event listener to link
+								link.addEventListener("mouseover", function(e) {
+									if (currentOpenBubble)
+										ui.removeBubble(currentOpenBubble);
+									var html = '<div>' +
+										'<p style="font-family:Arial,sans-serif; font-size:12px;">LinkId: ' + e.target.$linkId + '</p>'
+									'</div>';
+
+									var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+
+									currentOpenBubble = new H.ui.InfoBubble(pos, {
+										content: html
+									});
+									ui.addBubble(currentOpenBubble);
+								});
+
+								//group.addObject(link);
+							}
+						}
+					}
+				}
+
+				/**
+				 *   draw a smooth route
+				 */
+				for (var r = 0; r < resp.response.route.length; r++) {
+					for (var k = 0; k < resp.response.route[r].leg.length; k++) {
+						for (var linkIdx in resp.response.route[0].leg[k].link) {
+							var strip = new H.geo.Strip();
+							var shape = resp.response.route[0].leg[k].link[linkIdx].shape;
+							var l = shape.length;
+
+							for (var i = 0; i < l; i = i + 2) {
+								strip.pushLatLngAlt.apply(strip, [shape[i], shape[i + 1]].map(function(item) {
+									return parseFloat(item);
+								}));
+							}
+							var polyline = createPolylineForIndex(strip, linkIdx);
+							polyline.setArrows(true);
+							routingGroup.addObject(polyline);
+						}
+						var maneuvers = resp.response.route[0].leg[k].maneuver
+						for (var i in maneuvers) {
+							var lat = maneuvers[i].position.latitude;
+							var lon = maneuvers[i].position.longitude;
+							var point = new H.geo.Point(parseFloat(lat), parseFloat(lon));
+							var instr = maneuvers[i].instruction.replace(new RegExp("</span>", 'g'), "").replace(new RegExp('<span class="[a-z\-]+">', 'g'), "");
+							var marker = new H.map.Marker(point, {
+								icon: createIconMarker(maneuvers[i].travelTime + " seconds", instr)
+							});
+							routingGroup.addObject(marker);
+						}
+					}
+				}
+				map.addObject(routingGroup);
+				map.setViewBounds(routingGroup.getBounds());
+			}
+
+			var createPolylineForIndex = function(strip, num) {
+				return new H.map.Polyline(strip, {
+					style: {
+						lineWidth: 8,
+						strokeColor: "rgba(70, 105, 160, 0.8)",
+						fillColor: "rgba(120, 133, 160, 0.9)"
+					}
+				});
+			};
+
+			function clearRoute() {
+				routingGroup.removeAll();
+			}
+
+			function restAPICaller(service, resource, params, callbackOnSuccess, callbackOnFailure, metaInfo) {
+				$('.loading').show();
+				var url = restHelper[service].hostname + restHelper[service].resources[resource].path;
+				url += "?app_id=" + app_id;
+				url += "&app_code=" + app_code;
+				$.ajax({
+					url: url,
+					dataType: "jsonp",
+					async: true,
+					type: restHelper[service].resources[resource].method,
+					data: params,
+					success: function(data) {
+						$('.loading').hide();
+						callbackOnSuccess(data, metaInfo);
+					},
+					contentType: (restHelper[service].resources[resource].method == 'POST') ? 'application/x-www-form-urlencoded' : 'application/json',
+					processData: (restHelper[service].resources[resource].method == 'POST') ? true : true,
+					method: restHelper[service].resources[resource].method,
+					error: function(xhr, status, e) {
+						$('.loading').hide();
+						callbackOnFailure(metaInfo, xhr);
+						var errorObj = "";
+						if (xhr.responseJSON && xhr.responseJSON.issues) {
+							errorObj = xhr.responseJSON.issues;
+						} else if (xhr.responseJSON && xhr.responseJSON.errors) {
+							errorObj = xhr.responseJSON.errors;
+						}
+						var errorResp = (errorObj[0] || {
+							"message": "unknown error occured"
+						});
+						console.log(errorResp.message);
+						alert(errorResp.message);
+					}
+				});
+			};
+
+			function calculate() {
+				waypoint_first = new H.geo.Point(52.4932938, 13.4284077);
+				firstMarker = addMarker(new H.geo.Point(52.4932938, 13.4284077));
+
+				waypoint_last = new H.geo.Point(52.5093864, 13.4164705);;
+				lastMarker = addMarker(new H.geo.Point(52.5093864, 13.4164705));
+
+
+				calculateRouteFromAtoB('bicycle', 'OVERLAYBICYCLECOMPLETE');
+				routeNotCalculated = false;
+			}
+
+			var changeStartAndDest = function(e) {
+				document.getElementById("start").value = tests[e.selectedIndex].start;
+				document.getElementById("destination").value = tests[e.selectedIndex].dest;
+			}
+		</script>
+</body>
+
+</html>

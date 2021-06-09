@@ -1,0 +1,709 @@
+<%= javascript_include_tag "fleet-connectivity-extension.js" %>
+<%= javascript_include_tag "jszip.min.js" %>
+<%= javascript_include_tag "center-utils.js" %>
+<%= javascript_include_tag "wellknown.js" %>
+
+<% content_for :title, "FleetConnectivity Demo: Dispatcher" %>
+
+<style>
+  #jobs-dashboard thead td,#assets-dashboard thead td {
+    background-color: #274190;
+    color: #F8F8F8;
+    text-align: center;
+  }
+
+  #jobs-dashboard tr td,#assets-dashboard tr td {
+    text-align: center;
+  }
+
+  #jobs-dashboard tr,#assets-dashboard tr {
+      border-bottom: 0.1em solid #274190;
+  }
+    a{
+      text-decoration: underline;
+    }
+</style>
+
+<div class="ctrl-panel bigger" style="max-width: 800px">
+
+  <h3>FCE Dispatcher (Control Room) Demo</h3>
+
+  <p>Dispatcher and Asset Ids are generated when the demo is loaded. Click "Open Asset Simulator Demo" to start
+    interaction.
+    Or fill in the Asset Id with the same you are using in the SDK (simulating the asset) to interact using demo
+    credentials.</p>
+
+  <h4><a href="#dispatcher-def" data-toggle="collapse" aria-expanded="true">Control Room Settings</a></h4>
+  <div class="form-horizontal dispatcher-def in collapse" id="dispatcher-def">
+    <p>A Dispatcher (Control Room) is identified by a unique id. The same applies to Assets (Devices, Demo). They must know each other Ids to communicate via Fleet Connectivity Extension. On page load, new unique Dispatcher (Control Room) Id is generated for your convenience.</p>
+    <p><em>Please make sure that this unique id matches on the asset setup and that the asset id gets added to the Dashboard before starting.</em></p>
+    <p>Once you are ready, click on <em>Start Monitoring Updates</em>.</p>
+    <div class="form-group">
+
+      <label class="control-label col-sm-4" for="asset_id">Add Asset Id to Dashboard</label>
+      <div class="col-sm-8">
+        <input class="form-control input-wide" type="text" autocomplete="off" id="asset_id" onclick="this.select();"/>
+        <div>(can be anything unique per app_id/app_code, <a href="#" onclick="document.getElementById('asset_id').value = fce.createAssetId()">generate new</a>)</div>
+
+        <input class="btn btn-default btn-info input-wide" type="submit" id="add-asset-btn" autocomplete="off" value="Add to Dashboard" onclick="trackAsset(assetId.value);">
+      </div>
+
+      <label class="control-label col-sm-4" for="dispatcher_id">Unique Dispatcher Id</label>
+
+      <div class="col-sm-8">
+        <input class="form-control input-wide" type="text" id="dispatcher_id" autocomplete="off" onclick="this.select();">
+
+        <div>(can be anything unique per app_id/app_code, cannot be changed after Start)</div>
+      </div>
+
+      <label class="control-label col-sm-4" for="poll_btn">Start</label>
+      <div class="col-sm-8">
+        <input class="btn btn-default btn-info input-wide" type="submit" autocomplete="off" id="poll_btn" value="Start Monitoring Updates" onclick="startPolling()"/>
+
+        <div>(will not see updates on dashboard without starting!)</div>
+      </div>
+    </div>
+  </div>
+
+  <h4><a href="#job-def" data-toggle="collapse" aria-expanded="true">Send Job to Asset</a></h4>
+
+  <div class="form-horizontal collapse" id="job-def">
+  <p>Click on <em>Send Job</em> will add a new job to the dashboard so it can be monitored.</p>
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="address">Destination Location</label>
+
+      <div class="col-sm-8">
+        <input class="form-control input-wide" autocomplete="off" type="text" id="address" value="">
+
+        <div>(click on the map to set new destination)</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="asset-ids">Target Asset Id</label>
+
+      <div class="col-sm-8">
+        <select class="form-control input-wide" id="asset-ids"></select>
+
+        <div>(only tracked asset ids are listed here)</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="message">Message</label>
+
+      <div class="col-sm-8">
+        <input class="form-control input-wide" type="text" id="message" autocomplete="off" value="This delivery is urgent. Hurry up! Sincerely, Your Boss">
+
+        <div>(the message will be sent to asset)</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label col-sm-4" for="eta_threshold">ETA Threshold %</label>
+
+      <div class="col-sm-8">
+        <input class="form-control input-wide" type="number" autocomplete="off" id="eta_threshold" value="5">
+
+        <div>(% difference from previous ETA to trigger update)</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="control-label col-sm-4"></label>
+
+      <div class="col-sm-8">
+        <input class="btn btn-default btn-info input-wide" type="submit" id="send_job_btn" value="Send Job" onclick="sendJob();"/>
+      </div>
+    </div>
+  </div>
+
+  <h4>Jobs Dashboard</h4>
+  <div class="form-horizontal">
+    <div class="form-group">
+
+      <div class="col-sm-12">
+        <table id="jobs-dashboard">
+          <thead>
+          <td>Destination</td>
+          <td>Asset Id</td>
+          <td>Status</td>
+          <td>ETA</td>
+          <td>Distance Left</td>
+          <td>Last Update</td>
+          </thead>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+
+  <h4>Assets Dashboard</h4>
+  <div class="form-horizontal">
+    <div class="form-group">
+
+      <div class="col-sm-12">
+        <table id="assets-dashboard">
+          <thead>
+          <td>Asset Id</td>
+          <td>Current Dest.</td>
+          <td>Status</td>
+          <td>ETA</td>
+          <td>Distance Left</td>
+          <td>Last Update</td>
+          <td></td>
+          </thead>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+
+  <h4><a href="#full-message-log" data-toggle="collapse" aria-expanded="true">Full Message Log</a></h4>
+
+  <div class="form-horizontal full-message-log collapse" id="full-message-log">
+    <div class="form-group">
+      <div class="col-sm-12">
+        <textarea class="col-sm-12" class="form-control input-wide" autocomplete="off" id="logArea" rows="10"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+  /**
+   * @author Michele Comignano
+   * @copyright (C) HERE 2015, 2016
+    author asadovoy
+    (C) HERE 2019 -> migrate to 3.1
+   */
+
+  
+  // check if the site was loaded via secure connection
+  var secure = (location.protocol === 'https:') ? true : false;
+
+  var custom_endpoint;
+
+  (function setValuesFromUrl() {
+    var indexOf = window.location.href.indexOf('?');
+    if (indexOf < 0) return;
+    var vars = window.location.href.slice(indexOf + 1).split('&');
+
+    for (var i = 0; i < vars.length; i++) {
+      nameVal = vars[i].split('=');
+      //if (!nameVal[0]) continue;
+      if (nameVal[0] === 'custom_endpoint') {
+        custom_endpoint = nameVal[1];
+      } else if (nameVal[0] === 'app_id') {
+        app_id = nameVal[1]
+      } else if (nameVal[0] === 'app_code') {
+        app_code = nameVal[1]
+      }
+      //document.getElementById(nameVal[0]).value = decodeURIComponent(nameVal[1]);
+    }
+
+  })();
+
+  // Create a platform object to communicate with the HERE REST APIs
+  var platform = new H.service.Platform({
+	apikey: api_key,
+    useHTTPS: secure
+  });
+  var maptypes = platform.createDefaultLayers();
+
+  // Instantiate a map in the 'map' div, set the base map to normal
+  var DEFAULT_CENTER = new H.geo.Point(50.0833333, 8.25);
+  var defaultZoom = 13;
+  var map = new H.Map(document.getElementById('mapContainer'), maptypes.vector.normal.map, {
+    center: DEFAULT_CENTER,
+    zoom: defaultZoom,
+    pixelRatio: window.devicePixelRatio || 1
+  });
+
+  // Do not draw under control panel
+  map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+  // Enable the map event system
+  var mapevents = new H.mapevents.MapEvents(map);
+
+  // Enable map interaction (pan, zoom, pinch-to-zoom)
+  var behavior = new H.mapevents.Behavior(mapevents);
+
+  // Enable the default UI
+  var ui = H.ui.UI.createDefault(map, maptypes);
+
+  //add JS API Release information
+  <!-- releaseInfoTxt.innerHTML += "JS API: 3." + H.buildInfo().version; -->
+
+  //add MRS Release information
+  <!-- loadMRSVersionTxt(); -->
+
+  window.addEventListener('resize', function () {
+    map.getViewPort().resize();
+  });
+
+  var geocoder = platform.getGeocodingService();
+  var fce = platform.ext.getFleetConnectivityService();
+  if (custom_endpoint) {
+    fce.endpoint = custom_endpoint;
+  }
+
+  map.addEventListener('tap', updateDestination);
+  var destinationMarker = new H.map.Marker(DEFAULT_CENTER);
+  map.addObject(destinationMarker);
+
+  // Checkpoint group for driving stuff.
+  // Remove reinit and fill when reset.
+  var checkPoints = new H.map.Group();
+
+  // Say... public fields.
+  var pollButton = document.getElementById('poll_btn');
+  var dispatcherId = document.getElementById('dispatcher_id');
+  var assetId = document.getElementById('asset_id');
+  //var checkButton = document.getElementById('check_btn');
+  var sendJobButton = document.getElementById('send_job_btn');
+  var address = document.getElementById('address');
+  var messageField = document.getElementById('message');
+  var etaThresholdField = document.getElementById('eta_threshold');
+  var logArea = document.getElementById('logArea');
+
+  // Asset ids under tracking
+  var assetIds = [];
+
+  // Say... Constants
+  var TRUCK_ICON = new H.map.Icon('/assets/icons/markerTruck.png');
+  var POLYLINE_DEFAULTS = {
+    style: {
+      lineWidth: 5,
+      strokeColor: "rgba(18, 65, 145, 1)",
+      lineJoin: "round"
+    }
+  };
+
+  // As sent to fce.
+  resetDispatcher();
+
+  function removeDefaultTxt() {
+    if (getAssetId().indexOf("Specify an ASSET ID here") != -1) {   // default text of field.
+      document.getElementById('asset_id').value = '';
+    }
+  }
+
+  function buildJob() {
+    var e = document.getElementById('asset-ids');
+    var assetId = e.options[e.selectedIndex].value;
+    return {
+      version: "1.0",
+      job_id: fce.createJobId(),
+      type: 'NEW_DESTINATION',
+      asset_id: assetId,
+      dispatcher_id: dispatcherId.value,
+      message: messageField.value,
+      eta_threshold_percent: etaThresholdField.value,
+      content: {
+        destination: address.$latlon,
+        destination_description: encodeURIComponent(address.value)
+      }
+    }
+  }
+
+  function onSendJob(resp, err) {
+    if (err) {
+      logArea.log('Error sending job: ' + err.toString());
+      return;
+    }
+    logArea.log('Job sent: ' + JSON.stringify(resp));
+
+    var jobId = resp.job_id;
+
+    var dashboard = document.getElementById('jobs-dashboard');
+
+    var jobLine = document.createElement('tr');
+
+    var jobDestCell = document.createElement('td');
+    jobDestCell.id = jobId + '-dest';
+    jobDestCell.innerHTML = decodeURIComponent(resp.content.destination_description);
+    jobLine.appendChild(jobDestCell);
+
+    var assetIdCell = document.createElement('td');
+    assetIdCell.id = jobId + '-asset-id';
+    assetIdCell.innerHTML = resp.asset_id;
+    jobLine.appendChild(assetIdCell);
+
+    var statusCell = document.createElement('td');
+    statusCell.id = jobId + '-status';
+    statusCell.innerHTML = 'SENT';
+    jobLine.appendChild(statusCell);
+
+    var etaCell = document.createElement('td');
+    etaCell.id = jobId + '-eta';
+    etaCell.innerHTML = 'N/A';
+    jobLine.appendChild(etaCell);
+
+    var distanceCell = document.createElement('td');
+    distanceCell.id = jobId + '-dist';
+    distanceCell.innerHTML = 'N/A';
+    jobLine.appendChild(distanceCell);
+
+    var lastUpdateCell = document.createElement('td');
+    lastUpdateCell.id = jobId + '-last-upd';
+    lastUpdateCell.innerHTML = 'N/A';
+    jobLine.appendChild(lastUpdateCell);
+    dashboard.appendChild(jobLine);
+
+    //checkButton.disabled = false;
+    //pollButton.disabled = false;
+    //sendJobButton.$jobSent = true;
+    //sendJobButton.value = 'Reset (will generate new dispatcher id)';
+    //sendJobButton.disabled = false;
+  }
+
+  function getDispatcherId() {
+    return document.getElementById('dispatcher_id').value;
+  }
+
+  function getAssetId() {
+    return document.getElementById('asset_id').value;
+  }
+
+  function onListUpdates(resp, err) {
+    var latestTime = 0;
+    if (err) {
+      logArea.log('Error listing updates: ' + err.toString());
+      return;
+    }
+    for (var i = 0; i < resp.events.length; i++) {
+      var event = resp.events[i];
+      if(event.creation_time_ms>latestTime){
+						latestTime = event.creation_time_ms;
+					}
+      var type = event.type;
+      switch (type) {
+        case 'ETA_UPDATE':
+          onEtaUpdate(event);
+          break;
+        case 'ACCEPTED':
+          onJobAccepted(event);
+          break;
+        case 'REJECTED':
+          onJobRejected(event);
+          break;
+        case 'DESTINATION_REACHED':
+          onDestinationReached(event);
+          break;
+        case 'USER_CANCELLED_GUIDANCE':
+          onUserCancelledGuidance(event);
+          break;
+        case 'READY':
+          onReady(event);
+          break;
+        default:
+          console.log('Message type unknown: ' + type);
+          break;
+      }
+      if (event.job_id) {
+        var now = new Date(Date.now());
+        document.getElementById(event.job_id + '-last-upd').innerHTML = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+      }
+      if (event.asset_id) {
+        var now = new Date(Date.now());
+        document.getElementById(event.asset_id + '-last-upd').innerHTML = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+      }
+      logArea.log(JSON.stringify(event));
+    }
+    if(latestTime>0){
+      longPollfceMessage(latestTime);
+    }
+  }
+
+  function pad(n) {
+    if (n < 10) {
+      return '0' + String(n);
+    }
+    return n;
+  }
+
+  function onEtaUpdate(event) {
+    if(document.getElementById(event.job_id + '-status') && document.getElementById(event.job_id + '-status').innerHTML != 'DESTINATION REACHED'){
+       var etaUpdate = event.eta_update;
+      var eta = new Date(event.creation_time_ms + etaUpdate.remaining_time_seconds * 1000);
+      document.getElementById(event.job_id + '-eta').innerHTML = pad(eta.getHours()) + ':' + pad(eta.getMinutes());
+      var distKm = Math.floor(etaUpdate.remaining_distance_meter / 1000);
+      var distM = etaUpdate.remaining_distance_meter % 1000;
+      var distStr = distKm + ',' + distM + ' km';
+      document.getElementById(event.job_id + '-dist').innerHTML = distStr;
+      document.getElementById(event.job_id + '-status').innerHTML = 'IN PROGRESS';
+      document.getElementById(event.asset_id + '-eta').innerHTML = pad(eta.getHours()) + ':' + pad(eta.getMinutes());
+      document.getElementById(event.asset_id + '-dist').innerHTML = distStr;
+      document.getElementById(event.asset_id + '-status').innerHTML = 'DRIVING';
+      /*if (event.location) {
+        onUpdateLocation(event);
+      }*/
+    }
+  }
+
+  function onJobAccepted(event) {
+     if(document.getElementById(event.job_id + '-status') && document.getElementById(event.job_id + '-status').innerHTML != 'DESTINATION REACHED'){
+        document.getElementById(event.job_id + '-status').innerHTML = 'ACCEPTED';
+        document.getElementById(event.asset_id + '-status').innerHTML = 'ACCEPTED JOB';
+        document.getElementById(event.asset_id + '-dest').innerHTML = document.getElementById(event.job_id + '-dest').innerHTML;
+     }
+    
+    /*if (event.location) {
+      onUpdateLocation(event);
+    }*/
+  }
+
+  function onReady(event) {
+    if(document.getElementById(event.job_id + '-status') && document.getElementById(event.job_id + '-status').innerHTML != 'DESTINATION REACHED'){
+       document.getElementById(event.asset_id + '-status').innerHTML = 'READY';
+    }
+   
+    /*if (event.location) {
+      onUpdateLocation(event);
+    }*/
+  }
+
+  function onUserCancelledGuidance(event) {
+    if(document.getElementById(event.job_id + '-status') && document.getElementById(event.job_id + '-status').innerHTML != 'DESTINATION REACHED'){
+      document.getElementById(event.job_id + '-status').innerHTML = 'CANCELLED';
+      document.getElementById(event.job_id + '-eta').innerHTML = 'N/A';
+      document.getElementById(event.job_id + '-dist').innerHTML = 'N/A';
+      document.getElementById(event.asset_id + '-status').innerHTML = 'CANCELLED JOB';
+      document.getElementById(event.asset_id + '-eta').innerHTML = 'N/A';
+      document.getElementById(event.asset_id + '-dist').innerHTML = 'N/A';
+    }
+  }
+
+  function onJobRejected(event) {
+    if(document.getElementById(event.job_id + '-status').innerHTML != 'DESTINATION REACHED'){
+      document.getElementById(event.job_id + '-status').innerHTML = 'REJECTED';
+      document.getElementById(event.asset_id + '-status').innerHTML = 'REJECTED JOB';
+    }
+  }
+
+  function onDestinationReached(event) {
+    document.getElementById(event.job_id + '-status').innerHTML = 'DESTINATION REACHED';
+    document.getElementById(event.job_id + '-eta').innerHTML = 'N/A';
+    document.getElementById(event.job_id + '-dist').innerHTML = 'N/A';
+    document.getElementById(event.asset_id + '-status').innerHTML = 'DESTINATION REACHED';
+    document.getElementById(event.asset_id + '-eta').innerHTML = 'N/A';
+    document.getElementById(event.asset_id + '-dist').innerHTML = 'N/A';
+  }
+
+  function sendJob() {
+    var e = document.getElementById('asset-ids');
+    if (e.options[e.selectedIndex].value.length == 0) {   // default text of field.
+      alert("Please specify an asset ID.");
+      return;
+    }
+    //if (!sendJobButton.$jobSent) {
+      //sendJobButton.disabled = true;
+      fce.sendJob(buildJob(), onSendJob);
+      //sendJobButton.disabled = true;
+
+      //map.addObject(checkPoints);
+    //} else {
+      //if (pollButton.$pollTimer) {
+        //startPolling();
+      //}
+     /* map.removeObject(checkPoints);
+      checkPoints = new H.map.Group();
+      pollButton.disabled = true;
+      checkButton.disabled = true;
+      resetDispatcher();
+      sendJobButton.value = 'Send Job';
+      sendJobButton.$jobSent = false;
+      logArea.value = '';
+    }*/
+  }
+
+  function startPolling() {
+    $('#dispatcher-def').collapse();
+    $('#job-def').collapse();
+    pollButton.disabled = true;
+    dispatcherId.disabled = true;
+    longPollfceMessage(Date.now());
+    //pollButton.$pollTimer = setInterval(listUpdates, 1000);
+  }
+
+  function stopPolling() {
+    pollTimer.cancel();
+  }
+
+  function listUpdates() {
+    fce.listUpdates(assetIds, document.getElementById('dispatcher_id').value, {incremental: true}, onListUpdates);
+  }
+
+
+  var XHR = [];
+
+/**
+ * starts a recursive 
+ */
+  function longPollfceMessage(lastUpdateTime){
+		var time = lastUpdateTime
+		var dispatcherId = document.getElementById('dispatcher_id').value;	
+		var callbackfn = '_jsonp_'+(Math.random().toString(36)+'00000000000000000').slice(2, 5+2);
+		var url = fce.endpoint  + '/check_messages.json' + '?last_update_timestamp_ms=' + time + '&app_code=' + app_code + '&app_id=' + app_id +'&recipient_id=' + dispatcherId;
+		if(dispatcherId.length == 0 || dispatcherId.indexOf("Specify an Disptcher ID here.") != -1) {   // default text of field.
+			   alert("Please specify an dispatcher ID.");
+			   return;
+		}
+
+		
+		
+			var req = $.ajax({ url: url,
+        dataType: "jsonp",
+        jsonpCallback: callbackfn,
+        timeout: 60000 
+     });
+			
+			XHR.push({id: callbackfn, req: req});
+
+			req.success(function(resp){
+				 if (resp.error_id != null) {
+					callback.call(that, resp, new Error(resp.issues));
+					return;
+				}else{
+					//update page based on data
+					fce.listUpdates(assetIds, document.getElementById('dispatcher_id').value, {incremental: false, last_update_timestamp_ms: time}, onListUpdates);
+				}	
+			});
+
+			req.error(function(xhr, ajaxOptions, thrownError) {
+				destroy(callbackfn);
+				longPollfceMessage(time);
+			});
+
+
+		
+	}
+
+  function destroy(callbackId){
+		XHR.forEach(function(reqObj,index) {
+			if(reqObj.id == callbackId){
+				reqObj.req.abort();
+			}
+		});
+	}
+
+  function updateDestination(e) {
+    if (sendJobButton.$jobSent === true) {
+      return;
+    }
+
+    var p = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+    destinationMarker.setGeometry(p);
+    address.$latlon = p.lat + ',' + p.lng;
+
+    geocoder.reverseGeocode({
+      prox: p.lat + ',' + p.lng + ',' + '1',
+      mode: 'retrieveAddresses',
+      requestId: 'TESTREQUEST'
+    }, function (result) {
+      var results = result.Response.View[0].Result;
+      if (results.length > 0) {
+        address.value = result.Response.View[0].Result[0].Location.Address.Label;
+      } else {
+        address.value = p.lat + ',' + p.lng;
+      }
+    }, window.alert);
+  }
+
+  function resetDispatcher() {
+    dispatcherId.value = fce.createDispatcherId();
+    assetId.value = fce.createAssetId();
+    map.setCenter(DEFAULT_CENTER);
+    address.value = 'Wiesbaden, Deutschland';
+    address.$latlon = DEFAULT_CENTER.lat + ',' + DEFAULT_CENTER.lng;
+    destinationMarker.setGeometry(DEFAULT_CENTER);
+  }
+
+  function trackAsset(assetIdValue) {
+    if (assetIdValue.length == 0) {
+      window.alert('Asset Id cannot be empty!');
+      return;
+    }
+    assetId.value = '';
+    if (assetIds.indexOf(assetIdValue) > -1) {
+      window.alert('Asset already tracked!');
+      return;
+    }
+
+    assetIds.push(assetIdValue);
+    var dashboard = document.getElementById('assets-dashboard');
+
+    var assetLine = document.createElement('tr');
+
+    var assetIdCell = document.createElement('td');
+    assetIdCell.id = assetIdValue + '-id';
+    assetIdCell.innerHTML = assetIdValue;
+    assetLine.appendChild(assetIdCell);
+
+    var destCell = document.createElement('td');
+    destCell.id = assetIdValue + '-dest';
+    destCell.innerHTML = 'N/A';
+    assetLine.appendChild(destCell);
+
+    var statusCell = document.createElement('td');
+    statusCell.id = assetIdValue + '-status';
+    statusCell.innerHTML = 'N/A';
+    assetLine.appendChild(statusCell);
+
+    var etaCell = document.createElement('td');
+    etaCell.id = assetIdValue + '-eta';
+    etaCell.innerHTML = 'N/A';
+    assetLine.appendChild(etaCell);
+
+    var distanceCell = document.createElement('td');
+    distanceCell.id = assetIdValue + '-dist';
+    distanceCell.innerHTML = 'N/A';
+    assetLine.appendChild(distanceCell);
+
+    var lastUpdateCell = document.createElement('td');
+    lastUpdateCell.id = assetIdValue + '-last-upd';
+    lastUpdateCell.innerHTML = 'N/A';
+    assetLine.appendChild(lastUpdateCell);
+    dashboard.appendChild(assetLine);
+
+    var linksCell = document.createElement('td');
+    linksCell.innerHTML = '<input class="btn btn-default btn-info" type="submit" id="openasset" value="Demo" onclick="openAssetDemo(\'' + assetIdValue + '\');" />';
+    assetLine.appendChild(linksCell);
+    dashboard.appendChild(assetLine);
+
+    var assetIdOpt = document.createElement('option');
+    assetIdOpt.value = assetIdValue;
+    assetIdOpt.innerHTML = assetIdValue;
+    document.getElementById('asset-ids').appendChild(assetIdOpt);
+
+    //checkButton.disabled = false;
+    //pollButton.disabled = false;
+    //sendJobButton.$jobSent = true;
+    //sendJobButton.value = 'Reset (will generate new dispatcher id)';
+    //sendJobButton.disabled = false;
+    logArea.log(assetIdCell.innerHTML + ' is now tracked.');
+  }
+
+  function openAssetDemo(assetId) {
+    if (!dispatcherId.value) {
+      window.alert('Please fill in Dispatcher Id');
+    }
+    window.resizeTo(screen.width / 1, screen.height);
+    window.moveTo(0, 0);
+    var asset = window.open('fce_simulating_asset?assetID=' + assetId + '&dispatcherID=' + dispatcherId.value + '&timestamp=' + Date.now() +'&custom_endpoint=' + fce.endpoint
+        + '&app_id=' + app_id + '&app_code=' + app_code,
+        'asset-demo-' + assetId, 'height=' + screen.height + ',width=' + screen.width / 2);
+    asset.moveTo(screen.width / 2, 0);
+    asset.focus();
+  }
+
+  logArea.log = function (str) {
+    logArea.value += '>>>\n' + str + '\n';
+    logArea.scrollTop = logArea.scrollHeight;
+  };
+
+</script>

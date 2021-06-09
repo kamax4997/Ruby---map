@@ -1,0 +1,4 @@
+[branch "master"]
+    rebase = true
+[core]
+    filemode = false

@@ -1,0 +1,276 @@
+<% content_for :title, "Display EV, Fuel, OffStreet Park, Safety Cam" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<h5>Auto Cloud EV Charging Stations</h5>
+	<p>EV Stations are available at Zoom Level 8 and higher</p>
+	<table id="content">
+		<tr style="background-color: #b65a27;">
+			<td>Fuel Stations</td>
+			<td><input class="typeCheck" type="checkbox" id="fuelStationCheck" onchange="requestContent()" ></td>
+		</tr>
+		<tr style="background-color: #00afaa;">
+			<td>Off Street Parking</td>
+			<td><input class="typeCheck" type="checkbox" id="parkingCheck" onchange="requestContent()"></td>
+		</tr>
+		<tr style="background-color: #8091c2;">
+			<td>Safety Camera</td>
+			<td><input class="typeCheck" type="checkbox" id="cameraCheck" onchange="requestContent()"></td>
+		</tr>
+	</table>
+</div>
+
+<div id="mapContainer"></div>
+
+<style type="text/css">
+	.H_ib_body {
+		width: 220px;
+	}
+	textarea
+	{
+		color: black;
+		font-size: 12px;
+	}
+	.color-box {
+	    width: 10px;
+	    height: 10px;
+	    display: inline-block;
+	    background-color: #ccc;
+	}
+	table{
+		color:white;
+	}
+</style>
+
+<script>
+	/*
+	author jonathan hernandez
+	Edits Dom Schuette
+	(C) HERE 2018 / 2021
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	
+	// in this example we need to overwrite the app_id & app_code
+	var app_id = "UbGDnK0iGwveR4rjIwhu",
+		app_code = "ztzryH1sjBDG_VQe0uNgRw";
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		apikey: api_key,
+		useHTTPS: secure
+	}),
+	currentBubble,
+	maptypes = platform.createDefaultLayers();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), maptypes.vector.normal.map, {
+		center: new H.geo.Point(41.88449, -87.6387699),
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	// var behavior = new H.mapevents.Behavior(mapevents);
+
+	// disable the zoom control
+	ui.getControl("zoom").setDisabled (true)
+
+	map.addEventListener("mapviewchangeend", function (event) {
+		requestContent();
+	});
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// groups for markers
+	var markerGroup = new H.map.Group();
+
+	function requestContent()
+	{
+		markerGroup.removeAll();
+
+		if(map.getZoom() <= 8)
+			return;
+		
+		var bounds = map.getViewModel().getLookAtData().bounds.getBoundingBox();
+		console.log(bounds);	
+		var bbox = bounds.getTop() + "," + bounds.getLeft() + ";" + bounds.getBottom() + "," + bounds.getRight();
+
+		//get all checked types and make a call for the respective ones
+
+		var checkboxArray = $('.typeCheck:checkbox:checked')
+		$.each(checkboxArray, function(index, checkbox){
+			if(checkbox.id === 'evStationCheck'){
+				makeGenericCall("https://ev-v2.cc.api.here.com/ev/stations.json?", bbox);
+			}
+			else if(checkbox.id === 'fuelStationCheck'){
+				makeGenericCall("https://fuel-v2.cc.api.here.com/fuel/stations.json?",bbox);
+			}
+			else if( checkbox.id === 'parkingCheck'){
+				makeGenericCall("https://parking-v2.cc.api.here.com/parking/facilities.json?",bbox);
+			}
+			else if(checkbox.id === 'cameraCheck'){
+				makeGenericCall("https://alerts.cc.api.here.com/alerts/1.0/search.json?traptype=0&traptype=1&traptype=2&traptype=3&traptype=4&traptype=5&traptype=6&traptype=7&",bbox);
+			}
+		});
+	}
+
+	function makeGenericCall(endpoint,bbox){
+		url = [
+			endpoint,
+			"bbox=",
+			bbox,
+			"&",
+			"app_id=",
+			app_id,
+			"&",
+			"app_code=",
+			app_code,
+			"&maxresults=500",
+			"&jsoncallback=parseResponse"
+			].join("");
+
+		script = document.createElement("script");
+		script.src = url;
+		document.body.appendChild(script);
+	}
+
+	//get array of stations based on response structure and specify color for display
+	var parseResponse = function(data){
+		if( !data )
+			return;
+
+		//Fuel Stations
+		else if(data.fuelStations)
+		{
+			parseStations(data.fuelStations.fuelStation, "#b65a27");
+		}
+		//Off-Street Parking
+		else if(data.facilities)
+		{
+			parseStations(data.facilities.facility, "#00afaa");
+		}
+
+		else if(data.speedCams)
+		{
+			parseStations(data.speedCams.marker, "#8091c2");
+		}
+	}
+
+
+	//get specific details to display in the infoBubble and display location
+	var parseStations = function(stations, markerColor)
+	{
+		var svgForMarker = '<svg width="35" height="50" xmlns="http://www.w3.org/2000/svg">'+
+		'<path d="M 5 30 A 13 13, 0, 1, 1, 28, 30 L 18 48 Z" fill="'+markerColor+'" stroke="white" stroke-width="3"/></svg>';
+		var icon = new H.map.Icon(svgForMarker);
+
+		if(stations)
+		{
+			for (i = 0; i < stations.length; i++)
+			{
+				var station = stations[i];
+				
+				if( (station.position && station.position.latitude && station.position.longitude) || 
+					(station.location && station.location.longitude && station.location.latitude) )
+				{
+					var html = "",
+						json = "";
+					
+					var point;
+					if(station.position)
+						point = new H.geo.Point(station.position.latitude, station.position.longitude);
+					else
+						point = new H.geo.Point(station.location.latitude, station.location.longitude);
+					var marker = new H.map.Marker(point, {icon: icon});
+
+
+					//For safety cameras
+					if(station.trapType)
+						html += "<h5>" + station.trapType.trapName + "</h5>";
+					if(station.vicinity)
+						html += "<h5>" + station.vicinity + "</h5>";
+					if(station.speedLimit)
+						html += "<h5>" + station.speedLimit + "</h5>";
+
+
+
+
+					if(station.name)
+						html += "<h5>" + station.name + "</h5>";
+					
+					if(station.totalNumberOfConnectors)
+						html += "<h5>#Connectors: " + station.totalNumberOfConnectors + "</h5>";
+					
+					if(station.brand)
+						html += "<h5>Brand: " + station.brand + "</h5>";
+					
+					if(station.address)
+					{
+						var address = station.address;
+						if(address.city)
+							html += "<h6>City: " + address.city + "</h6>";
+						if(address.country)
+							html += "<h6>Country: " + address.country + "</h6>";
+						if(address.postalCode)
+							html += "<h6>ZIP: " + address.postalCode + "</h6>";
+						if(address.street)
+							html += "<h6>Street: " + address.street + "</h6>";
+						if(address.streetNumber)
+							html += "<h6>Hnr: " + address.streetNumber + "</h6>";
+					}
+
+					if(station.fuelPrice)
+					{
+						json += JSON.stringify(station.fuelPrice, undefined, 4);
+					}
+
+					if(station.facilityAvailability){
+						json += JSON.stringify(station.facilityAvailability, undefined,4);
+					}
+					
+					if(station.facilityDetails){
+						json += JSON.stringify(station.facilityDetails, undefined,4);
+					}
+
+					if(stations.connectors)
+						json += JSON.stringify(station.connectors, undefined, 4);
+
+					if(station.contacts)
+						json += JSON.stringify(station.contacts, undefined, 4);
+
+					if(station.evStationDetails)
+						json += JSON.stringify(station.evStationDetails, undefined, 4);
+					
+					if(station.connectors)
+						json += JSON.stringify(station.connectors, undefined, 4);
+					
+					if(json)
+						html += "<textarea rows='10' cols='25'>" + json + "</textarea>";
+					
+					marker.$html = html;
+
+					marker.addEventListener("pointerdown", function(e)
+					{
+						if(currentBubble)
+							ui.removeBubble(currentBubble);
+						currentBubble = new H.ui.InfoBubble(e.target.getPosition(), { content: e.target.$html });
+						ui.addBubble(currentBubble);
+					});
+					markerGroup.addObject(marker);
+				}
+			}
+			map.addObject(markerGroup);
+		}
+	}
+</script>

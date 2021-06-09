@@ -1,0 +1,182 @@
+<%= javascript_include_tag "rectangle_selection" %>
+
+<% content_for :title, "Zoom Rectangle UI example" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>With Behavior Control, UI &amp; Rectangle Zoom UI</p>
+	<input type="checkbox" id="Transport" onchange='handleOverlay(this.checked);'>Overlay on / off
+	<select id="zoomLevel">
+		<option value="0" selected = "selected">0</option>
+		<option value="1">1</option>
+		<option value="2">2</option>
+		<option value="3">3</option>
+		<option value="4">4</option>
+		<option value="5">5</option>
+		<option value="6">6</option>
+		<option value="7">7</option>
+		<option value="8">8</option>
+		<option value="9">9</option>
+		<option value="10">10</option>
+		<option value="11">11</option>
+		<option value="12">12</option>
+		<option value="13">13</option>
+		<option value="14">14</option>
+		<option value="15">15</option>
+		<option value="16">16</option>
+		<option value="17">17</option>
+		<option value="18">18</option>
+		<option value="19">19</option>
+		<option value="20">20</option>
+	</select>
+	<div id="output"></div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2014
+	*/
+
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		apikey: api_key,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+	rectangle;
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), maptypes.vector.normal.map, {
+		center: center,
+		zoom: zoom,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+	
+	var rectangle_selection = new H.ui.RectangleSelection();
+	rectangle_selection.setCallback(select);
+	ui.addControl('Rectangle', rectangle_selection);
+	
+		function TileToQuadKey ( x, y, zoom){ 
+		var quad = ""; 
+		for (var i = zoom; i > 0; i--){
+			var mask = 1 << (i - 1); 
+			var cell = 0; 
+			if ((x & mask) != 0) 
+				cell++; 
+			if ((y & mask) != 0) 
+				cell += 2; 
+			quad += cell; 
+		} 
+		return quad; 
+	}
+
+	var infoOverlayShown = false;
+	var tileSize = 256;
+	// Tile proivder to add overlay on the map
+	class CustomProvider extends H.map.provider.RemoteTileProvider {
+			requestInternal(col, row, level, onSuccess, onError) {
+			var fill;
+			if ((col % 2 && !(row % 2)) || (!(col % 2) && row % 2)) {
+				fill = "255,255,255,0.2";
+			} else { 
+				fill = "0,0,0,0.2";
+			}
+	
+			var XY = " (" + col + "," + row +")";
+			var tiletms = " (" + col + "," + ((1 << level) - row - 1) + ")";
+			var tilequadtree = " " +TileToQuadKey( col, row, level);
+			
+			var iconSVG = '<svg width=\'256\' height=\'256\' xmlns=\'http://www.w3.org/2000/svg\'>' +
+							  '<rect width=\'256\' height=\'256\' style=\'fill:rgba(__FILL__);\'></rect>' +
+							  '<text x=\'20\' y=\'20\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'XY: __XY__\'>XY: __XY__</text>' +
+							  '<text x=\'20\' y=\'40\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'TMS: __TMS__\'>TMS: __TMS__</text>' +
+							  '<text x=\'20\' y=\'60\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'QK: __QUAD__\'>QK: __QUAD__</text>' +
+							  '<text x=\'20\' y=\'110\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'Zoom: __ZOOM__\'>Zoom: __ZOOM__</text>' +
+							  '<text x=\'20\' y=\'170\' font-size=\'12pt\' font-family=\'arial\' font-weight=\'bold\' style=\'fill:rgb(255,255,255);stroke:#000000\' ' +
+							  'text-anchor=\'left\' fill=\'black\' textContent=\'TEST: __TEST__\'>TEST: __TEST__</text>' +									  
+						  '</svg>',
+
+			svg = iconSVG
+				.replace(/__XY__/g, XY)
+				.replace(/__TMS__/g, tiletms)
+				.replace(/__QUAD__/g, tilequadtree)
+				.replace(/__ZOOM__/g, level)
+				.replace(/__FILL__/g, fill)
+				.replace(/__TEST__/g, "Ã¼berhaupt");
+			
+			var img = new Image();
+			img.crossOrigin = 'anonymous';
+			img.src = 'data:image/svg+xml;base64,' + btoa(svg);
+			img.addEventListener("load", () => {
+				onSuccess(img);
+			});
+		  };
+		  providesRasters() {
+			return true;
+		  }
+	
+	}
+	
+	var cProvider = new CustomProvider({tileSize: tileSize});
+	var infoLayer = new H.map.layer.TileLayer(cProvider);
+	
+	var handleOverlay = function(checked)
+	{
+		if(checked)
+			map.addLayer(infoLayer);
+		else
+			map.removeLayer(infoLayer);
+	}
+
+	function select(bbox)
+	{
+		var topLeft = bbox.getTopLeft(), 
+			bottomRight = bbox.getBottomRight(), 
+			zoom = document.getElementById('zoomLevel').value;;
+		
+		if(rectangle)
+			map.removeObject(rectangle);
+		
+		rectangle = new H.map.Rect(bbox);
+		map.addObject(rectangle);
+		
+		topLeft = getTileXY(topLeft, zoom);
+		bottomRight = getTileXY(bottomRight, zoom);
+		
+		var html = "startx " + topLeft.x + " </br>" + "starty " + topLeft.y + "</br>" + "requestsx " + Math.abs((topLeft.x - bottomRight.x)) + "</br>" + "requestsy " + Math.abs((topLeft.y - bottomRight.y)); 
+		document.getElementById("output").innerHTML = html; 		
+		console.log(topLeft.x + " " + topLeft.y + " " + bottomRight.x + " " + bottomRight.y);
+	}
+	
+	function getTileXY(coord, zoom)
+	{
+		var x = Math.floor((coord.lng + 180) / 360 * Math.pow(2, zoom)),
+			y = Math.floor((1 -Math.log(Math.tan(coord.lat * Math.PI / 180) + 1 / Math.cos(coord.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+		
+		return {x : x, y : y};
+	}
+		
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+</script>

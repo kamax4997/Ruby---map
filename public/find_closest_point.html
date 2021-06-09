@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="initial-scale=1.0, width=device-width" />
+<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css" />
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-places.js"></script>
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+
+</head>
+<body>
+
+  <div id="map" style="position:absolute; width:49%; height:100%; background:grey" ></div>
+  <div id="panel" style="position:absolute; width:49%; left:51%; height:100%; background:inherit" >
+  Appid : <input type="text" id="appid" value=""></input><br>
+  Appcode : <input type="text" id="appcode" value=""></input> <br>   
+  Start : <input type="text" id="start" value="25.774082,55.925928"></input><br>
+  Input <br>
+  <textarea rows="10" cols="50" id="inputs"></textarea><br>
+  <input type="button" value="Start Route requests" onclick="init()"></input><br/>
+   <div id="status" ></div>
+  <table id="results" border="1px">
+	<tr>
+	<td> Original </td>
+	<td> Closest Truck Nav point</td>
+	<td> Distance/Time</td>
+	</tr>
+	</table>
+  
+  </div>
+  <script  type="text/javascript" charset="UTF-8" >
+var bubble,polyline,marker,platform,group,map,behavior,ui,locationPolyLine,idList=[],routes=[],waypoints=[],index=0,radius=50,truckNavPoint=[];function geocode(e){if(index<waypoints.length){document.getElementById("status").innerHTML="Processing..";var t=e.getRoutingService(),n={waypoint0:document.getElementById("start").value,waypoint1:waypoints[index]+";"+radius,mode:"fastest;truck;traffic:disabled",maneuverattributes:"notes",routeattributes:"waypoints,summary,shape,legs,notes"};t.calculateRoute(n,onSuccess,onError)}else document.getElementById("status").innerHTML="Completed"}function onSuccess(e){if(e&&e.response&&e.response.route){var t=e.response.route[0].waypoint[1].mappedPosition;routes[index]=e.response.route[0],addLocationsToPanel(t),index++,radius=50,geocode(platform)}else radius+=20,geocode(platform)}function onError(e){alert("Ooops!"+e)}function init(){if(""!=document.getElementById("appid").value.trim()&&""!=document.getElementById("appcode").value.trim()){if(null==platform){var e=(platform=new H.service.Platform({app_id:document.getElementById("appid").value.trim(),app_code:document.getElementById("appcode").value.trim(),useHTTPS:!0})).createDefaultLayers();map=new H.Map(document.getElementById("map"),e.normal.map,{center:{lat:37.376,lng:-122.034},zoom:15}),behavior=new H.mapevents.Behavior(new H.mapevents.MapEvents(map)),ui=H.ui.UI.createDefault(map,e),group=new H.map.Group}parseInput()}else alert("Appid or Appcode not provided")}function parseInput(){var e=document.getElementById("inputs").value.split("\n");if(e.length<=0)alert("No input");else{for(var t=0;t<e.length;t++){var n=e[t].split(",");if(n.length%3!=0)return void alert("Invalid Input, please put in format Id,latitude,longitude");for(var o=0;o<n.length;o+=3)idList.push(n[o]),waypoints.push(n[o+1]+","+n[o+2])}clearTable(),geocode(platform)}}function clearTable(){for(var e=document.getElementById("results"),t=e.rows.length,n=1;n<t;n++)e.deleteRow(1)}function openBubble(e,t){bubble?(bubble.setPosition(e),bubble.setContent(t),bubble.open()):(bubble=new H.ui.InfoBubble(e,{content:t}),ui.addBubble(bubble))}function addLocationsToPanel(e){var t=document.createElement("ul");t.style.fontSize="small",t.style.marginLeft="5%",t.style.marginRight="5%";document.createElement("li"),document.createElement("div"),idList[index];position={lat:e.latitude,lng:e.longitude},position.lat,position.lng;var n=document.createElement("tr"),o=document.createElement("td");o.innerHTML=idList[index];var a=document.createElement("td");a.innerHTML='<a href="#" onclick="showMapping(\''+index+"')\">"+position.lat+","+position.lng+"</a>";var i=routes[index].summary,l=document.createElement("td");l.innerHTML=i.text,truckNavPoint[index]=position.lat+","+position.lng,n.appendChild(o),n.appendChild(a),n.appendChild(l),document.getElementById("results").appendChild(n)}function addLocationsToMap(e){var t;position,i;var n=!1;for(i=0;i<e.length;i+=1){position={lat:e[i].Location.DisplayPosition.Latitude,lng:e[i].Location.DisplayPosition.Longitude};var o=e[i].Location.LinkInfo.AccessFlags;for(j=0;j<o.length;j+=1)if("Trucks"==o[j]){n=!0,t=e[i];break}}n?addLocationsToPanel(t):radius+=50}function showMapping(e){polyline&&map.removeObject(polyline);var t=new H.geo.Strip;routes[e].shape.forEach(function(e){var n=e.split(",");t.pushLatLngAlt(n[0],n[1])}),polyline=new H.map.Polyline(t,{style:{lineWidth:4,strokeColor:"rgba(0, 128, 255, 0.7)"}}),map.addObject(polyline),map.setViewBounds(polyline.getBounds(),!0),marker&&map.removeObject(marker);var n={lat:truckNavPoint[e].split(",")[0],lng:truckNavPoint[e].split(",")[1]};marker=new H.map.Marker(n),map.addObject(marker),locationPolyLine&&map.removeObject(locationPolyLine);var o=waypoints[e];(t=new H.geo.LineString).pushLatLngAlt(n.lat,n.lng,0),t.pushLatLngAlt(o.split(",")[0],o.split(",")[1],0),locationPolyLine=new H.map.Polyline(t,{style:{strokeColor:"rgba(255, 0, 0, 0.7)",lineWidth:10}}),map.addObject(locationPolyLine)}var locationsContainer=document.getElementById("panel");
+
+  </script>
+</body>
+</html>

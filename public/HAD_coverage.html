@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta name="viewport" content="initial-scale=1.0, width=device-width" />
+	<link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css" />
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+	<script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+	<style>
+		html,
+		body {
+			height: 100%;
+			width: 100%;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="map" style="width: 100%; height: 100%; background: grey" />
+	<script type="text/javascript" charset="UTF-8">
+		function calculateRoute(platform) {
+			var router = platform.getRoutingService();
+
+			var waypointsStr = "waypoint0=geo!stopOver!37.365013,-121.903630&waypoint1=geo!stopOver!37.61376,-122.42511&waypoint2=geo!stopOver!37.575807,-122.319235&waypoint3=geo!stopOver!37.618384,-122.398911&waypoint4=geo!stopOver!37.61376,-122.42511&waypoint5=geo!stopOver!37.34185,-122.09196&waypoint6=geo!stopOver!37.38909,-121.90595&waypoint7=geo!stopOver!37.70083,-122.03784&waypoint8=geo!stopOver!33.91859,-118.19615&waypoint9=geo!stopOver!34.28869,-118.46620&waypoint10=geo!stopOver!33.91485,-118.18121&waypoint11=geo!stopOver!37.68916,-122.13329&waypoint12=geo!stopOver!37.32928,-122.00976"
+			var waypoints = waypointsStr.split(/\=(.*?)\&/);
+
+			var routeRequestParams = {
+				mode: 'fastest;car;traffic:disabled',
+				representation: 'display',
+				routeattributes: 'sh,gr',
+				maneuverattributes: 'po,ti,pt,ac,di,fj,ix'
+			};
+			for (var i = 0; i < waypoints.length - 1; i++) {
+				routeRequestParams[waypoints[i]] = waypoints[i + 1];
+			}
+
+			router.calculateRoute(
+				routeRequestParams,
+				function(result) {
+					var route = result.response.route[0];
+					addRouteShapeToMap(route);
+				},
+				function(err) {
+					console.log("Oh noes.");
+				}
+			);
+		}
+
+		function addRouteShapeToMap(route) {
+			var lineString = new H.geo.LineString(),
+				routeShape = route.shape,
+				polyline;
+
+			routeShape.forEach(function(point) {
+				var parts = point.split(',');
+				lineString.pushLatLngAlt(parts[0], parts[1]);
+			});
+
+			polyline = new H.map.Polyline(lineString, {
+				style: {
+					lineWidth: 4,
+					strokeColor: 'rgba(0, 128, 255, 0.7)'
+				}
+			});
+			map.addObject(polyline);
+			map.setViewBounds(polyline.getBounds(), true);
+		}
+
+		var platform = new H.service.Platform({
+			app_id: 'inCUge3uprAQEtRaruyaZ8',
+			app_code: '9Vyk_MElhgPCytA7z3iuPA',
+			useCIT: true,
+			useHTTPS: true
+		});
+
+
+		var defaultLayers = platform.createDefaultLayers();
+
+		var map = new H.Map(document.getElementById('map'),
+			defaultLayers.normal.map, {
+				center: {
+					lat: 33.91859,
+					lng: 3 - 118.19615
+				},
+				zoom: 6
+			});
+
+		var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+
+		var ui = H.ui.UI.createDefault(map, defaultLayers, 'en-US');
+
+		map.addLayer(defaultLayers.normal.metaInfo);
+		calculateRoute(platform);
+	</script>
+</body>
+
+</html>

@@ -1,0 +1,5 @@
+== README
+The details of the set up are availbale in {Wiki}[https://deveo.in.here.com/HERE/projects/tcs-sites/wiki/Home]
+
+3.2.2021
+This is moved to https://main.gitlab.in.here.com/technical-support/tcs-sites/wiki

@@ -1,0 +1,238 @@
+<%= javascript_include_tag "TCSEngineers" %>
+<%= javascript_include_tag "ClusterMarkerSpider" %>
+<script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-clustering.js"></script>
+<% content_for :title, "TCS Engineers over the World" %>
+
+<style type="text/css">
+	/*
+	overwrite the info bubble content css
+	background color and padding to remove "closing X" display
+	*/
+	.H_ib_body {
+		background: #3FC8BB;
+		background: -webkit-linear-gradient(#3FC8BB, #2E3038);
+		background: -o-linear-gradient(#3FC8BB, #2E3038);
+		background: -moz-linear-gradient(#3FC8BB, #2E3038);
+		background: linear-gradient(#3FC8BB, #2E3038);
+		font-family:    Arial, Helvetica, sans-serif;
+		font-size:      1em;		
+	}
+	/* overwrite the info bubble tail css */
+	.H_ib_tail
+	{
+		fill: #2E3038;
+	}
+	/* remove the X, which closes the InfoBubble on click */
+	.H_ib_close
+	{
+		font-size: .6em;
+		position: absolute;
+		right: .2em;
+		top: .2em;
+		cursor: pointer;
+		fill: #fff;
+	}
+	.H_ib {
+		position: absolute;
+		left: .91em;
+		background: #000;
+		color: #fff;
+		font-size: 1em;
+		line-height: 1em;
+		fill: #000;
+		left: -100%;
+		-moz-user-select: initial;
+		-khtml-user-select: initial;
+		-webkit-user-select: initial;
+		-o-user-select: initial;
+		-ms-user-select: initial;
+	}
+	.bContent
+	{
+		font-family:    Arial, Helvetica, sans-serif;
+		font-size:      1em;
+	}
+</style>
+
+<div id="mapContainer"></div>
+
+<script>
+	/*
+	author domschuette
+	(C) HERE 2016
+	*/
+
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		apikey: api_key,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers();
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), maptypes.vector.normal.map, {
+		center: new H.geo.Point(41.75357315088905, 1.1057774156171263),
+		zoom: 2,
+		pixelRatio: window.devicePixelRatio || 1
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var dataPoints = [];
+	
+	for(var i = 0; i < TCSEngineers.length; i++)
+	{
+		dataPoints.push(new H.clustering.DataPoint(TCSEngineers[i].lat, TCSEngineers[i].lng, null /*altitude*/, TCSEngineers[i]));
+	}
+	
+	var oms = new OverlappingMarkerSpiderfier(map, { markersWontMove: true, markersWontHide: true });
+
+	var noiseSvg =
+	'<svg xmlns="http://www.w3.org/2000/svg" height="50px" width="50px">' +
+	'<circle cx="20px" cy="20px" r="20" fill="#48dad0" stroke="white" stroke-width="2"/>' +
+	'<text x="20" y="35" font-size="30pt" font-family="arial" font-weight="bold" text-anchor="middle" fill="white" textContent="1">1</text></svg>';
+
+	var noiseIcon = new H.map.Icon(noiseSvg, {
+		size: { w: 22, h: 22 },
+		anchor: { x: 11, y: 11 }
+	});
+
+	var clusterSvgTemplate =
+	'<svg xmlns="http://www.w3.org/2000/svg" height="50px" width="50px"><circle cx="25px" cy="25px" r="20" fill="#48dad0" stroke="white" stroke-width="2"/>' +
+	'<text x="24" y="32" font-size="14pt" font-family="arial" font-weight="bold" text-anchor="middle" fill="white">{text}</text>' +
+	'</svg>';
+
+	var clusteringProvider = new H.clustering.Provider(dataPoints, {
+		min: 1,
+		max: 15,
+		clusteringOptions: {
+			minWeight: 1,
+			eps: 32
+		},
+		theme: {
+			getClusterPresentation: function (markerCluster) {
+
+				// Use cluster weight to change icon size:
+				var svgString = clusterSvgTemplate.replace('{radius}', markerCluster.getWeight() * 5);
+				svgString = svgString.replace('{text}', + markerCluster.getWeight());
+
+				var w, h;
+				var weight = markerCluster.getWeight();
+
+				//Set cluster size depending on the weight
+				if (weight <= 6)
+				{
+					w = 35;
+					h = 35;
+				}
+				else if (weight <= 12) {
+					w = 50;
+					h = 50;
+				}
+				else {
+					w = 75;
+					h = 75;
+				}
+
+				var clusterIcon = new H.map.Icon(svgString, {
+					size: { w: w, h: h },
+					anchor: { x: (w/2), y: (h/2) }
+				});
+
+				// Create a marker for clusters:
+				var clusterMarker = new H.map.Marker(markerCluster.getPosition(), {
+					icon: clusterIcon,
+					// Set min/max zoom with values from the cluster, otherwise
+					// clusters will be shown at all zoom levels:
+					min: markerCluster.getMinZoom(),
+					max: markerCluster.getMaxZoom()
+				});
+
+				// Bind cluster data to the marker:
+				clusterMarker.setData(markerCluster);
+				
+				clusterMarker.addEventListener("tap", function (event) {
+
+					var point = event.target.getGeometry(),
+						screenPosition = map.geoToScreen(point),
+						t = event.target,
+						data = t.getData();
+					oms.clearMarkers();
+					data.forEachDataPoint(
+						function(p) 
+						{
+							var m = new H.map.Marker({lat:data.getPosition().lat, lng:data.getPosition().lng});
+							m.$employee = p.getData().Employee;
+							m.$title = p.getData().Title;
+							m.$location = p.getData().Location;
+							m.addEventListener("tap", function (event) {
+								var html = '<div class="bContent">';
+									html += 'Employee: ' + event.target.$employee + '</br>';
+									html += 'Title: ' + event.target.$title + '</br>';
+									html += 'Location: ' + event.target.$location + '</br>';
+									html += '</div>';
+								var point = event.target.getGeometry();
+								var screenPosition = map.geoToScreen(point);
+
+								infoBubble = new H.ui.InfoBubble(map.screenToGeo(screenPosition.x, screenPosition.y), { content: html });
+								ui.addBubble(infoBubble);
+							});
+							oms.addMarker(m);
+						}
+					);
+					// needs to be called
+					oms.spiderManual();
+				});
+
+				return clusterMarker;
+			},
+			getNoisePresentation: function (noisePoint) {
+
+				// Create a marker for noise points:
+				var noiseMarker = new H.map.Marker(noisePoint.getPosition(), {
+					icon: noiseIcon,
+
+					// Use min zoom from a noise point to show it correctly at certain
+					// zoom levels:
+					min: noisePoint.getMinZoom(),
+					max: 20
+				});
+
+				// Bind cluster data to the marker:
+				noiseMarker.setData(noisePoint);
+
+				noiseMarker.addEventListener("tap", function (event) {
+
+					var point = event.target.getGeometry();
+					var tooltipContent = ["Latitude: ", point.lat, ", Longitude: ", point.lng].join("");
+
+					var screenPosition = map.geoToScreen(point);
+
+					infoBubble = new H.ui.InfoBubble(map.screenToGeo(screenPosition.x, screenPosition.y), { content: tooltipContent });
+					ui.addBubble(infoBubble);
+				});
+
+				return noiseMarker;
+			}
+		}
+
+	});
+
+	var objectLayer = new H.map.layer.ObjectLayer(clusteringProvider);
+	map.addLayer(objectLayer);
+
+</script>

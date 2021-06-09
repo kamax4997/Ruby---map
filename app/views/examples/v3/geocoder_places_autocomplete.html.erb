@@ -1,0 +1,320 @@
+<% content_for :title, "Geocoder & Places Autocomplete" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>This Example Shows the Autocomplete feature of the HERE Geocoder & Places.</p>
+	<p>Places must be used with Location Context</p>
+	<div class="form-group">
+		<input class="form-control input-wide" type="text" id="search">
+	</div>
+ 	<div class="checkbox">
+		<label><input id="useMapview-checkbox" type="checkbox" checked>Restrict Geocoder search to current Mapview</label>
+	</div>
+	<div class="checkbox">
+		<label><input id="useCountry-checkbox" type="checkbox">Use Country filter</label>
+	</div>
+	
+	<div>
+		<table id="table1">
+			<tr>
+				<td height="" valign="" width="">
+					Select a country to filter the results within the country:<br/>
+					<select multiple id="chk_c">
+						<option value="AUS">Australia</option>
+						<option value="NZL">New Zealand</option>
+						<option value="USA">USA</option>
+						<option value="DEU">Germany</option>
+					</select>
+				</td>
+			</tr>
+		</table>
+	</div>
+	
+	<div>
+		<table id="table1">
+			<tr>
+				<td height="" valign="" width="">
+					Select the result language:<br/>
+					<select multiple id="language">
+						<option value="EN" selected>English</option>
+						<option value="DE">German</option>
+						<option value="RU">Russian</option>
+						<option value="BG">Bulgarian</option>
+					</select>
+				</td>
+			</tr>
+		</table>
+	</div>
+	
+	<div>HLP Service releases which are used in this demo:</div>
+	<div id="releaseInfoTxt" value="Used Service Releases:/n"></div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette / ali aien
+	(C) HERE 2017
+	*/
+
+	function init()
+	{
+		// Check whether the environment should use hi-res maps
+		var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+		
+		// check if the site was loaded via secure connection
+		var secure = (location.protocol === 'https:') ? true : false;
+
+		// Create a platform object to communicate with the HERE REST APIs
+		var platform = new H.service.Platform({
+			app_id: app_id,
+			app_code: app_code,
+			useHTTPS: secure
+		}),
+		maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+		geocoder = platform.getGeocodingService();
+
+		// Instantiate a map in the 'map' div, set the base map to normal
+		map = new H.Map(document.getElementById('mapContainer'), maptypes.normal.map, {
+			center: new H.geo.Point(41.885655755431436, -87.6199204166536),
+			zoom: zoom,
+			pixelRatio: hidpi ? 2 : 1
+		});
+
+		//add JS API Release information
+		releaseInfoTxt.innerHTML += "JS API: 3." + H.buildInfo().version;
+		//add MRS Release information
+		loadMRSVersionTxt();
+
+		var releaseGeocoderShown = false;
+
+		// to store the returned locations
+		var group;
+
+		// Enable the map event system
+		var mapevents = new H.mapevents.MapEvents(map);
+
+		// Enable map interaction (pan, zoom, pinch-to-zoom)
+		var behavior = new H.mapevents.Behavior(mapevents);
+
+		// Enable the default UI
+		var ui = H.ui.UI.createDefault(map, maptypes);
+
+		// setup the Streetlevel imagery
+		platform.configure(H.map.render.panorama.RenderEngine);
+
+		// if the window is resized, we need to resize the viewport
+		window.addEventListener('resize', function() { map.getViewPort().resize(); });
+		
+		// handle checks
+		document.getElementById("useMapview-checkbox").onchange = function() {
+			if(this.checked) {
+				document.getElementById("useCountry-checkbox").checked = false;
+			}
+		};
+		
+		document.getElementById("useCountry-checkbox").onchange = function() {
+			if(this.checked) {
+				document.getElementById("useMapview-checkbox").checked = false;
+			}
+		};
+
+		$.widget("custom.autocompleteHighlight", $.ui.autocomplete, {
+			_renderItem : function (ul, item) {
+				return $('<li>' + item.label + '</li>').appendTo(ul);
+			}
+		});
+		
+		function getReady() 
+		{
+			var deferredReady = $.Deferred();
+			$(document).ready(function()
+			{
+				deferredReady.resolve();
+			});
+			return deferredReady.promise();
+		}
+
+		var autoCompelteUrl='http://autocomplete.geocoder.api.here.com/6.2/suggest.json',
+			discoverUrl = 'http://places.api.here.com/places/v1/discover/search?',
+			autoSuggestUrl = 'http://places.demo.api.here.com/places/v1/autosuggest';
+			
+		if(secure){
+			autoCompelteUrl='https://autocomplete.geocoder.api.here.com/6.2/suggest.json';
+			discoverUrl = 'https://places.api.here.com/places/v1/discover/search?',
+			autoSuggestUrl = 'https://places.demo.api.here.com/places/v1/autosuggest';
+		}
+
+		$("#search").autocompleteHighlight({
+			source : function (request, response) {
+				countries = getSelectedCountries();
+				/*geocoderRequest = $.ajax({
+					url : autoCompelteUrl,
+					dataType : "json",
+					data : {
+						maxresults : 5,
+						country : document.getElementById("useCountry-checkbox").checked ? countries : "",
+						language : document.getElementById("language").value,
+						query : request.term,
+						beginHighlight : '<mark>',
+						endHighlight : '</mark>',
+						app_id : app_id,
+						app_code : app_code,
+						mapview : document.getElementById("useMapview-checkbox").checked ? map.getViewBounds().getTopLeft().lat + "," + map.getViewBounds().getTopLeft().lng + ";" + map.getViewBounds().getBottomRight().lat + "," + map.getViewBounds().getBottomRight().lng : ""
+					}
+				});
+				*/
+				
+				placesRequest = $.ajax({
+					url : autoSuggestUrl,
+					dataType : "json",
+					data : {
+						size : 100,
+						q : request.term,
+						app_id : app_id,
+						app_code : app_code,
+						"X-Map-Viewport" : document.getElementById("useMapview-checkbox").checked ? map.getViewBounds().getTopLeft().lng + "," + map.getViewBounds().getBottomRight().lat + "," + map.getViewBounds().getBottomRight().lng + "," + map.getViewBounds().getTopLeft().lat : "-165,-83,165,83"
+					}
+				});
+				
+				$.when( getReady(), /*geocoderRequest,*/ placesRequest).done( function( readyResponse, /*geocoderResponse,*/ placesResponse ) 
+				{
+					/*
+					var g = $.map(geocoderResponse[0].suggestions, function (item) {
+								value = item.label.replace(/(<mark>|<\/mark>)/gm, '');
+								name = item.label;
+								return {
+									label : "(G) " + name,
+									value : {type: "Geocoder", searchString: value }
+								}
+							});
+					*/
+					
+					var p = $.map(placesResponse[0].results.items, function (item) {
+								value = item.title + " " + item.vicinity.replace(/(<br\/>)/gm, ', ');
+								name = item.title + " " + item.vicinity.replace(/(<br\/>)/gm, ', ');
+								return {
+									label : "(P) " + name,
+									value : {type: "Places", lat: item.position[0], lng: item.position[1], bbox: item.bbox}
+								}
+							});
+					// var result = g.concat(p);
+					// response(result);
+					response(p);
+				});
+			}, 
+			minLength : 2,
+			select : function (event, ui) {
+				event.preventDefault();
+				if (ui.item) {
+					selectItem(ui.item.value);
+				}
+				return true;
+			},
+		});
+
+		$("#search").keypress(function (e) {
+			if (e.which == 13) {
+				$(".ui-menu-item").hide();
+				geocode($("#search").val(), 10);
+			}
+		});
+		
+		function getSelectedCountries() {
+			
+			var items = [];
+			$('#chk_c option:selected').each(function(){ items.push($(this).val()); });
+			return items.join(',');
+		}
+
+		function selectItem (obj)
+		{
+			if(obj && obj.type == "Places")
+			{
+				if (group) {
+					map.removeObject(group);
+				}
+
+				group = new H.map.Group();
+				
+				var bbox = obj.bbox;
+				var mapview = null;
+				if(bbox)
+					mapview = new H.geo.Rect(bbox[3], bbox[0], bbox[1], bbox[2]);
+				
+				var marker = new H.map.Marker(new H.geo.Point(obj.lat, obj.lng));
+				marker.label = "1";
+				group.addObject(marker);
+				map.addObject(group);
+				map.setViewBounds(mapview != null ? mapview : group.getBounds());
+			}
+			if(obj && obj.type == "Geocoder")
+			{
+				geocode(obj.searchString, 1);
+			}
+		}
+
+		function geocode(addr, maxResults) {
+			geocodingParameters = {
+				searchText : addr,
+				maxresults : maxResults
+			};
+
+			geocoder.geocode(
+				geocodingParameters,
+				onSuccess,
+				onError
+			);
+		}
+
+		function onSuccess(result) {
+			var position,
+			i = 0,
+			mapview,
+			topLeft,
+			bottomRight;
+
+			if (group) {
+				map.removeObject(group);
+			}
+
+			group = new H.map.Group();
+
+			var locations = result.Response.View[0].Result;
+
+			//add Geocoder Release information if not already done
+			if (releaseGeocoderShown == false) {
+					loadGeocoderVersionTxt();
+					releaseGeocoderShown = true;
+			}
+
+			// Add a marker for each location found
+			for (;i < locations.length; i += 1) {
+				position = {
+					lat : locations[i].Location.DisplayPosition.Latitude,
+					lng : locations[i].Location.DisplayPosition.Longitude
+				};
+				topLeft = locations[0].Location.MapView.TopLeft;
+				bottomRight = locations[0].Location.MapView.BottomRight;
+				mapview = new H.geo.Rect(topLeft.Latitude, topLeft.Longitude, bottomRight.Latitude, bottomRight.Longitude);
+				marker = new H.map.Marker(position);
+				marker.label = i;
+				group.addObject(marker);
+			}
+			// Add the locations group to the map
+			map.addObject(group);
+			if(group.getChildCount() > 1)
+				map.setViewBounds(group.getBounds());
+			else
+				map.setViewBounds(mapview);
+		}
+
+		function onError(error) {
+			alert('Ooops!');
+		}
+	}
+
+	//initialize
+	init();
+</script>

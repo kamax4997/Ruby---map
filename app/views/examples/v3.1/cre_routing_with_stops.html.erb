@@ -1,0 +1,287 @@
+<% content_for :title, "CRE: Truck Routing with Arrival and Stops" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p id="mapReleaseTxt">After route calculation, additional info is retrieved from PDE Web Service and displayed.</p>
+	<table border="0">
+		<tr>
+			<td>Start</td><td><input type='text' id='start' class='form-control' size='50' value='Lyon'/></td>
+		</tr>
+		<tr>
+			<td>Destination</td><td><input type='text' id='dest' class='form-control' size='50' value='Bremen'/></td>
+		</tr>
+	</table>
+	
+	<table border="0">
+		<tr>
+			<td id="arrivalmode" onclick="handlemode(this)" style="cursor:pointer"><b>Arrival Mode</b> / Depature Mode</td>
+			<td><input type='datetime-local' id='arrivaltime' size='25'/></td>
+		</tr>
+	</table>
+	
+	<input type="submit" id="routeButton" class="btn btn-default btn-sm" value="Calculate Route">
+	<div id="feedbackTxt" style="left:0; top:0; z-index: 0;"></div>
+</div>
+
+<div id="mapContainer"></div>
+<script type="text/javascript">
+
+	/*
+	* author domschuette
+	* (C) HERE 2018
+	*/
+	
+	var mode = "arrival"
+
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	var mapContainer = document.getElementById('mapContainer'),
+
+	platform = new H.service.Platform({
+		apikey: api_key,
+		useHTTPS: secure
+	}),
+	maptypes = platform.createDefaultLayers(),
+	geocoder = platform.getGeocodingService(),
+	router = platform.getRoutingService(),
+	group = new H.map.Group(),
+	map = new H.Map(mapContainer, maptypes.vector.normal.map,
+		{
+			center: center,
+			zoom: zoom,
+            pixelRatio: window.devicePixelRatio || 1
+		}
+	);
+	
+	// add the group to the map for later display all markers and route
+	map.addObject(group);
+
+	// Do not draw under control panel
+	map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());
+
+	// add behavior control
+	new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+	// add UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+
+	
+	// add long click in map event listener
+	map.addEventListener('longpress', handleLongClickInMap);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	var	routeButton  = document.getElementById("routeButton"),
+	start        = document.getElementById("start"      ),
+	dest         = document.getElementById("dest"       ),
+	pointA,
+	pointB,
+	currentBubble,
+	bLongClickUseForStartPoint = true,
+	mode = "arrival",
+	now = new Date(),
+	utcString = now.toISOString().substring(0,19),
+	hour = now.getHours(),
+	localDatetime = utcString.substring(0,11) + (hour < 10 ? "0" + hour : hour) + utcString.substring(13,19),
+	datetimeField = document.getElementById("arrivaltime");
+	datetimeField.value = localDatetime;
+
+
+	// function to handle the change the arrival / departure mode
+	function handlemode(di)
+	{
+		modetr = document.getElementById("arrivalmode");
+		modetr = mode == "arrival" ? modetr.innerHTML = "Arrival Mode / <b>Depature Mode</b>" : modetr.innerHTML = "<b>Arrival Mode</b> / Depature Mode";
+		mode = mode == "arrival" ? "departure" : "arrival";
+	}
+	
+	/********************************************************
+	Start/Destination selectin via LongClick in map
+	********************************************************/
+	function handleLongClickInMap(currentEvent)
+	{
+		var lastClickedPos = map.screenToGeo(currentEvent.currentPointer.viewportX, currentEvent.currentPointer.viewportY);
+		geocode(lastClickedPos.lat + "," + lastClickedPos.lng, bLongClickUseForStartPoint);
+		if(!bLongClickUseForStartPoint)
+		{
+			document.getElementById("dest").value = lastClickedPos.lat + "," + lastClickedPos.lng;
+			group.removeAll();
+		}
+		else
+		{
+			document.getElementById("start").value = lastClickedPos.lat + "," + lastClickedPos.lng;
+		}
+		bLongClickUseForStartPoint = bLongClickUseForStartPoint ? false : true; 
+	}
+
+	routeButton.onclick = function ()
+	{
+		group.removeAll();
+		geocode(start.value, true);
+	};
+
+	var geocode = function(searchTerm, start)
+	{
+		geocoder.search(
+			{
+				searchText: searchTerm
+			},
+			function(result) {
+				if(result.Response.View[0].Result[0].Location != null)
+				{
+					pos = result.Response.View[0].Result[0].Location.DisplayPosition
+				}
+				else
+				{
+					pos = result.Response.View[0].Result[0].Place.Locations[0].DisplayPosition
+				}
+				if(start)
+					pointA = new H.geo.Point(pos.Latitude, pos.Longitude);
+				else
+					pointB = new H.geo.Point(pos.Latitude, pos.Longitude);
+
+				if(result.Response.View[0].Result[0].Location != null)
+				{
+					address = result.Response.View[0].Result[0].Location.Address;
+				}
+				else
+				{
+					address = result.Response.View[0].Result[0].Place.Locations[0].Address;
+				}
+
+				line1 = pos.Latitude + " " + pos.Longitude;
+				line2 = address.Label ? address.Label : line1;
+
+				marker = new H.map.Marker(start ? pointA : pointB,
+					{
+						icon: createIconMarker(line1, line2)
+					});
+
+				group.addObject(marker);
+				if(start)
+					geocode(dest.value, false);
+				else
+					calculateRoute(pointA, pointB);
+			},
+			function(error) {
+				alert(error);
+			}
+		);
+	}
+
+	var calculateRoute = function(start, destination)
+	{
+		
+		// https://cre.api.here.com/2/calculateroute.json?&limitedWeight=20.0&app_id=GfjUWY4V5nLUUFs0aahE&app_code=iWKRQ2Y1eM64LokNc8kNzg&driver_cost=30&traverseGates=true&ignoreWaypointVehicleRestriction=1000
+		
+		var ext = mode == "arrival" ? "&arrival=" + document.getElementById('arrivaltime').value : "&departure=" + document.getElementById('arrivaltime').value;
+		var urlRoutingReq =
+		["https://cre.",
+			"api.here.com/2/calculateroute.json?",
+			"waypoint0=",
+			start.lat,
+			",",
+			start.lng,
+			"&waypoint1=",
+			destination.lat,
+			",",
+			destination.lng,
+			"&mode=fastest;truck;traffic:enabled",
+			"&limitedWeight=20.0",
+			"&driver_cost=30",
+			"&traverseGates=true",
+			"&ignoreWaypointVehicleRestriction=1000",
+			"&jsonattributes=41",
+			ext,
+			"&app_id=",
+			app_id,
+			"&app_code=",
+			app_code,
+			"&jsoncallback=parseResponse"].join("");
+
+			feedbackTxt.innerHTML = urlRoutingReq;
+			script = document.createElement("script");
+			script.src = urlRoutingReq;
+			document.body.appendChild(script);
+	}
+
+
+	// parse the routing response
+	var parseResponse = function (resp)
+	{
+		if (resp.error != undefined)
+		{
+			alert (resp.error);
+			feedbackTxt.innerHTML = resp.error;
+			return;
+		}
+		if (resp.response == undefined)
+		{
+			alert (resp.subtype + " " + resp.details);
+			feedbackTxt.innerHTML = resp.error;
+			return;
+		}
+
+		var lastTimeRemains = -1; 
+		var strip = new H.geo.LineString();
+		for (var l = 0; l < resp.response.route[0].leg.length; l++)	{
+			var links = resp.response.route[0].leg[l].link;
+			for (var i = 0; i < links.length; i++)	{
+				var shape = links[i].shape;
+				for (var j = 0; j < shape.length; j++) {
+					if (shape[j].toFixed != undefined) {  // &jsonattributes=41 -> array of lat, lon, lat, lon...
+						strip.pushLatLngAlt(shape[j], shape[j + 1], 0);
+						j++;
+					} else { // array of "lat,lon", "lat,lon", ...
+						var latLon = shape[j].split(",");
+						strip.pushLatLngAlt(parseFloat(latLon[0]), parseFloat(latLon[1]), 0);
+					}
+				}
+				if(lastTimeRemains - links[i].remainTime > 1800) // 30 Minutes
+				{
+					var lat = links[i].shape[0],
+						lng = links[i].shape[1];
+						
+					var marker = new H.map.Marker(new H.geo.Point(lat, lng), {});
+					group.addObject(marker);
+				}
+				lastTimeRemains = links[i].remainTime;
+			}
+		}
+		var polyline = new H.map.Polyline(strip, { style: { lineWidth: 5, strokeColor: "#2222B2", lineJoin: "round" } });
+		polyline.setArrows( true );
+		
+		if (mode == "arrival")
+		{
+			var t = new Date(datetimeField.value);
+			t = (t.getTime() - (resp.response.route[0].summary.travelTime * 1000));
+			
+			var d = new Date(t);
+			document.getElementById('feedbackTxt').innerHTML = d;
+		}
+		else
+		{
+			document.getElementById('feedbackTxt').innerHTML = resp.response.route[0].summary.travelTime / 60 / 60;
+		}
+		group.addObject(polyline);
+        map.getViewModel().setLookAtData({
+            bounds: group.getBoundingBox()
+        });
+	}
+
+	//--- Helper - Create Start / Destination marker
+	var createIconMarker = function (line1, line2) {
+		var svgMarker = svgMarkerImage_Line;
+
+		svgMarker = svgMarker.replace(/__line1__/g, line1);
+		svgMarker = svgMarker.replace(/__line2__/g, line2);
+		svgMarker = svgMarker.replace(/__width__/g, line2.length  * 4 + 30 );
+		svgMarker = svgMarker.replace(/__widthAll__/g, line2.length  * 4 + 80);
+
+		return new H.map.Icon(svgMarker, {
+			anchor: new H.math.Point(24, 57)
+		});
+
+	};
+</script>

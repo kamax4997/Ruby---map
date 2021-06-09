@@ -1,0 +1,77 @@
+<%= javascript_include_tag "cebit2017" %>
+
+<% content_for :title, "Volkswagen EV Live Vehicles" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>YOUR CONTENT HERE ;) </p>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/*
+	author domschuette
+	(C) HERE 2017
+	*/
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+
+		// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+	
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		app_id: app_id,
+		app_code: app_code,
+		useHTTPS: secure
+	}),
+	defaultLayers = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), defaultLayers.normal.map, {
+		center: new H.geo.Point(52.324772570746205,9.808866010850693),
+		zoom: 16,
+		pixelRatio: hidpi ? 2 : 1
+	});
+	
+	// group for building footprints
+	var footprintsGroup = new H.map.Group();
+	
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	// wait until the display is ready for drawing
+	var displayReady = function(e)
+	{
+		map.removeEventListener("mapviewchangeend", displayReady);
+		drawFootprints();
+	};
+	map.addEventListener("mapviewchangeend", displayReady);
+	
+	function drawFootprints()
+	{
+		for (var i = 0; i < cebit2017.length; i++)
+		{
+			var curName = cebit2017[i].name,
+				curCoords = cebit2017[i].coordinates;
+				curStrip = new H.geo.Strip(),
+				j = 0;
+				
+			for(; j < curCoords.length; j++)
+			{
+				curStrip.pushLatLngAlt( curCoords[j].lat, curCoords[j].lng, 0);
+			}
+			
+			var shp = new H.map.Polygon(curStrip,{});
+			footprintsGroup.addObject(shp);
+		}
+		map.addObject(footprintsGroup);
+	}
+	
+</script>

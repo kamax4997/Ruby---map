@@ -1,0 +1,285 @@
+<%= javascript_include_tag "moment" %>
+<%= javascript_include_tag "moment-range" %>
+<% content_for :title, "Platooning - Submit Forbidden Road" %>
+
+    <div class="ctrl-panel">
+        <span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+
+        <div class="form-horizontal">
+            <div class="form-group">
+				<label class="control-label col-sm-4">Layer:</label>
+				<div class="col-sm-8">
+					<input class="form-control col-sm-6" type="text" id="layer_name" size="25" value="NO_PLATOONS"/>
+				</div>
+			</div>
+            <div class="form-group">
+				<label class="control-label col-sm-4">Road Section:</label>
+				<div class="col-sm-8">
+					<input class="form-control col-sm-6" type="text" id="road_section_name" size="25" value="A66 Eschborn Hattersheim"/>
+				</div>
+				<div class="col-sm-8">
+                    <input class="btn btn-default btn-sm" type="button" id="b1" value="Load this road section from CLE" onclick="loadRoadSectionFromCle()">
+				</div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-4" for="exampleSelector">Road section way points:</label>
+				<p>Click into the map to define the road section by way points.
+				If you changed points in the text field, press "Redraw".</p>
+                <div class="col-sm-8">
+                    <textarea id="destinations" class="form-control" rows="8"></textarea>
+                    <input class="btn btn-default btn-sm" type="button" id="b1" value="Redraw Waypoints" onclick="calculateRoute()">
+                </div>
+            </div>
+			<div class="form-group">
+				<input class="btn btn-default btn-sm" type="button" id="b4" value="Append Route Links to CLE Layer" onclick="submitLinks()">
+				or purge+recreate layer <input type="checkbox" id="newLayerCheckBox"/>
+			</div>
+            <div class="form-group">
+                <label class="control-label col-sm-4">Router Endpoint:</label>
+                <div class="col-sm-8">
+                    <textarea id="router_endpoint" class="form-control" rows="3" cols="10" wrap="virtual">https://cle.api.here.com/2/calculateroute.json&#10;?algopts=nohlprouter&#10;&mode=fastest;car;traffic:disabled</textarea>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="control-label col-sm-4">CLE Endpoint:</label>
+                <div class="col-sm-8">
+					<input class="form-control col-sm-6" type="text" id="cle_endpoint" size="25" value="https://cle.api.here.com/2"/>
+                </div>
+            </div>
+			<div class="form-group">
+				<div id="feedbackTxt"></div>
+			</div>
+		</div>
+    </div>
+
+    <style>
+        #notecontent a { color: white; }
+        #notecontent a:hover { color: red; }
+        table td, table td * { vertical-align: top; }
+        textarea { white-space: pre; word-wrap: normal; overflow: scroll; }
+        li.accStarts, li.accEnds { color: #59b354; }
+        li.stStarts, li.stEnds { color: #1b5fcc; }
+        li.arr { color: red; }
+        li.dep { color: white; }
+        li.at { color: yellow; }
+        .menubkg { background-color: #f8f8f8; border-radius: 15px; color: black; }
+        .menubkg select { font-size: 10px; vertical-align: middle; }
+        .menubkg select option:checked { background-color: #999; }
+    </style>
+
+    <div id="mapContainer"></div>
+
+    <script type="text/javascript">
+        /**
+         * @author Wolfgang Becker
+         * (C) HERE 2017
+         */
+
+       $(document).ready(function() {});
+        var feedbackTxt = document.getElementById("feedbackTxt");
+        var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+        var mapContainer = document.getElementById('mapContainer');
+        var platform = new H.service.Platform({ app_code: app_code, app_id: app_id, useHTTPS: true }),
+            maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null),
+            labels = new H.map.Group(),
+            groups = [],
+            basemaptileService = platform.getMapTileService({ 'type': 'base' }),
+            greyTileLayer = basemaptileService.createTileLayer("maptile", "normal.day.grey", hidpi ? 512 : 256, "png8", null);
+        
+        map = new H.Map(mapContainer,  maptypes.normal.map, { center: center, zoom: zoom });
+
+        map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());        // Do not draw under control panel
+        map.getViewPort().setPadding(0, 0, 0, $('.ctrl-panel').width());        // set padding for control panel
+        map.addObject(labels);        											// add labels (waypoint markers) to map
+        new H.mapevents.Behavior(new H.mapevents.MapEvents(map));   		    // add behavior control, e.g. for mouse
+        var ui = H.ui.UI.createDefault(map, maptypes);                          // enable UI components and remove the unnecessary
+        ui.removeControl('panorama');
+        ui.removeControl('mapsettings');
+
+        var groupClickedWaypoints = new H.map.Group();
+        groupClickedWaypoints.setZIndex(1); 
+        map.addObject(groupClickedWaypoints);
+        window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+        var routeLinks = [];
+        var group = new H.map.Group();
+        var waypointsArr = [];
+
+        /**
+        *   A waypoint for display using markers
+        */
+        function Waypoints(idx, lat, lng) {
+            this.idx = idx;
+            this.lat = lat;
+            this.lng = lng;
+        }
+
+        /**
+        *   Read Markers list and generate markers
+        */
+        function createMarkersForWaypoints(resizeToPointsBoundingBox) {
+            groupClickedWaypoints.removeAll();
+            for (var wpIdx in waypointsArr) {
+                var marker = new H.map.Marker(waypointsArr[wpIdx],{
+                    icon: new H.map.Icon(createWaypointIcon(wpIdx))
+                });
+                groupClickedWaypoints.addObject(marker);
+            }
+            if (resizeToPointsBoundingBox) map.setViewBounds(groupClickedWaypoints.getBounds());
+        }
+
+        map.addEventListener('tap', function(evt) {
+                var coords = map.screenToGeo(evt.currentPointer.viewportX, evt.currentPointer.viewportY);
+                waypointsArr.push(new Waypoints(waypointsArr.length, coords.lat, coords.lng));
+                createMarkersForWaypoints(false);
+				var roadSectionName = document.getElementById('road_section_name').value;
+				document.getElementById('destinations').value = "";
+				for (var wpIdx in waypointsArr) {
+					document.getElementById('destinations').value += wpIdx + "," + parseFloat(waypointsArr[wpIdx].lat).toFixed(6) + "," +
+                                                                     parseFloat(waypointsArr[wpIdx].lng).toFixed(6) + ',' + roadSectionName + "\n";
+				}
+        		calculateRoute();
+			}, false);
+
+        function calculateRoute() {
+            var tempwaypointArr = []; // read the coordinates from the text area
+			var urlWayPoints = "";
+            if (document.getElementById('destinations').value.trim() != "") {
+                var rawDestArray = document.getElementById('destinations').value.trim().split(/\r*\n/);
+                for (var i = 0; i < rawDestArray.length; i++) {
+                    var coord = rawDestArray[i].split(",");
+                    tempwaypointArr.push(new Waypoints(coord[0], coord[1], coord[2]));
+					urlWayPoints += '&waypoint' + i + "=" + coord[1] + "," + coord[2];
+                }
+            }
+            waypointsArr = tempwaypointArr;
+            createMarkersForWaypoints(true);
+			var url = document.getElementById("router_endpoint").value + '&app_id=' + app_id + '&app_code=' + app_code + urlWayPoints;
+            $.ajax({
+                url: url,
+                dataType: "json",
+                async: true,
+                type: 'get',
+                success: function(data) {
+                    parseRoutingResponse(data);
+                },
+                error: function(xhr, status, e) {
+                    var errorResp = (xhr.responseJSON.issues[0] || {
+                        "message": "unknown error occured"
+                    });
+                    feedbackTxt.innerHTML = "<font color=\"red\">" + errorResp.message + "</font>";
+                    feedbackTxt.innerHTML += "<br/>";
+                }
+            });
+        }
+
+        function parseRoutingResponse(resp) {
+            group.removeAll();
+            routeLinks = [];
+            // create link objects
+            for (var k = 0; k<resp.response.route[0].leg.length; k++){ // we just take the first alternative
+                for (var m = 0; m < resp.response.route[0].leg[k].link.length; m++) {
+                    var linkId = (resp.response.route[0].leg[k].link[m].linkId.lastIndexOf("+", 0) === 0 ? resp.response.route[0].leg[k].link[m].linkId.substring(1) : resp.response.route[0].leg[k].link[m].linkId);
+                    var strip = new H.geo.Strip();
+                    var shape = resp.response.route[0].leg[k].link[m].shape;
+                    for (var i = 0; i < shape.length; i += 2) strip.pushLatLngAlt(shape[i], shape[i + 1], 0);
+                    var link = new H.map.Polyline(strip, {style: {lineWidth: 8, strokeColor: 'rgba(18, 65, 145, 0.8)', lineCap: 'butt'}});
+                    link.setArrows({color: "#F00F", width: 2, length: 3, frequency: 8});
+                    link.$linkId = resp.response.route[0].leg[k].link[m].linkId;
+                    routeLinks.push(link);
+                }
+            }
+
+            // draw route
+            for (var k = 0; k<resp.response.route[0].leg.length; k++){ // we just take the first alternative
+                for (var linkIdx in resp.response.route[0].leg[k].link) {
+                    var strip = new H.geo.Strip();
+                    var shape = resp.response.route[0].leg[k].link[linkIdx].shape;
+                    var l = shape.length;
+                    for (var i = 0; i < l; i = i + 2) {
+                        strip.pushLatLngAlt.apply(strip, [shape[i], shape[i + 1]].map(function(item) {
+                            return parseFloat(item);
+                        }));
+                    }
+                    var polyline = new H.map.Polyline(strip, {style: {lineWidth: 8, strokeColor: "rgba(70, 105, 160, 0.8)", fillColor: "rgba(120, 133, 160, 0.9)"}});
+                    polyline.setArrows(true);
+                    group.addObject(polyline);
+                }
+            }
+            map.addObject(group);
+            feedbackTxt.innerHTML = "";
+        }
+
+        function submitLinks() {
+			var url = document.getElementById("cle_endpoint").value + '/layers/modify.json?action=append&layer_id=' + document.getElementById("layer_name").value +
+                      '&app_id=' + app_id + '&app_code=' + app_code + '&changes=GEOMETRY_ID%09ROAD_SECTION%09LINK_ID%09WKT';
+			var roadSectionName = document.getElementById('road_section_name').value;
+            for (var l = 0; l < routeLinks.length; l++) {
+			    var link = routeLinks[l];
+				var yxzs = link.getGeometry().getLatLngAltArray();
+			    url += '%0D%0A' + link.$linkId + '%09' + roadSectionName + '%09' + link.$linkId + '%09LINESTRING('; // for now we simply use the link_id as geometry_id
+				for (var s = 0; s < yxzs.length; s += 3) {
+				    if (s > 0) url += ',';
+				    url += yxzs[s + 1] + '%20' + yxzs[s];
+				}
+				url += ')';
+            }
+			if (document.getElementById("newLayerCheckBox").checked) {
+				url = url.replace('modify.json', 'upload.json');
+				url = url.replace('changes=', 'file=');
+				document.getElementById("newLayerCheckBox").checked = false;
+			}
+            $.ajax({ url: url, dataType: "json", async: true, type: 'get',
+                success: function(data) {
+                    feedbackTxt.innerHTML = "<font color=\"green\">" + JSON.stringify(data, null, 4) + "</font><br/>";
+                },
+                error: function(xhr, status, e) {
+                    var errorResp = (xhr.responseJSON.issues[0] || { "message": "unknown error occured" });
+                    feedbackTxt.innerHTML = "<font color=\"red\">" + errorResp.message + "</font><br/>";
+                }
+            });
+        }
+
+        function loadRoadSectionFromCle() {
+			var url = document.getElementById("cle_endpoint").value + '/search/all.json?layer_id=' + document.getElementById("layer_name").value +
+                      '&app_id=' + app_id + '&app_code=' + app_code + '&geom=full&filter=ROAD_SECTION=="' + document.getElementById("road_section_name").value + '"';
+            $.ajax({ url: url, dataType: "json", async: true, type: 'get',
+                success: parseCleQueryResponse,
+                error: function(xhr, status, e) {
+                    var errorResp = (xhr.responseJSON.issues[0] || { "message": "unknown error occured" });
+                    feedbackTxt.innerHTML = "<font color=\"red\">" + errorResp.message + "</font><br/>";
+                }
+            });
+        }
+
+	    function parseCleQueryResponse(resp) {
+            feedbackTxt.innerHTML = JSON.stringify(resp, null, 4);
+			var roadSectionName = document.getElementById('road_section_name').value;
+			document.getElementById('destinations').value = "";
+		    waypointsArr = [];
+			for (var g = 0; g < resp.geometries.length; g++) { // for now we just pick the center coordinate between the first 2 shape points from each line string
+                var lonLats = resp.geometries[g].geometry.substring(11, resp.geometries[g].geometry.length - 1);
+				var xy0 = lonLats.split(",")[0].split(' ');
+				var xy1 = lonLats.split(",")[1].split(' ');
+				var x = Math.round((parseFloat(xy0[0]) + parseFloat(xy1[0])) / 2.0 * 100000.0) / 100000.0;
+				var y = Math.round((parseFloat(xy0[1]) + parseFloat(xy1[1])) / 2.0 * 100000.0) / 100000.0;
+			    waypointsArr.push(new Waypoints(waypointsArr.length, y, x));
+				document.getElementById('destinations').value += (waypointsArr.length - 1) + "," + y + "," + x + ',' + roadSectionName + "\n";
+			}
+            createMarkersForWaypoints(false);
+        	calculateRoute();
+        }
+
+        var createWaypointIcon = function(waypointId, pickupDropOff) {
+            var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28px" height="36px">' +
+			  '<path d="M 19 31 C 19 32.7 16.3 34 13 34 C 9.7 34 7 32.7 7 31 C 7 29.3 9.7 28 13 28 C 16.3 28 19' +
+			  ' 29.3 19 31 Z" fill="#000" fill-opacity=".2"/>' +
+			  '<path d="M 13 0 C 9.5 0 6.3 1.3 3.8 3.8 C 1.4 7.8 0 9.4 0 12.8 C 0 16.3 1.4 19.5 3.8 21.9 L 13 31 L 22.2' +
+			  ' 21.9 C 24.6 19.5 25.9 16.3 25.9 12.8 C 25.9 9.4 24.6 6.1 22.1 3.8 C 19.7 1.3 16.5 0 13 0 Z" fill="#fff"/>' +
+			  '<path d="M 13 2.2 C 6 2.2 2.3 7.2 2.1 12.8 C 2.1 16.1 3.1 18.4 5.2 20.5 L 13 28.2 L 20.8 20.5 C' +
+			  ' 22.9 18.4 23.8 16.2 23.8 12.8 C 23.6 7.07 20 2.2 13 2.2 Z" fill="#1188DD"/>' +
+			  '<text font-size="11" font-weight="bold" fill="#fff" font-family="Nimbus Sans L,sans-serif" text-anchor="middle" x="45%" y="50%">__num__</text>' +
+			  '</svg>';
+            return svg.replace(/__num__/g, waypointId);
+        };
+    </script>

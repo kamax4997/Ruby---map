@@ -1,0 +1,173 @@
+<% content_for :title, "Safety Cameras around Center Position" %>
+
+<div class="ctrl-panel">
+	<span id="toggle-ctrl-panel" class="glyphicon glyphicon-menu-left"></span>
+	<p>Display of Safety Cameras around Center Position</p>
+	<div id="centerCoordinate"></div>
+</div>
+
+<div id="mapContainer"></div>
+
+<script type="text/javascript">
+	/* 
+		author domschuette
+		(C) HERE 2016
+	*/
+	
+	// Check whether the environment should use hi-res maps
+	var hidpi = ('devicePixelRatio' in window && devicePixelRatio > 1);
+	
+	// check if the site was loaded via secure connection
+	var secure = (location.protocol === 'https:') ? true : false;
+
+	// Create a platform object to communicate with the HERE REST APIs
+	var platform = new H.service.Platform({
+		useCIT: true,
+		useHTTPS: secure,
+		apikey: api_key
+	}),
+	maptypes = platform.createDefaultLayers(hidpi ? 512 : 256, hidpi ? 320 : null);
+
+	// Instantiate a map in the 'map' div, set the base map to normal
+	var map = new H.Map(document.getElementById('mapContainer'), maptypes.vector.normal.map, {
+		center: new H.geo.Point(52.1324859924475, 4.941442935163195),
+		zoom: 11,
+		pixelRatio: hidpi ? 2 : 1
+	});
+
+	// Enable the map event system
+	var mapevents = new H.mapevents.MapEvents(map);
+	
+	// Enable map interaction (pan, zoom, pinch-to-zoom)
+	var behavior = new H.mapevents.Behavior(mapevents);
+
+	// Enable the default UI
+	var ui = H.ui.UI.createDefault(map, maptypes);
+	
+	var app_id_auto = "DemoCredForAutomotiveAPI",
+		app_code_auto = "JZlojTwKtPLbrQ9fEGznlA",
+		group = new H.map.Group(),
+		currentBubble;
+		
+	map.addObject(group);
+	
+	window.addEventListener('resize', function() { map.getViewPort().resize(); });
+
+	map.addEventListener("mapviewchange", function() 
+		{ 
+			var d = document.getElementById("centerCoordinate"),
+				c = map.getCenter(),
+				lat = c.lat,
+				lon = c.lng;
+			d.innerHTML = "" + lat + " " + lon + " @" + map.getZoom();
+		}
+	);
+	
+	map.addEventListener("mapviewchangeend", function() 
+		{
+			group.removeAll();
+			requestAlerts(map.getCenter());
+		}
+	);
+	
+	requestAlerts = function(center)
+	{
+		var url = ["https://alerts.cc.api.here.com/",
+				   "alerts/",
+				   "1.0/",
+				   "search.json?",
+				   "app_id=", 
+				   app_id_auto,
+				   "&app_code=",
+				   app_code_auto,
+				   "&prox=",
+				   center.lat,
+				   ",",
+				   center.lng,
+				   ",18000",
+				   "&traptype=2",
+				   "&jsoncallback=alertsReceived"].join("");
+	  
+		script = document.createElement("script");
+		script.src = url;
+		document.body.appendChild(script);
+	}
+	
+	alertsReceived = function(response)
+	{
+		if(response && response.speedCams && response.speedCams.marker)
+		{
+			var spcm = response.speedCams.marker,
+				i = 0,
+				l = spcm.length;
+				
+			for(;i < l; i++)
+			{
+				var currentMarker = spcm[i],
+					lat = currentMarker.location.latitude,
+					lng = currentMarker.location.longitude
+					str = "";
+
+				if(currentMarker.id)
+					str += "ID: " + currentMarker.id + "</br>";
+				if(currentMarker.distance)
+					str += "Distance: " + currentMarker.distance + "</br>";
+				if(currentMarker.vicinity)
+					str += "Vicinity: " + currentMarker.vicinity + "</br>";
+				if(currentMarker.trapType)
+				{
+					str += "TrapTypeID: " + currentMarker.trapType.id + "</br>";
+					str += "TrapName: " + currentMarker.trapName + "</br>";
+				}
+				if(currentMarker.numVotes)
+					str += "NumVotes: " + currentMarker.numVotes + "</br>";
+				if(currentMarker.lastVoteDatetime)
+					str += "LastVotedTS: " + currentMarker.lastVoteDatetime + "</br>";
+				if(currentMarker.lifeTime)
+					str += "LifeTime: " + currentMarker.lifeTime + "</br>";
+				if(currentMarker.country)
+					str += "Country: " + currentMarker.country + "</br>";
+				if(currentMarker.speedLimit)
+					str += "SpeedLimit: " + currentMarker.speedLimit + "</br>";
+				if(currentMarker.affectedDirection)
+					str += "AffectedDirection: " + currentMarker.affectedDirection + "</br>";
+				if(currentMarker.cameraFacingDirection)
+					str += "cameraFacingDirection: " + currentMarker.cameraFacingDirection + "</br>";
+				if(currentMarker.linkId)
+					str += "LinkId: " + currentMarker.linkId + "</br>";
+				if(currentMarker.fieldVerified)
+					str += "FieldVerified: " + currentMarker.fieldVerified + "</br>";
+				
+				addMarker(lat, lng, str);
+			}
+		}
+	}
+	
+	addMarker = function(lat, lng, html)
+	{
+		if(lat && lng)
+		{
+			var m = new H.map.Marker({
+				lat: lat,
+				lng: lng
+			});
+			
+			m.$html = html;
+			
+			m.addEventListener("pointerdown", function(e)
+			{
+				if(currentBubble)
+					ui.removeBubble(currentBubble);
+				var html = e.target.$html +'</p>';
+
+				var pos = map.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
+
+				currentBubble = new H.ui.InfoBubble(pos, { content: html });
+				ui.addBubble(currentBubble);
+			});
+			
+			group.addObject(m);
+		}
+	}
+	
+</script>
